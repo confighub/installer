@@ -1,0 +1,143 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	ipkg "github.com/confighubai/installer/internal/pkg"
+	"github.com/confighubai/installer/pkg/api"
+)
+
+func newDocCmd() *cobra.Command {
+	var (
+		outDir string
+		asJSON bool
+	)
+	cmd := &cobra.Command{
+		Use:   "doc <package-ref>",
+		Short: "Print a package's components, requirements, and inputs",
+		Long: `Pull a package and print its declared bases, components (with required-deps),
+external requirements, and wizard inputs schema. Use --json for machine-
+readable output suitable for agents.
+
+Package references:
+  ./path/to/pkg               local directory
+  /abs/path/to/pkg.tgz        local archive
+  oci://ghcr.io/org/pkg:tag   OCI artifact (Helm-OCI shaped)
+`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ref := args[0]
+			ctx := context.Background()
+			dir, err := ipkg.Pull(ctx, ref, outDir)
+			if err != nil {
+				return err
+			}
+			loaded, err := ipkg.Load(dir)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(loaded.Package)
+			}
+			printPackageDoc(loaded.Package)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&outDir, "out", "", "destination directory for fetched package (default: temp dir for archives, in place for local dirs)")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "machine-readable output")
+	return cmd
+}
+
+func printPackageDoc(p *api.Package) {
+	fmt.Printf("Package: %s\n", p.Metadata.Name)
+	if p.Metadata.Version != "" {
+		fmt.Printf("Version: %s\n", p.Metadata.Version)
+	}
+	fmt.Println()
+
+	fmt.Println("Bases:")
+	for _, b := range p.Spec.Bases {
+		def := ""
+		if b.Default {
+			def = " (default)"
+		}
+		fmt.Printf("  - %s%s\n", b.Name, def)
+		if b.Description != "" {
+			fmt.Printf("      %s\n", b.Description)
+		}
+	}
+	fmt.Println()
+
+	if len(p.Spec.Components) > 0 {
+		fmt.Println("Components:")
+		for _, c := range p.Spec.Components {
+			fmt.Printf("  - %s\n", c.Name)
+			if c.Description != "" {
+				fmt.Printf("      %s\n", c.Description)
+			}
+			if len(c.Requires) > 0 {
+				fmt.Printf("      requires:  %s\n", strings.Join(c.Requires, ", "))
+			}
+			if len(c.Conflicts) > 0 {
+				fmt.Printf("      conflicts: %s\n", strings.Join(c.Conflicts, ", "))
+			}
+			if len(c.ValidForBases) > 0 {
+				fmt.Printf("      valid-for-bases: %s\n", strings.Join(c.ValidForBases, ", "))
+			}
+		}
+		fmt.Println()
+	}
+
+	if len(p.Spec.ExternalRequires) > 0 {
+		fmt.Println("External requirements:")
+		for _, r := range p.Spec.ExternalRequires {
+			line := fmt.Sprintf("  - %s", r.Kind)
+			if r.Name != "" {
+				line += " " + r.Name
+			}
+			if r.Version != "" {
+				line += " " + r.Version
+			}
+			if r.Capability != "" {
+				line += " capability=" + r.Capability
+			}
+			fmt.Println(line)
+			if r.SuggestedSource != "" {
+				fmt.Printf("      suggested: %s\n", r.SuggestedSource)
+			}
+			if len(r.SuggestedProviders) > 0 {
+				fmt.Printf("      providers: %s\n", strings.Join(r.SuggestedProviders, ", "))
+			}
+		}
+		fmt.Println()
+	}
+
+	if len(p.Spec.Inputs) > 0 {
+		fmt.Println("Inputs:")
+		for _, in := range p.Spec.Inputs {
+			req := ""
+			if in.Required {
+				req = " (required)"
+			}
+			def := ""
+			if in.Default != nil {
+				def = fmt.Sprintf(" [default: %v]", in.Default)
+			}
+			fmt.Printf("  - %s (%s)%s%s\n", in.Name, in.Type, req, def)
+			if in.Prompt != "" {
+				fmt.Printf("      %s\n", in.Prompt)
+			}
+			if len(in.Options) > 0 {
+				fmt.Printf("      options: %s\n", strings.Join(in.Options, ", "))
+			}
+		}
+	}
+}

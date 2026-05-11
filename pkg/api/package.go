@@ -1,0 +1,213 @@
+package api
+
+// Package is the installer.yaml document a package author writes by hand.
+// It declares what bases and components are available, what inputs the wizard
+// should ask for, what external preconditions the package needs, and what the
+// function chain template looks like.
+type Package struct {
+	APIVersion string      `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string      `yaml:"kind" json:"kind"`
+	Metadata   Metadata    `yaml:"metadata" json:"metadata"`
+	Spec       PackageSpec `yaml:"spec" json:"spec"`
+}
+
+type PackageSpec struct {
+	// Bases are alternative top-level kustomize trees. Exactly one is selected
+	// at install time (default: the one with Default: true). Use this when the
+	// package supports orthogonal deployment shapes that cannot be expressed
+	// as opt-in Components (e.g., KServe Knative vs Raw, llm-d colocated vs
+	// P/D-disaggregated).
+	Bases []Base `yaml:"bases" json:"bases"`
+
+	// Components are kustomize Components (kind: Component) that may be
+	// selected to add features on top of the chosen Base. Selection is
+	// closed under Requires.
+	Components []Component `yaml:"components,omitempty" json:"components,omitempty"`
+
+	// ExternalRequires lists preconditions the cluster must satisfy. Evaluated
+	// at install-time by `installer preflight` and surfaced in the wizard.
+	ExternalRequires []ExternalRequire `yaml:"externalRequires,omitempty" json:"externalRequires,omitempty"`
+
+	// Provides lists CRDs and other resources this package installs. Used to
+	// detect double-install conflicts when multiple packages are deployed in
+	// the same cluster.
+	Provides []Provide `yaml:"provides,omitempty" json:"provides,omitempty"`
+
+	// ClusterSingleton lists leader-election leases this package claims at
+	// cluster scope. Two packages claiming the same lease cannot coexist.
+	ClusterSingleton []SingletonClaim `yaml:"clusterSingleton,omitempty" json:"clusterSingleton,omitempty"`
+
+	// ExternalManifests are remote manifest files (e.g., release tarballs of
+	// CRDs) that get fetched at render time and merged into the rendered
+	// output as additional Units. Used by projects like Gateway API Inference
+	// Extension that distribute CRDs as a release-tarball outside any chart.
+	ExternalManifests []ExternalManifest `yaml:"externalManifests,omitempty" json:"externalManifests,omitempty"`
+
+	// Inputs declares the wizard prompts. Inputs are referenced by Go template
+	// expressions in FunctionChainTemplate (e.g., "{{ .Inputs.namespace }}").
+	Inputs []Input `yaml:"inputs,omitempty" json:"inputs,omitempty"`
+
+	// Phases groups rendered output Units for ordered apply. Each rendered
+	// Unit is labeled with the first matching phase. The last phase with an
+	// empty WhereResource matches everything else.
+	Phases []Phase `yaml:"phases,omitempty" json:"phases,omitempty"`
+
+	// FunctionChainTemplate is a list of function invocation groups. At render
+	// time it is resolved with the wizard answers (Go templates), then each
+	// group is executed by funcimpl.NewStandardExecutor with its own toolchain
+	// and whereResource filter, output of each group feeding the next.
+	FunctionChainTemplate []FunctionGroup `yaml:"functionChainTemplate,omitempty" json:"functionChainTemplate,omitempty"`
+}
+
+type Base struct {
+	// Name is the slug used in Selection.spec.base.
+	Name string `yaml:"name" json:"name"`
+	// Path is the directory in the package tree containing kustomization.yaml.
+	Path string `yaml:"path" json:"path"`
+	// Default selects this base when the user does not pick one.
+	Default bool `yaml:"default,omitempty" json:"default,omitempty"`
+	// Description is shown by `installer doc`.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// ExternalRequires scoped to this base (in addition to package-level requires).
+	ExternalRequires []ExternalRequire `yaml:"externalRequires,omitempty" json:"externalRequires,omitempty"`
+}
+
+type Component struct {
+	// Name is the slug used in Selection.spec.components.
+	Name string `yaml:"name" json:"name"`
+	// Path is the directory in the package tree containing the kind: Component
+	// kustomization.yaml.
+	Path string `yaml:"path" json:"path"`
+	// Description is shown by `installer doc`.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Requires names other Components that must be selected. Closure is
+	// computed by the wizard's solver before render.
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+	// Conflicts names Components that cannot be selected together.
+	Conflicts []string `yaml:"conflicts,omitempty" json:"conflicts,omitempty"`
+	// ValidForBases names Bases this Component is compatible with. Empty
+	// means valid for all bases.
+	ValidForBases []string `yaml:"validForBases,omitempty" json:"validForBases,omitempty"`
+	// ExternalRequires scoped to this Component.
+	ExternalRequires []ExternalRequire `yaml:"externalRequires,omitempty" json:"externalRequires,omitempty"`
+}
+
+// ExternalRequireKind enumerates the typed precondition categories observed
+// across real inference-stack projects (KServe, KubeRay, GAIE, llm-d, vLLM).
+type ExternalRequireKind string
+
+const (
+	ExtReqCRD                 ExternalRequireKind = "CRD"
+	ExtReqClusterFeature      ExternalRequireKind = "ClusterFeature"
+	ExtReqWebhookCertProvider ExternalRequireKind = "WebhookCertProvider"
+	ExtReqGatewayClass        ExternalRequireKind = "GatewayClass"
+	ExtReqOperator            ExternalRequireKind = "Operator"
+	ExtReqStorageClass        ExternalRequireKind = "StorageClass"
+	ExtReqRuntimeClass        ExternalRequireKind = "RuntimeClass"
+)
+
+type ExternalRequire struct {
+	Kind ExternalRequireKind `yaml:"kind" json:"kind"`
+	Name string              `yaml:"name,omitempty" json:"name,omitempty"`
+	// Version is a constraint expression (e.g., ">= v0.4.0").
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	// Capability is used with GatewayClass to require a specific feature
+	// (e.g., "ext-proc"). Any GatewayClass providing the capability satisfies.
+	Capability string `yaml:"capability,omitempty" json:"capability,omitempty"`
+	// Namespace pins the requirement to a specific namespace (Operator/StorageClass).
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// IssuerKind constrains a WebhookCertProvider (e.g., "ClusterIssuer").
+	IssuerKind string `yaml:"issuerKind,omitempty" json:"issuerKind,omitempty"`
+	// SuggestedSource points the user at a package or chart that satisfies
+	// this requirement, surfaced in the wizard.
+	SuggestedSource string `yaml:"suggestedSource,omitempty" json:"suggestedSource,omitempty"`
+	// SuggestedProviders lists multiple acceptable providers (e.g., for
+	// GatewayClass: Istio, EnvoyGateway, kgateway, ...).
+	SuggestedProviders []string `yaml:"suggestedProviders,omitempty" json:"suggestedProviders,omitempty"`
+}
+
+// ProvideKind enumerates what a package can claim to provide.
+type ProvideKind string
+
+const (
+	ProvideCRD          ProvideKind = "CRD"
+	ProvideOperator     ProvideKind = "Operator"
+	ProvideGatewayClass ProvideKind = "GatewayClass"
+)
+
+type Provide struct {
+	Kind ProvideKind `yaml:"kind" json:"kind"`
+	Name string      `yaml:"name" json:"name"`
+}
+
+type SingletonClaim struct {
+	Lease     string `yaml:"lease" json:"lease"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
+type ExternalManifest struct {
+	// Name identifies this manifest within the package.
+	Name string `yaml:"name" json:"name"`
+	// URL is fetched at render time. Must include a digest pin via Digest.
+	URL string `yaml:"url" json:"url"`
+	// Digest is the expected sha256:... of the fetched bytes; render fails on mismatch.
+	Digest string `yaml:"digest" json:"digest"`
+	// SplitByResource splits the fetched multi-doc YAML stream into one Unit
+	// per resource (default true). Set false to keep as a single Unit.
+	SplitByResource *bool `yaml:"splitByResource,omitempty" json:"splitByResource,omitempty"`
+	// Phase assigns these resources to a named phase from spec.phases.
+	Phase string `yaml:"phase,omitempty" json:"phase,omitempty"`
+}
+
+// Input declares one wizard prompt.
+type Input struct {
+	// Name is the key in the resolved Inputs map and the variable name used
+	// in function chain templates ({{ .Inputs.<name> }}).
+	Name string `yaml:"name" json:"name"`
+	// Type constrains the value: string, int, bool, enum, list.
+	Type string `yaml:"type" json:"type"`
+	// Default is used when the user does not supply a value.
+	Default any `yaml:"default,omitempty" json:"default,omitempty"`
+	// Required fails if missing and no default is set.
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+	// Prompt is the human-readable question.
+	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`
+	// Description is longer help text.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Options are valid values when Type == "enum".
+	Options []string `yaml:"options,omitempty" json:"options,omitempty"`
+	// WhenExternalRequire only prompts this input if the package has an
+	// ExternalRequire of this Kind.
+	WhenExternalRequire ExternalRequireKind `yaml:"whenExternalRequire,omitempty" json:"whenExternalRequire,omitempty"`
+}
+
+type Phase struct {
+	Name string `yaml:"name" json:"name"`
+	// WhereResource is a ConfigHub function-executor filter expression. The
+	// first phase whose filter matches is assigned to a resource. The last
+	// phase with empty WhereResource catches everything else.
+	WhereResource string `yaml:"whereResource,omitempty" json:"whereResource,omitempty"`
+}
+
+// FunctionGroup is one batch of function invocations sharing a toolchain and
+// a whereResource filter, mirroring the cub function-executor SDK signature
+// (one call to invokeLocalFunctions per group).
+type FunctionGroup struct {
+	// Toolchain is the executor toolchain (e.g., "Kubernetes/YAML",
+	// "AppConfig/Properties"). Per-group so a single chain can mutate both
+	// raw Kubernetes manifests and AppConfig Units in the same render.
+	Toolchain string `yaml:"toolchain" json:"toolchain"`
+	// WhereResource scopes which resources this group operates on. Empty
+	// means all resources.
+	WhereResource string `yaml:"whereResource,omitempty" json:"whereResource,omitempty"`
+	// Invocations runs in order. Output of each invocation feeds the next
+	// (within the group). Output of each group feeds the next group.
+	Invocations []FunctionInvocation `yaml:"invocations" json:"invocations"`
+	// Description is shown when previewing the chain.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+type FunctionInvocation struct {
+	Name string   `yaml:"name" json:"name"`
+	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+}

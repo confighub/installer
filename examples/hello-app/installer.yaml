@@ -1,0 +1,89 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: hello-app
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: A minimal app — Namespace, Deployment, Service.
+
+  components:
+    - name: monitoring
+      path: components/monitoring
+      description: Adds a ServiceMonitor for Prometheus scraping.
+      externalRequires:
+        - kind: CRD
+          name: servicemonitors.monitoring.coreos.com
+          suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+    - name: ingress
+      path: components/ingress
+      description: Adds an Ingress so the app is reachable from outside the cluster.
+    - name: ingress-tls
+      path: components/ingress-tls
+      description: Annotates the Ingress to request a cert from cert-manager.
+      requires: [ingress]
+      externalRequires:
+        - kind: WebhookCertProvider
+          name: cert-manager
+          issuerKind: ClusterIssuer
+
+  inputs:
+    - name: namespace
+      type: string
+      default: hello
+      prompt: Kubernetes namespace
+      required: true
+    - name: image
+      type: string
+      default: nginxdemos/hello:plain-text
+      prompt: Container image
+    - name: hostname
+      type: string
+      default: hello.local
+      prompt: Hostname for the Ingress (only used if ingress component is selected)
+
+  phases:
+    - name: namespace
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+    - name: workload
+      whereResource: ""
+
+  functionChainTemplate:
+    # Set the Namespace resource's own name. set-namespace (below) does not
+    # rename Namespace resources, so we scope set-name to v1/Namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      description: Name the Namespace resource.
+      invocations:
+        - name: set-name
+          args: ["{{ .Inputs.namespace }}"]
+
+    # ensure-namespaces adds metadata.namespace where missing (set-namespace
+    # alone is a no-op on resources that don't already carry the field).
+    # set-namespace then sets the value on every namespaced resource.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set metadata.namespace on every namespaced resource.
+      invocations:
+        - name: ensure-namespaces
+        - name: set-namespace
+          args: ["{{ .Inputs.namespace }}"]
+
+    # Override the Deployment container image with the user's chosen image.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
+      description: Set the application container image.
+      invocations:
+        - name: set-container-image
+          args: ["app", "{{ .Inputs.image }}"]
+
+    # Set the Ingress host (no-op if the ingress component was not selected).
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'networking.k8s.io/v1/Ingress'"
+      description: Set the Ingress host.
+      invocations:
+        - name: set-hostname
+          args: ["{{ .Inputs.hostname }}"]
