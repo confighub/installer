@@ -1,16 +1,39 @@
 # installer
 
-Kubernetes off-the-shelf component installer using configuration as data.
+Kubernetes off-the-shelf component installer using
+[configuration as data](https://docs.confighub.com/background/config-as-data/).
 
-`installer` renders kustomize-based packages — wrapped with an `installer.yaml`
+This tool is intended to play the role of an 
+[installer wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
+and a [package dependency manager](https://medium.com/@sdboyer/so-you-want-to-write-a-package-manager-4ae9c17d9527).
+
+As with installer wizards for systems other than Kubernetes, changes to detailed default
+settings are deferred until after installation. Configuration as data makes this possible
+by storing the configuration data rather than re-rendering from scratch. That decouples
+[configuration authoring](https://docs.confighub.com/guide/authoring-config/) from
+[configuration editing](https://itnext.io/configuration-editing-is-imperative-fa9db379fbe4).
+
+An installer should only present the minimal number of high-level decisions, such as
+which components to install and where to install them. To simplify the component decision,
+it is recommended to offer a working default selection of components. In general, it is
+recommended to set reasonable defaults as much as possible.
+
+For cases where installation decisions depend on hardware, operating system, networking,
+or other details of the deployment Target, we plan to add a mechanism for retrieving discovered
+Target facts.
+
+This tool renders kustomize-based packages — wrapped with an `installer.yaml`
 manifest that declares components, dependencies, inputs, and a function chain —
 into per-resource Kubernetes YAML, customized at install time with ConfigHub
 functions executed locally via the SDK. Output goes to plain YAML files that
 can be uploaded to ConfigHub for delivery via ArgoCD, Flux, or direct apply.
 
 The "code" lives in the installer (kustomize composition + ConfigHub function
-chain). The "config" stays as data (literal YAML in ConfigHub Units), editable
-after install without re-running templates.
+chain). The "config" stays as data (literal YAML in ConfigHub Units). For post-installation
+customization, ConfigHub's function suite includes functions for changing
+commonly changed Kubernetes resource properties, such as container images, 
+cpu and memory resources, replicas, and environment variables, and general-purpose
+editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
 
 ## Status
 
@@ -177,7 +200,7 @@ installed, the same commands work via `cub install ...`.
 
 - `cub unit create -f <dir>` bulk mode — turns
   `installer upload` into a single batched call instead of per-file.
-- Interactive wizard (Bubble Tea or `survey`).
+- Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic Link creation.
