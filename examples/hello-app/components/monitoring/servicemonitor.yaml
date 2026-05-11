@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hello-app
+  labels:
+    app: hello-app
+spec:
+  selector:
+    matchLabels:
+      app: hello-app
+  endpoints:
+    - port: http
+      interval: 30s
