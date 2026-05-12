@@ -30,10 +30,14 @@ can be uploaded to ConfigHub for delivery via ArgoCD, Flux, or direct apply.
 
 The "code" lives in the installer (kustomize composition + ConfigHub function
 chain). The "config" stays as data (literal YAML in ConfigHub Units). For post-installation
-customization, ConfigHub's function suite includes functions for changing
-commonly changed Kubernetes resource properties, such as container images,
-cpu and memory resources, replicas, and environment variables, and general-purpose
+customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions) includes functions for changing
+commonly changed Kubernetes resource properties, such as `set-container-image`,
+`set-container-resources`, `set-replicas`, and `set-env-var`, and general-purpose
 editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
+
+Why not just [kustomize](https://kustomize.io), or [kpt](https://kpt.dev)? Neither tool
+was really designed to be an installer. A lot was learned from kustomize and kpt, but
+starting afresh made it easier to experiment with different design choices.
 
 ## Status
 
