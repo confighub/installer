@@ -1,0 +1,60 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: gaie
+  version: 1.5.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        The four Gateway API Inference Extension CRDs (InferencePool,
+        InferenceObjective, InferenceModelRewrite, InferencePoolImport),
+        vendored from kubernetes-sigs/gateway-api-inference-extension v1.5.0.
+
+  components:
+    - name: sample-pool
+      path: components/sample-pool
+      description: |
+        A minimal InferencePool + InferenceObjective for kicking the tires.
+        References an EPP Service named sample-pool-epp which this package
+        does NOT install — point endpointPickerRef.name at your own EPP, or
+        layer the inferencepool Helm chart on top of this package.
+
+  # Cluster-scoped resources this package installs. Downstream packages
+  # (vLLM serving, llm-d) declare these as externalRequires.
+  provides:
+    - { kind: CRD, name: inferencepools.inference.networking.k8s.io }
+    - { kind: CRD, name: inferenceobjectives.inference.networking.x-k8s.io }
+    - { kind: CRD, name: inferencemodelrewrites.inference.networking.x-k8s.io }
+    - { kind: CRD, name: inferencepoolimports.inference.networking.x-k8s.io }
+
+  inputs:
+    - name: namespace
+      type: string
+      default: inference
+      prompt: Namespace for InferencePool/InferenceObjective custom resources (only used by sample-pool)
+      required: true
+
+  functionChainTemplate:
+    # Name the sample-pool Namespace resource. set-namespace below does not
+    # rename Namespace resources, so we scope set-name to v1/Namespace. This
+    # is a no-op when sample-pool isn't selected (no Namespace resource).
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      description: Name the sample-pool's Namespace resource.
+      invocations:
+        - name: set-name
+          args: ["{{ .Inputs.namespace }}"]
+
+    # The base is CRDs only (cluster-scoped) so this is a no-op when no
+    # components are selected. With sample-pool, the InferencePool and
+    # InferenceObjective pick up the chosen namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set metadata.namespace on every namespaced resource.
+      invocations:
+        - name: ensure-namespaces
+        - name: set-namespace
+          args: ["{{ .Inputs.namespace }}"]

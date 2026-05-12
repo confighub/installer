@@ -1,0 +1,72 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: kuberay
+  version: 1.6.1
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        KubeRay operator and its four CRDs (RayCluster, RayJob, RayService, RayCronJob),
+        vendored from ray-project/kuberay v1.6.1 (ray-operator/config).
+
+  components:
+    - name: sample-cluster
+      path: components/sample-cluster
+      description: A minimal RayCluster for kicking the tires.
+
+  # Cluster-scoped resources this package installs. Other packages can declare
+  # these as externalRequires and the installer will know they will be satisfied.
+  provides:
+    - { kind: CRD, name: rayclusters.ray.io }
+    - { kind: CRD, name: rayjobs.ray.io }
+    - { kind: CRD, name: rayservices.ray.io }
+    - { kind: CRD, name: raycronjobs.ray.io }
+
+  # The operator runs as a single replica with leader election; only one
+  # instance per cluster should hold the lease.
+  clusterSingleton:
+    - kind: leader-election-lease
+      name: kuberay-operator
+
+  inputs:
+    - name: namespace
+      type: string
+      default: kuberay-system
+      prompt: Namespace for the KubeRay operator
+      required: true
+    - name: operator_image
+      type: string
+      default: quay.io/kuberay/operator:v1.6.1
+      prompt: Operator container image
+
+  functionChainTemplate:
+    # Name the Namespace resource. set-namespace below does not rename
+    # Namespace resources, so we scope set-name to v1/Namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      description: Name the operator's Namespace resource.
+      invocations:
+        - name: set-name
+          args: ["{{ .Inputs.namespace }}"]
+
+    # Set metadata.namespace on every namespaced resource. ensure-namespaces
+    # adds the field where missing; set-namespace then writes the value, and
+    # also fixes up RoleBinding/ClusterRoleBinding subjects.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set metadata.namespace (and RBAC subject namespaces) on every namespaced resource.
+      invocations:
+        - name: ensure-namespaces
+        - name: set-namespace
+          args: ["{{ .Inputs.namespace }}"]
+
+    # Override the operator container image.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
+      description: Set the kuberay-operator container image.
+      invocations:
+        - name: set-container-image
+          args: ["kuberay-operator", "{{ .Inputs.operator_image }}"]

@@ -107,3 +107,185 @@ func filenames(files []render.File) []string {
 	}
 	return out
 }
+
+// TestEndToEnd_KubeRay drives the kuberay package through wizard → render
+// and verifies the trickier bits a real package exercises: CRDs stay
+// cluster-scoped, RBAC subjects pick up the target namespace, and the
+// operator image is rewritten.
+//
+// Requires the kustomize binary on PATH; skipped if missing.
+func TestEndToEnd_KubeRay(t *testing.T) {
+	if _, err := exec.LookPath("kustomize"); err != nil {
+		t.Skip("kustomize not on PATH")
+	}
+
+	repoRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkgDir := filepath.Join(repoRoot, "examples/kuberay")
+
+	loaded, err := ipkg.Load(pkgDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tmp := t.TempDir()
+	outDir := filepath.Join(tmp, "out")
+
+	sel, inputs, err := wizard.Run(loaded.Package, wizard.RawAnswers{
+		Inputs: map[string]string{
+			"namespace":      "raysystem",
+			"operator_image": "quay.io/kuberay/operator:v1.6.1",
+		},
+		SelectedComponents: []string{"sample-cluster"},
+	}, outDir)
+	if err != nil {
+		t.Fatalf("wizard.Run: %v", err)
+	}
+
+	result, err := render.Render(context.Background(), render.Options{
+		Loaded:    loaded,
+		Selection: sel,
+		Inputs:    inputs,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// 4 CRDs + Namespace + ServiceAccount + ClusterRole + ClusterRoleBinding
+	// + Role + RoleBinding + Deployment + Service + RayCluster = 13.
+	if len(result.Files) != 13 {
+		t.Fatalf("got %d files, want 13: %v", len(result.Files), filenames(result.Files))
+	}
+
+	manifests := filepath.Join(outDir, "manifests")
+
+	// Cluster-scoped resources should NOT have a namespace prefix in their slug.
+	for _, want := range []string{
+		"customresourcedefinition-rayclusters-ray-io.yaml",
+		"clusterrole-kuberay-operator.yaml",
+		"clusterrolebinding-kuberay-operator.yaml",
+		"namespace-raysystem.yaml",
+	} {
+		if _, err := os.Stat(filepath.Join(manifests, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+
+	// ClusterRoleBinding subject namespace was rewritten.
+	crb, err := os.ReadFile(filepath.Join(manifests, "clusterrolebinding-kuberay-operator.yaml"))
+	if err != nil {
+		t.Fatalf("read crb: %v", err)
+	}
+	if !strings.Contains(string(crb), "namespace: raysystem") {
+		t.Errorf("ClusterRoleBinding subject namespace not rewritten:\n%s", crb)
+	}
+
+	// Operator deployment has the right image and namespace.
+	dep, err := os.ReadFile(filepath.Join(manifests, "deployment-raysystem-kuberay-operator.yaml"))
+	if err != nil {
+		t.Fatalf("read deployment: %v", err)
+	}
+	got := string(dep)
+	if !strings.Contains(got, "image: quay.io/kuberay/operator:v1.6.1") {
+		t.Errorf("set-container-image did not apply:\n%s", got)
+	}
+	if !strings.Contains(got, "namespace: raysystem") {
+		t.Errorf("deployment namespace not set:\n%s", got)
+	}
+
+	// Sample RayCluster picked up the namespace.
+	rc, err := os.ReadFile(filepath.Join(manifests, "raycluster-raysystem-raycluster-kuberay.yaml"))
+	if err != nil {
+		t.Fatalf("read raycluster: %v", err)
+	}
+	if !strings.Contains(string(rc), "namespace: raysystem") {
+		t.Errorf("RayCluster namespace not set:\n%s", rc)
+	}
+
+	// Selection solver and wizard agree (sanity).
+	if got, _ := selection.Resolve(loaded.Package, "", []string{"sample-cluster"}); got.Spec.Base != sel.Spec.Base {
+		t.Errorf("solver and wizard disagree on base")
+	}
+}
+
+// TestEndToEnd_GAIE drives the gaie package through wizard → render with the
+// sample-pool component selected. Verifies the four CRDs stay cluster-scoped
+// and that the sample custom resources land in the chosen namespace.
+//
+// Requires the kustomize binary on PATH; skipped if missing.
+func TestEndToEnd_GAIE(t *testing.T) {
+	if _, err := exec.LookPath("kustomize"); err != nil {
+		t.Skip("kustomize not on PATH")
+	}
+
+	repoRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkgDir := filepath.Join(repoRoot, "examples/gaie")
+
+	loaded, err := ipkg.Load(pkgDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tmp := t.TempDir()
+	outDir := filepath.Join(tmp, "out")
+
+	sel, inputs, err := wizard.Run(loaded.Package, wizard.RawAnswers{
+		Inputs:             map[string]string{"namespace": "inferdemo"},
+		SelectedComponents: []string{"sample-pool"},
+	}, outDir)
+	if err != nil {
+		t.Fatalf("wizard.Run: %v", err)
+	}
+
+	result, err := render.Render(context.Background(), render.Options{
+		Loaded:    loaded,
+		Selection: sel,
+		Inputs:    inputs,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// 4 CRDs + Namespace + InferencePool + InferenceObjective = 7.
+	if len(result.Files) != 7 {
+		t.Fatalf("got %d files, want 7: %v", len(result.Files), filenames(result.Files))
+	}
+
+	manifests := filepath.Join(outDir, "manifests")
+
+	// All four CRDs present and unprefixed (cluster-scoped).
+	for _, want := range []string{
+		"customresourcedefinition-inferencepools-inference-networking-k8s-io.yaml",
+		"customresourcedefinition-inferenceobjectives-inference-networking-x-k8s-io.yaml",
+		"customresourcedefinition-inferencemodelrewrites-inference-networking-x-k8s-io.yaml",
+		"customresourcedefinition-inferencepoolimports-inference-networking-x-k8s-io.yaml",
+		"namespace-inferdemo.yaml",
+	} {
+		if _, err := os.Stat(filepath.Join(manifests, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+
+	// set-name renamed the Namespace resource.
+	nsBytes, err := os.ReadFile(filepath.Join(manifests, "namespace-inferdemo.yaml"))
+	if err != nil {
+		t.Fatalf("read namespace: %v", err)
+	}
+	if !strings.Contains(string(nsBytes), "name: inferdemo") {
+		t.Errorf("set-name did not rename Namespace:\n%s", nsBytes)
+	}
+
+	// InferencePool picked up the namespace.
+	poolBytes, err := os.ReadFile(filepath.Join(manifests, "inferencepool-inferdemo-sample-pool.yaml"))
+	if err != nil {
+		t.Fatalf("read inferencepool: %v", err)
+	}
+	if !strings.Contains(string(poolBytes), "namespace: inferdemo") {
+		t.Errorf("InferencePool namespace not set:\n%s", poolBytes)
+	}
+}
