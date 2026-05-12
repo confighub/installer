@@ -45,12 +45,6 @@ spec:
       default: hello.local
       prompt: Hostname for the Ingress (only used if ingress component is selected)
 
-  phases:
-    - name: namespace
-      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
-    - name: workload
-      whereResource: ""
-
   functionChainTemplate:
     # Set the Namespace resource's own name. set-namespace (below) does not
     # rename Namespace resources, so we scope set-name to v1/Namespace.

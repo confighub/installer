@@ -3,7 +3,7 @@
 Kubernetes off-the-shelf component installer using
 [configuration as data](https://docs.confighub.com/background/config-as-data/).
 
-This tool is intended to play the role of an 
+This tool is intended to play the role of an
 [installer wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
 and a [package dependency manager](https://medium.com/@sdboyer/so-you-want-to-write-a-package-manager-4ae9c17d9527).
 
@@ -31,7 +31,7 @@ can be uploaded to ConfigHub for delivery via ArgoCD, Flux, or direct apply.
 The "code" lives in the installer (kustomize composition + ConfigHub function
 chain). The "config" stays as data (literal YAML in ConfigHub Units). For post-installation
 customization, ConfigHub's function suite includes functions for changing
-commonly changed Kubernetes resource properties, such as container images, 
+commonly changed Kubernetes resource properties, such as container images,
 cpu and memory resources, replicas, and environment variables, and general-purpose
 editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
 
@@ -122,25 +122,28 @@ metadata:
   name: my-package
   version: 0.1.0
 spec:
-  bases:                     # alternative top-level kustomize trees
+  bases: # alternative top-level kustomize trees
     - { name: default, path: bases/default, default: true }
-  components:                # opt-in kustomize Components (kind: Component)
+  components: # opt-in kustomize Components (kind: Component)
     - { name: monitoring, path: components/monitoring }
-    - { name: ingress,    path: components/ingress }
+    - { name: ingress, path: components/ingress }
     - name: ingress-tls
       path: components/ingress-tls
       requires: [ingress]
       externalRequires:
-        - { kind: WebhookCertProvider, name: cert-manager, issuerKind: ClusterIssuer }
-  externalRequires: []       # cluster preconditions not provided by this package
-  provides: []               # cluster-scope resources this package installs (CRDs, etc.)
-  clusterSingleton: []       # leader-election leases this package claims
-  externalManifests: []      # remote release-tarball manifests to fetch + merge
-  inputs:                    # wizard prompts
+        - {
+            kind: WebhookCertProvider,
+            name: cert-manager,
+            issuerKind: ClusterIssuer,
+          }
+  externalRequires: [] # cluster preconditions not provided by this package
+  provides: [] # cluster-scope resources this package installs (CRDs, etc.)
+  clusterSingleton: [] # leader-election leases this package claims
+  externalManifests: [] # remote release-tarball manifests to fetch + merge
+  inputs: # wizard prompts
     - { name: namespace, type: string, default: my-app }
-    - { name: app_name,  type: string, required: true }
-  phases: []                 # for ordered apply (CRDs → operators → workloads)
-  functionChainTemplate:     # one or more groups of function invocations
+    - { name: app_name, type: string, required: true }
+  functionChainTemplate: # one or more groups of function invocations
     - toolchain: Kubernetes/YAML
       whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
       invocations:
@@ -198,13 +201,12 @@ installed, the same commands work via `cub install ...`.
 
 ## Roadmap
 
-- `cub unit create -f <dir>` bulk mode — turns
-  `installer upload` into a single batched call instead of per-file.
 - Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
-- Automatic Link creation.
-- Phase-based output and per-phase Unit labels for ordered apply.
-- Real packages: KubeRay, Gateway API Inference Extension, llm-d, KServe,
-  vLLM production stack.
+- Automatic apply ordering (CRDs before custom resources, Namespace before
+  namespaced resources, etc.) inferred from resource kind plus the existing
+  link graph — no per-package phase declarations.
+- Real packages: llm-d, KServe, vLLM production stack
+  (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
 - AppConfig support.
