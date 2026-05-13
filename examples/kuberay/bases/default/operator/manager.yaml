@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kuberay-operator
+  namespace: system
   labels:
     app.kubernetes.io/name: kuberay
     app.kubernetes.io/component: kuberay-operator

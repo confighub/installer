@@ -38,23 +38,13 @@ spec:
       required: true
 
   functionChainTemplate:
-    # Name the sample-pool Namespace resource. set-namespace below does not
-    # rename Namespace resources, so we scope set-name to v1/Namespace. This
-    # is a no-op when sample-pool isn't selected (no Namespace resource).
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
-      description: Name the sample-pool's Namespace resource.
-      invocations:
-        - name: set-name
-          args: ["{{ .Inputs.namespace }}"]
-
-    # The base is CRDs only (cluster-scoped) so this is a no-op when no
-    # components are selected. With sample-pool, the InferencePool and
-    # InferenceObjective pick up the chosen namespace.
+    # Rename the sample-pool Namespace resource (when sample-pool is selected)
+    # and set metadata.namespace on every namespace-scoped resource. The base
+    # is CRDs only (cluster-scoped), so this is a no-op when no components
+    # are selected.
     - toolchain: Kubernetes/YAML
       whereResource: ""
-      description: Set metadata.namespace on every namespaced resource.
+      description: Set the namespace on every namespaced resource.
       invocations:
-        - name: ensure-namespaces
         - name: set-namespace
           args: ["{{ .Inputs.namespace }}"]

@@ -11,18 +11,13 @@ Manifests are vendored from
 - `bases/default/operator/` — `ray-operator/config/{manager,rbac}/`
 - `components/sample-cluster/raycluster.yaml` — `ray-operator/config/samples/ray-cluster.sample.yaml`
 
-Local edits to the vendored YAML:
-
-- The `namespace: system` placeholder was stripped from `manager.yaml`; the
-  function chain sets `metadata.namespace` from the wizard's `namespace`
-  input.
-- The `ServiceAccount` subjects in `role_binding.yaml` (ClusterRoleBinding)
-  and `leader_election_role_binding.yaml` (RoleBinding) gained a placeholder
-  `namespace: kuberay-system`. ConfigHub's `set-namespace` function only
-  rewrites existing `subjects[*].namespace` paths — it doesn't add the field —
-  so without this seed the chain would leave RBAC subjects unscoped.
-- A `Namespace` resource was added at the top of the kustomization so the
-  operator's namespace is created on apply.
+The only addition to the upstream files is `bases/default/namespace.yaml` (a
+`Namespace` resource at the top of the kustomization so the operator's
+namespace is created on apply). ConfigHub's `set-namespace` function renames
+that `Namespace`, sets `metadata.namespace` on every namespaced resource, and
+upserts `subjects[*].namespace` on the `ServiceAccount` subjects in the two
+binding files — so the upstream YAML can be vendored without any further
+edits.
 
 ## Components
 
@@ -36,7 +31,11 @@ Local edits to the vendored YAML:
 | name | default | notes |
 | --- | --- | --- |
 | `namespace` | `kuberay-system` | Operator namespace. Also names the `Namespace` resource. |
-| `operator_image` | `quay.io/kuberay/operator:v1.6.1` | Tag should match the CRDs vendored above. |
+
+The operator image is hardcoded to `quay.io/kuberay/operator:v1.6.1` in
+`installer.yaml`'s function chain (upstream `manager.yaml` ships `image:
+kuberay/operator` without a registry or tag, and the kuberay project doesn't
+push to Docker Hub). Fork the package to point at a private mirror.
 
 ## Quick start
 
@@ -72,7 +71,6 @@ curl -sfL $BASE/samples/ray-cluster.sample.yaml \
   -o components/sample-cluster/raycluster.yaml
 ```
 
-After refreshing, reapply the local edits listed in "Upstream" above (strip
-`namespace: system` from `manager.yaml`, add `namespace: kuberay-system` to
-the `ServiceAccount` subjects in both binding files), and update
-`installer.yaml`'s `metadata.version` and the default for `operator_image`.
+After refreshing, update `installer.yaml`'s `metadata.version` and the
+hardcoded operator image tag in the `set-container-image` invocation to match
+the new release. The vendored YAML doesn't need any post-fetch edits.
