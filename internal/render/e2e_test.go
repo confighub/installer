@@ -37,16 +37,14 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 	tmp := t.TempDir()
 	outDir := filepath.Join(tmp, "out")
 
-	sel, inputs, err := wizard.Run(loaded.Package, wizard.RawAnswers{
-		Inputs: map[string]string{
-			"namespace": "demo",
-			"image":     "nginx:latest",
-		},
+	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
+		Inputs:             map[string]string{"namespace": "demo"},
 		SelectedComponents: []string{"monitoring"},
-	}, outDir)
+	}, loaded.Root, outDir)
 	if err != nil {
 		t.Fatalf("wizard.Run: %v", err)
 	}
+	sel, inputs := wres.Selection, wres.Inputs
 
 	// Reuse the selection solver assertion just to confirm the wiring.
 	if got, _ := selection.Resolve(loaded.Package, "", []string{"monitoring"}); got.Spec.Base != sel.Spec.Base {
@@ -63,8 +61,8 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 	}
 
 	// Expect 4 resources: Namespace + Deployment + Service + ServiceMonitor.
-	if len(result.Files) != 4 {
-		t.Fatalf("got %d files, want 4: %v", len(result.Files), filenames(result.Files))
+	if len(result.Manifests) != 4 {
+		t.Fatalf("got %d files, want 4: %v", len(result.Manifests), filenames(result.Manifests))
 	}
 
 	manifestsDir := filepath.Join(outDir, "manifests")
@@ -74,11 +72,11 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 		t.Fatalf("read deployment: %v", err)
 	}
 	got := string(deploymentBytes)
-	// set-container-image should have replaced the literal default image.
-	if !strings.Contains(got, "image: nginx:latest") {
-		t.Errorf("set-container-image did not apply:\n%s", got)
+	// hello-app's chain only does set-namespace; the image is whatever the
+	// base declares. Verify the base image survives and the namespace is set.
+	if !strings.Contains(got, "image: nginxdemos/hello:plain-text") {
+		t.Errorf("base image not preserved:\n%s", got)
 	}
-	// set-namespace should have populated metadata.namespace.
 	if !strings.Contains(got, "namespace: demo") {
 		t.Errorf("set-namespace did not apply:\n%s", got)
 	}
@@ -133,16 +131,14 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 	tmp := t.TempDir()
 	outDir := filepath.Join(tmp, "out")
 
-	sel, inputs, err := wizard.Run(loaded.Package, wizard.RawAnswers{
-		Inputs: map[string]string{
-			"namespace":      "raysystem",
-			"operator_image": "quay.io/kuberay/operator:v1.6.1",
-		},
+	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
+		Inputs:             map[string]string{"namespace": "raysystem"},
 		SelectedComponents: []string{"sample-cluster"},
-	}, outDir)
+	}, loaded.Root, outDir)
 	if err != nil {
 		t.Fatalf("wizard.Run: %v", err)
 	}
+	sel, inputs := wres.Selection, wres.Inputs
 
 	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
@@ -155,8 +151,8 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 
 	// 4 CRDs + Namespace + ServiceAccount + ClusterRole + ClusterRoleBinding
 	// + Role + RoleBinding + Deployment + Service + RayCluster = 13.
-	if len(result.Files) != 13 {
-		t.Fatalf("got %d files, want 13: %v", len(result.Files), filenames(result.Files))
+	if len(result.Manifests) != 13 {
+		t.Fatalf("got %d files, want 13: %v", len(result.Manifests), filenames(result.Manifests))
 	}
 
 	manifests := filepath.Join(outDir, "manifests")
@@ -234,13 +230,14 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	tmp := t.TempDir()
 	outDir := filepath.Join(tmp, "out")
 
-	sel, inputs, err := wizard.Run(loaded.Package, wizard.RawAnswers{
+	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
 		Inputs:             map[string]string{"namespace": "inferdemo"},
 		SelectedComponents: []string{"sample-pool"},
-	}, outDir)
+	}, loaded.Root, outDir)
 	if err != nil {
 		t.Fatalf("wizard.Run: %v", err)
 	}
+	sel, inputs := wres.Selection, wres.Inputs
 
 	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
@@ -252,8 +249,8 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	}
 
 	// 4 CRDs + Namespace + InferencePool + InferenceObjective = 7.
-	if len(result.Files) != 7 {
-		t.Fatalf("got %d files, want 7: %v", len(result.Files), filenames(result.Files))
+	if len(result.Manifests) != 7 {
+		t.Fatalf("got %d files, want 7: %v", len(result.Manifests), filenames(result.Manifests))
 	}
 
 	manifests := filepath.Join(outDir, "manifests")

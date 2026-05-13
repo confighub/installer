@@ -14,6 +14,11 @@ type InputsSpec struct {
 	// Package identifies the source package (name@version) these inputs answer.
 	Package        string `yaml:"package" json:"package"`
 	PackageVersion string `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
+	// Namespace is the Kubernetes namespace into which the package will install.
+	// Captured at wizard time via --namespace so that every package does not
+	// need to declare its own `namespace` input. Function-chain templates
+	// reference it as `{{ .Namespace }}`.
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 	// Values maps input Name → user-provided value, coerced to the declared Type.
 	Values map[string]any `yaml:"values" json:"values"`
 }

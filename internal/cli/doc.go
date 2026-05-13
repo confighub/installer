@@ -139,5 +139,41 @@ func printPackageDoc(p *api.Package) {
 				fmt.Printf("      options: %s\n", strings.Join(in.Options, ", "))
 			}
 		}
+		fmt.Println()
+	}
+
+	if p.Spec.Collector != nil {
+		fmt.Println("Collector:")
+		fmt.Printf("  command: %s", p.Spec.Collector.Command)
+		if len(p.Spec.Collector.Args) > 0 {
+			fmt.Printf(" %s", strings.Join(p.Spec.Collector.Args, " "))
+		}
+		fmt.Println()
+		if p.Spec.Collector.Description != "" {
+			for _, line := range strings.Split(strings.TrimSpace(p.Spec.Collector.Description), "\n") {
+				fmt.Printf("      %s\n", line)
+			}
+		}
+		fmt.Println()
+	}
+
+	if p.Spec.Validation != nil {
+		v := p.Spec.Validation
+		fmt.Println("Validation artifacts:")
+		if v.CommandHelp != "" {
+			fmt.Printf("  command-help: %s\n", v.CommandHelp)
+		}
+		if v.EnvSchema != "" {
+			fmt.Printf("  env-schema:   %s\n", v.EnvSchema)
+		}
+		if v.RuntimeSpec != "" {
+			fmt.Printf("  runtime-spec: %s\n", v.RuntimeSpec)
+		}
+		if v.HowToRegenerate != "" {
+			fmt.Println("  regenerate with:")
+			for _, line := range strings.Split(strings.TrimSpace(v.HowToRegenerate), "\n") {
+				fmt.Printf("      %s\n", line)
+			}
+		}
 	}
 }

@@ -1,0 +1,132 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: confighub-worker
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        ConfigHub bridge worker — Namespace, ServiceAccount, ClusterRoleBinding,
+        Deployment, plus a kustomize secretGenerator that builds the
+        confighub-worker-secret from a .env.secret file produced by the
+        collector. Intended for installing the standard worker image
+        (ghcr.io/confighubai/confighub-worker); custom worker images can be
+        accommodated by editing the rendered Deployment after install or by
+        forking the package.
+
+  # The wizard runs ./collector.sh before render. It calls the active cub
+  # context to discover:
+  #   - the server URL (CONFIGHUB_URL)
+  #   - the version-matched worker image
+  #   - the BridgeWorkerID (creates the worker on the fly if missing)
+  # and writes confighub-worker-secret.env.secret into bases/default/ for the
+  # secretGenerator to pick up. See the script for the contract.
+  collector:
+    command: ./collector.sh
+    description: |
+      Fetches CONFIGHUB_URL and the default worker image from `cub`, ensures a
+      BridgeWorker entity exists for INSTALLER_INPUT_WORKER_SLUG in the active
+      space, and writes the worker secret to
+      bases/default/confighub-worker-secret.env.secret for the kustomize
+      secretGenerator.
+
+  inputs:
+    - name: worker_slug
+      type: string
+      required: true
+      prompt: Worker slug
+      description: |
+        Slug of the BridgeWorker entity in cub. The collector fetches the
+        worker if it exists; otherwise it creates one. Also used as the
+        Deployment name.
+    - name: space
+      type: string
+      prompt: "ConfigHub space for the BridgeWorker (default: active context's space)"
+      description: |
+        cub space that holds the BridgeWorker entity. When empty (the
+        default), the collector relies on the active context's default
+        space. This is independent of the destination space passed to
+        `installer upload --space`; the two may differ when the worker
+        lives in a platform space but applies Units in env-specific spaces.
+
+  validation:
+    commandHelp: validation/command.yaml
+    envSchema: validation/env.schema.json
+    runtimeSpec: validation/runtime.yaml
+    howToRegenerate: |
+      Pull the worker image and run its docgen commands:
+
+        IMAGE=ghcr.io/confighubai/confighub-worker:latest
+        docker run --rm $IMAGE docgen command > validation/command.yaml
+        docker run --rm $IMAGE docgen env     > validation/env.schema.json
+        docker run --rm $IMAGE docgen runtime > validation/runtime.yaml
+
+      The three files describe respectively: the worker CLI surface (Cobra
+      YAML), the accepted env vars (JSON Schema), and the runtime spec (ports,
+      mount paths, probes) — together they document everything an AI agent or
+      human operator needs to author a working Deployment.
+
+  functionChainTemplate:
+    # 1. Name the Namespace and the ClusterRoleBinding (cluster-scoped, so
+    #    they don't get a metadata.namespace from set-namespace below).
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      description: Set the Namespace metadata.name.
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}"]
+
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'rbac.authorization.k8s.io/v1/ClusterRoleBinding'"
+      description: Set the ClusterRoleBinding metadata.name (cluster-scoped, so it must encode the namespace).
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}-confighub-worker-admin"]
+
+    # 2. Apply per-install customization. set-namespace + set-default-names
+    #    span all kinds; container/probe/env functions only touch resources
+    #    with a PodSpec. set-annotation intentionally annotates every
+    #    rendered resource (including the Secret) with the worker's
+    #    BridgeWorkerID — that's the marker ConfigHub uses to track which
+    #    worker installed which resources.
+    - toolchain: Kubernetes/YAML
+      description: Per-install customization of the worker workload.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+        - name: set-default-names
+          args: ["{{ .Inputs.worker_slug }}"]
+        - name: set-container-image
+          args: ["worker", "{{ .Facts.image }}"]
+        - name: set-env
+          args:
+            - "worker"
+            - "CONFIGHUB_URL={{ .Facts.configHubURL }}"
+            - "CONFIGHUB_WORKER_HTTP_SERVER_PORT=9092"
+        - name: set-pod-container-security-context-defaults
+        - name: set-container-volume-mount-path
+          args: ["worker", "tmp", "/tmp", "emptyDir"]
+        - name: set-annotation
+          args:
+            - "confighub.com/BridgeWorkerID"
+            - "{{ .Facts.bridgeWorkerID }}"
+        - name: set-container-port
+          args: ["worker", "http", "9092"]
+        - name: set-container-probe-defaults
+          args:
+            - "--liveness-path=/internal/ok"
+            - "--readiness-path=/internal/ready"
+            - "--startup-path=/internal/ok"
+        - name: set-int-path
+          args:
+            - "apps/v1/Deployment"
+            - "spec.template.spec.containers.?name=worker.livenessProbe.periodSeconds"
+            - "60"
+        - name: set-int-path
+          args:
+            - "apps/v1/Deployment"
+            - "spec.template.spec.containers.?name=worker.readinessProbe.periodSeconds"
+            - "60"

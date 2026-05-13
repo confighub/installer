@@ -11,9 +11,11 @@ import (
 )
 
 // File represents one rendered Kubernetes resource as it will be written to
-// disk and uploaded as one ConfigHub Unit.
+// disk and uploaded as one ConfigHub Unit (unless Sensitive is true, in which
+// case it is written to out/secrets/ and never uploaded).
 type File struct {
-	// Filename is the recommended filename within out/manifests/.
+	// Filename is the recommended filename within out/manifests/ (or
+	// out/secrets/ when Sensitive).
 	Filename string
 	// Slug is the recommended ConfigHub Unit slug for upload.
 	Slug string
@@ -25,6 +27,10 @@ type File struct {
 	Kind       string
 	Name       string
 	Namespace  string
+	// Sensitive marks resources that must never be uploaded as Units.
+	// Currently set for any v1/Secret. Routed to out/secrets/ instead of
+	// out/manifests/ and skipped by `installer upload`.
+	Sensitive bool
 }
 
 // splitForUnits splits a multi-doc YAML stream into one File per resource,
@@ -91,7 +97,16 @@ func fileForDoc(doc []byte) (*File, error) {
 		Kind:       meta.Kind,
 		Name:       meta.Metadata.Name,
 		Namespace:  meta.Metadata.Namespace,
+		Sensitive:  isSensitiveKind(meta.APIVersion, meta.Kind),
 	}, nil
+}
+
+// isSensitiveKind reports whether a rendered resource must be routed to
+// out/secrets/ and excluded from upload. Currently just v1/Secret; the
+// kustomize secretGenerator-with-disableNameSuffixHash pattern is what
+// produces those resources in installer packages.
+func isSensitiveKind(apiVersion, kind string) bool {
+	return apiVersion == "v1" && kind == "Secret"
 }
 
 // slugify derives a Unit slug from kind + namespace + name following kubectl-

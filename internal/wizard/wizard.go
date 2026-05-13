@@ -1,15 +1,18 @@
 // Package wizard collects user answers (currently non-interactive only),
-// validates them against the package's Inputs schema, and emits Selection +
-// Inputs documents into a working directory.
+// validates them against the package's Inputs schema, runs the package's
+// optional Collector to discover install-time facts, and emits Selection +
+// Inputs + Facts documents into a working directory.
 package wizard
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/confighubai/installer/internal/collector"
 	"github.com/confighubai/installer/internal/selection"
 	"github.com/confighubai/installer/pkg/api"
 )
@@ -24,19 +27,34 @@ type RawAnswers struct {
 	SelectedComponents []string
 	// BaseName is the chosen base from --base; "" means use the package default.
 	BaseName string
+	// Namespace is the Kubernetes namespace from --namespace. Persisted to
+	// inputs.yaml and exposed to function-chain templates as {{ .Namespace }}.
+	Namespace string
 }
 
-// Run validates answers against the package, runs the selection solver, and
-// writes selection.yaml + inputs.yaml into outDir/spec.
-func Run(pkg *api.Package, raw RawAnswers, outDir string) (*api.Selection, *api.Inputs, error) {
+// Result bundles the documents the wizard produces. Facts is nil if the
+// package declares no Collector.
+type Result struct {
+	Selection *api.Selection
+	Inputs    *api.Inputs
+	Facts     *api.Facts
+}
+
+// Run validates answers against the package, runs the selection solver,
+// invokes the package's Collector (if any), and writes selection.yaml +
+// inputs.yaml + facts.yaml into outDir/spec.
+//
+// packageDir is the absolute path to the loaded package working copy; the
+// collector runs with that as its working directory.
+func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outDir string) (*Result, error) {
 	values, err := coerceInputs(pkg, raw.Inputs)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	sel, err := selection.Resolve(pkg, raw.BaseName, raw.SelectedComponents)
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolve selection: %w", err)
+		return nil, fmt.Errorf("resolve selection: %w", err)
 	}
 
 	inputs := &api.Inputs{
@@ -48,23 +66,58 @@ func Run(pkg *api.Package, raw RawAnswers, outDir string) (*api.Selection, *api.
 		Spec: api.InputsSpec{
 			Package:        pkg.Metadata.Name,
 			PackageVersion: pkg.Metadata.Version,
+			Namespace:      raw.Namespace,
 			Values:         values,
 		},
 	}
 
+	workDir := filepath.Dir(outDir)
+	factsValues, err := collector.Run(ctx, pkg, collector.Inputs{
+		PackageDir:         packageDir,
+		WorkDir:            workDir,
+		Namespace:          raw.Namespace,
+		Base:               sel.Spec.Base,
+		SelectedComponents: sel.Spec.Components,
+		InputValues:        values,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("collector: %w", err)
+	}
+
+	var facts *api.Facts
+	if factsValues != nil {
+		facts = &api.Facts{
+			APIVersion: api.APIVersion,
+			Kind:       api.KindFacts,
+			Metadata: api.Metadata{
+				Name: pkg.Metadata.Name + "-facts",
+			},
+			Spec: api.FactsSpec{
+				Package:        pkg.Metadata.Name,
+				PackageVersion: pkg.Metadata.Version,
+				Values:         factsValues,
+			},
+		}
+	}
+
 	specDir := filepath.Join(outDir, "spec")
 	if err := os.MkdirAll(specDir, 0o755); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := writeYAML(filepath.Join(specDir, "selection.yaml"), sel); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := writeYAML(filepath.Join(specDir, "inputs.yaml"), inputs); err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+	if facts != nil {
+		if err := writeYAML(filepath.Join(specDir, "facts.yaml"), facts); err != nil {
+			return nil, err
+		}
 	}
 
-	return sel, inputs, nil
+	return &Result{Selection: sel, Inputs: inputs, Facts: facts}, nil
 }
 
 // coerceInputs validates raw string values against the declared Input schema

@@ -1,0 +1,89 @@
+name: cub-worker-run
+synopsis: Start a worker process
+description: |
+    Start a worker process to serve one or more supported provider types.
+
+    Each ProviderType corresponds to one or more ToolchainTypes.
+    For example, the "Kubernetes" provider type corresponds to the Kubernetes/YAML ToolchainType
+
+    Some ToolchainTypes are supported by multiple ProviderTypes, and some ProviderTypes support
+    multiple ToolchainTypes.
+
+    The available ProviderTypes are:
+
+    - ConfigHub
+    - Kubernetes
+    - FluxRenderer
+    - FluxOCI
+    - ArgoCDRenderer
+    - ArgoCDOCI
+    - ConfigMapRenderer
+
+    Here the provider types are case-insensitive and they can be comma-separated, like "kubernetes,configmaprenderer".
+
+    They can be passed in the one optional command-line argument (deprecated), or
+    via the CONFIGHUB_WORKER_PROVIDER_TYPES environment variable.
+
+    By default, all provider types are started.
+
+    The worker takes its configuration primarily from environment variables.
+    Flags should only be used for testing. They are not part of the worker invocation contract
+    used by cub worker install, cub worker run, and cub worker get-envs.
+
+    The environment variables it expects are:
+
+    - CONFIGHUB_WORKER_ID: The worker ID
+    - CONFIGHUB_WORKER_SECRET: The worker secret
+
+    Optional environment variables:
+
+    - CONFIGHUB_WORKER_PROVIDER_TYPES: Comma-separated list of lower-cased provider types
+    - CONFIGHUB_WORKER_FUNCTIONS: Comma-separated list of additional function names to register (e.g., "vet-kyverno-server", "vet-opa-gatekeeper")
+
+    - CONFIGHUB_URL: The URL (scheme and host) to call the ConfigHub API. Defaults to https://hub.confighub.com
+    - CONFIGHUB_WORKER_PORT: The port for the worker's HTTP2 connection to ConfigHub. Defaults to 443
+    - CONFIGHUB_WORKER_HTTP_SERVER_PORT: When set, starts a local HTTP server on this port. Exposes /internal/metrics (Prometheus), /internal/pprof, /internal/ok (liveness), and /internal/ready (readiness). When unset, no HTTP server is started.
+    - CONFIGHUB_WORKER_SERVER_SHUTDOWN_TIMEOUT: The amount of time to allow the HTTP server to shutdown, default is 5 seconds
+
+    Run "cub-worker-run docgen env" to print the worker environment variables as a JSON Schema.
+    Run "cub-worker-run docgen command" to print Cobra YAML documentation for the worker command.
+    Run "cub-worker-run docgen runtime" to print the worker's runtime spec (ports, paths, probes) as YAML.
+    Run "cub-worker-run get-env" to print the loaded worker configuration as JSON.
+usage: cub-worker-run [<provider-types>] [flags]
+options:
+    - name: grace-period-delay
+      default_value: "10"
+      usage: |
+        Delay in seconds after receiving SIGTERM before starting shutdown (GRACE_PERIOD_DELAY)
+    - name: help
+      shorthand: h
+      default_value: "false"
+      usage: help for cub-worker-run
+    - name: main-port
+      default_value: "443"
+      usage: |
+        ConfigHub Main Port (extracted from CONFIGHUB_URL by default)
+    - name: provider-types
+      shorthand: t
+      default_value: argocdoci,argocdrenderer,confighub,configmaprenderer,fluxrenderer,kubernetes
+      usage: |
+        Comma-separated list of provider types (CONFIGHUB_WORKER_PROVIDER_TYPES)
+    - name: url
+      shorthand: u
+      default_value: https://hub.confighub.com
+      usage: ConfigHub Server URL (CONFIGHUB_URL)
+    - name: worker-id
+      shorthand: w
+      usage: Worker ID (CONFIGHUB_WORKER_ID)
+    - name: worker-port
+      shorthand: p
+      default_value: "443"
+      usage: ConfigHub Worker Port (CONFIGHUB_WORKER_PORT)
+    - name: worker-secret
+      shorthand: s
+      usage: Worker Secret (CONFIGHUB_WORKER_SECRET)
+see_also:
+    - cub-worker-run completion - Generate the autocompletion script for the specified shell
+    - cub-worker-run docgen - Generate documentation for the worker
+    - cub-worker-run get-env - Print the loaded worker configuration
+    - cub-worker-run version - Show version, commit and build date

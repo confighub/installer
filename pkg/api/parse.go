@@ -76,6 +76,18 @@ func ParseInputs(data []byte) (*Inputs, error) {
 	return &i, nil
 }
 
+// ParseFacts parses facts.yaml bytes into Facts.
+func ParseFacts(data []byte) (*Facts, error) {
+	var f Facts
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("parse Facts: %w", err)
+	}
+	if f.Kind != "" && f.Kind != KindFacts {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", f.Kind, KindFacts)
+	}
+	return &f, nil
+}
+
 // ParseFunctionChain parses function-chain.yaml bytes.
 func ParseFunctionChain(data []byte) (*FunctionChain, error) {
 	var c FunctionChain
