@@ -60,6 +60,14 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				if err := os.RemoveAll(manifestsDir); err != nil {
 					return err
 				}
+				if err := os.RemoveAll(filepath.Join(outDir, "secrets")); err != nil {
+					return err
+				}
+			}
+
+			facts, err := readFactsOptional(filepath.Join(specDir, "facts.yaml"))
+			if err != nil {
+				return err
 			}
 
 			ctx := context.Background()
@@ -67,19 +75,35 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				Loaded:    loaded,
 				Selection: sel,
 				Inputs:    inputs,
+				Facts:     facts,
 			}, outDir)
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("Rendered %d resource(s) to %s\n", len(result.Files), manifestsDir)
+			fmt.Printf("Rendered %d manifest(s) to %s\n", len(result.Manifests), manifestsDir)
+			if len(result.Secrets) > 0 {
+				fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(result.Secrets), outDir)
+			}
 			fmt.Printf("Spec docs in %s\n", specDir)
 			fmt.Printf("Next: installer upload %s --space <slug>\n", workDir)
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&clean, "clean", false, "remove out/manifests/ before rendering")
+	cmd.Flags().BoolVar(&clean, "clean", false, "remove out/manifests/ and out/secrets/ before rendering")
 	return cmd
+}
+
+// readFactsOptional reads facts.yaml if it exists, returning nil otherwise.
+func readFactsOptional(path string) (*api.Facts, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return api.ParseFacts(data)
 }
 
 func readSelection(path string) (*api.Selection, error) {

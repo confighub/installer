@@ -1,0 +1,24 @@
+Ports:
+  - Name: http
+    Description: Local HTTP server. Bound only when CONFIGHUB_WORKER_HTTP_SERVER_PORT is set. Serves /internal/metrics (Prometheus), /internal/pprof/* (pprof), /internal/routes (route listing), /internal/ok (liveness), and /internal/ready (readiness).
+    Protocol: TCP
+    Sources:
+      - Type: Env
+        EnvVar: CONFIGHUB_WORKER_HTTP_SERVER_PORT
+Paths:
+  - Name: tmp
+    Description: Scratch space for schema caching and transient work. Required to be writable; safe to back with emptyDir.
+    Path: /tmp
+    Access: ReadWrite
+    Persistence: Ephemeral
+Probes:
+  - Name: liveness
+    Type: Liveness
+    HTTPGet:
+      Path: /internal/ok
+      PortName: http
+  - Name: readiness
+    Type: Readiness
+    HTTPGet:
+      Path: /internal/ready
+      PortName: http

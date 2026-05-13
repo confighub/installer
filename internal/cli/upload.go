@@ -17,14 +17,27 @@ import (
 )
 
 func newUploadCmd() *cobra.Command {
-	var space string
+	var (
+		space       string
+		target      string
+		annotations []string
+		labels      []string
+	)
 	cmd := &cobra.Command{
 		Use:   "upload <work-dir>",
 		Short: "Upload rendered manifests to a ConfigHub space",
 		Long: `Upload sends <work-dir>/out/manifests/*.yaml to a ConfigHub space as one
-Unit per file. After upload, the command analyzes the space with the
-get-resources, get-references, and get-workload-labels functions and creates
-NeedsProvides links between units when:
+Unit per file. Files in <work-dir>/out/secrets/ are never uploaded — they
+hold rendered Secret resources flagged as sensitive by render.
+
+--target, --annotation, and --label are forwarded to ` + "`cub unit create`" + ` so every
+created Unit can be bound to a destination, annotated, and labeled in a
+single command. Each --annotation and --label is repeatable and takes
+key=value.
+
+After upload, the command analyzes the space with the get-resources,
+get-references, and get-workload-labels functions and creates NeedsProvides
+links between units when:
 
   - a unit references another unit's resource by name (e.g., a Deployment
     referencing a Namespace, ConfigMap, or ServiceAccount),
@@ -42,6 +55,12 @@ Units are never linked to themselves; duplicate edges are collapsed.`,
 			if _, err := exec.LookPath("cub"); err != nil {
 				return fmt.Errorf("cub CLI not found on PATH: %w", err)
 			}
+			if err := validateKeyValueFlags("--annotation", annotations); err != nil {
+				return err
+			}
+			if err := validateKeyValueFlags("--label", labels); err != nil {
+				return err
+			}
 			workDir, err := filepath.Abs(args[0])
 			if err != nil {
 				return err
@@ -57,7 +76,18 @@ Units are never linked to themselves; duplicate edges are collapsed.`,
 				}
 				slug := trimExt(e.Name())
 				path := filepath.Join(manifestsDir, e.Name())
-				ccmd := exec.Command("cub", "unit", "create", "--space", space, slug, path)
+				cubArgs := []string{"unit", "create", "--space", space}
+				if target != "" {
+					cubArgs = append(cubArgs, "--target", target)
+				}
+				for _, a := range annotations {
+					cubArgs = append(cubArgs, "--annotation", a)
+				}
+				for _, l := range labels {
+					cubArgs = append(cubArgs, "--label", l)
+				}
+				cubArgs = append(cubArgs, slug, path)
+				ccmd := exec.Command("cub", cubArgs...)
 				ccmd.Stdout = os.Stdout
 				ccmd.Stderr = os.Stderr
 				if err := ccmd.Run(); err != nil {
@@ -68,7 +98,19 @@ Units are never linked to themselves; duplicate edges are collapsed.`,
 		},
 	}
 	cmd.Flags().StringVar(&space, "space", "", "destination ConfigHub space slug")
+	cmd.Flags().StringVar(&target, "target", "", "target slug; forwarded to cub unit create --target on every Unit")
+	cmd.Flags().StringSliceVar(&annotations, "annotation", nil, "annotation key=value to set on every Unit (repeatable)")
+	cmd.Flags().StringSliceVar(&labels, "label", nil, "label key=value to set on every Unit (repeatable)")
 	return cmd
+}
+
+func validateKeyValueFlags(flag string, vals []string) error {
+	for _, v := range vals {
+		if !strings.Contains(v, "=") {
+			return fmt.Errorf("%s %q must be key=value", flag, v)
+		}
+	}
+	return nil
 }
 
 // cub function-do emits one JSON object per unit on stdout, separated by

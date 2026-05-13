@@ -18,6 +18,7 @@ const (
 	KindInputs        = "Inputs"
 	KindSelection     = "Selection"
 	KindFunctionChain = "FunctionChain"
+	KindFacts         = "Facts"
 )
 
 // Metadata is the common metadata block on every installer doc.

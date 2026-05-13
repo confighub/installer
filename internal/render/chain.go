@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/confighubai/installer/pkg/api"
@@ -14,11 +15,19 @@ import (
 )
 
 // resolveChainTemplate expands Go template expressions inside the package's
-// FunctionChainTemplate against the resolved Inputs and Selection. Returns
-// the materialized FunctionChain ready to execute. Empty arg strings after
-// resolution are kept (they may legitimately encode "set this field empty");
-// callers that want to skip empty groups should filter post-resolution.
-func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selection) (*api.FunctionChain, error) {
+// FunctionChainTemplate against the resolved Inputs, Selection, and Facts.
+// Returns the materialized FunctionChain ready to execute. Empty arg strings
+// after resolution are kept (they may legitimately encode "set this field
+// empty"); callers that want to skip empty groups should filter post-resolution.
+//
+// Template context:
+//
+//	{{ .Namespace }}      — value of `installer wizard --namespace`
+//	{{ .Inputs.<name> }}  — value from inputs.yaml
+//	{{ .Facts.<name> }}   — value from facts.yaml (nil if no collector ran)
+//	{{ .Selection.* }}    — chosen base + components
+//	{{ .Package.* }}      — package metadata (name, version, labels, ...)
+func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selection, facts *api.Facts) (*api.FunctionChain, error) {
 	// Marshal the template to YAML, run text/template over the bytes, then
 	// re-parse. This lets the template author use {{ .Inputs.foo }} anywhere
 	// a string appears in the chain (function args, whereResource, even
@@ -33,8 +42,14 @@ func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selecti
 		return nil, fmt.Errorf("parse template: %w", err)
 	}
 	var buf bytes.Buffer
+	factValues := map[string]any{}
+	if facts != nil {
+		factValues = facts.Spec.Values
+	}
 	ctx := map[string]any{
+		"Namespace": inputs.Spec.Namespace,
 		"Inputs":    inputs.Spec.Values,
+		"Facts":     factValues,
 		"Selection": sel.Spec,
 		"Package":   pkg.Metadata,
 	}
@@ -82,9 +97,9 @@ func runChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 				return nil, fmt.Errorf("group %d: function %q not registered for toolchain %q",
 					i, inv.Name, group.Toolchain)
 			}
-			args := make([]fapi.FunctionArgument, 0, len(inv.Args))
-			for _, a := range inv.Args {
-				args = append(args, fapi.FunctionArgument{Value: a})
+			args, err := parseFunctionArguments(inv.Args)
+			if err != nil {
+				return nil, fmt.Errorf("group %d, function %q: %w", i, inv.Name, err)
 			}
 			invs = append(invs, fapi.FunctionInvocation{
 				FunctionName: inv.Name,
@@ -113,4 +128,30 @@ func runChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 		}
 	}
 	return data, nil
+}
+
+// parseFunctionArguments converts cub-CLI-shaped arg strings into the
+// FunctionArgument form the executor expects. An arg of the form
+// `--name=value` becomes a named argument with ParameterName=name; a bare
+// arg becomes a positional argument with Value=<arg>.
+//
+// Mirrors the parser in public/cmd/cub/function_do.go so that chain templates
+// can use the same `--liveness-path=/internal/ok` style as worker_install.go.
+func parseFunctionArguments(args []string) ([]fapi.FunctionArgument, error) {
+	out := make([]fapi.FunctionArgument, 0, len(args))
+	namedMode := false
+	for _, a := range args {
+		if strings.HasPrefix(a, "--") && strings.Contains(a, "=") {
+			namedMode = true
+			parts := strings.SplitN(a, "=", 2)
+			name := strings.TrimPrefix(parts[0], "--")
+			out = append(out, fapi.FunctionArgument{ParameterName: name, Value: parts[1]})
+			continue
+		}
+		if namedMode {
+			return nil, fmt.Errorf("positional argument %q cannot follow named arguments", a)
+		}
+		out = append(out, fapi.FunctionArgument{Value: a})
+	}
+	return out, nil
 }

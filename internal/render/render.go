@@ -10,19 +10,26 @@ import (
 	"github.com/confighubai/installer/pkg/api"
 )
 
-// Options controls Render. All fields are optional except Loaded.
+// Options controls Render. All fields are required except Facts.
 type Options struct {
 	Loaded    *ipkg.Loaded
 	Selection *api.Selection
 	Inputs    *api.Inputs
+	// Facts is the parsed facts.yaml. Nil when the package has no collector
+	// or the wizard has not been re-run after one was added.
+	Facts *api.Facts
 }
 
 // Result is what Render produces.
 type Result struct {
-	// OutDir is the directory written to (out/manifests + out/spec underneath).
+	// OutDir is the directory written to (out/manifests + out/secrets + out/spec
+	// underneath).
 	OutDir string
-	// Files is the per-resource output, ordered by Slug.
-	Files []File
+	// Manifests is the per-resource non-sensitive output, ordered by Slug.
+	Manifests []File
+	// Secrets is the per-resource sensitive output (Kubernetes Secrets),
+	// written to out/secrets/ and never uploaded as Units.
+	Secrets []File
 	// Chain is the resolved FunctionChain that was executed (also persisted to spec/).
 	Chain *api.FunctionChain
 }
@@ -56,8 +63,8 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	// 2. Resolve the function chain template against the inputs.
-	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection)
+	// 2. Resolve the function chain template against the inputs and facts.
+	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +84,19 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	// 5. Write everything out.
+	// 5. Split sensitive resources off into out/secrets/, write the rest to
+	// out/manifests/.
+	var manifests, secrets []File
+	for _, f := range files {
+		if f.Sensitive {
+			secrets = append(secrets, f)
+		} else {
+			manifests = append(manifests, f)
+		}
+	}
+
 	manifestsDir := filepath.Join(outDir, "manifests")
+	secretsDir := filepath.Join(outDir, "secrets")
 	specDir := filepath.Join(outDir, "spec")
 	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
 		return nil, err
@@ -86,33 +104,53 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	if err := os.MkdirAll(specDir, 0o755); err != nil {
 		return nil, err
 	}
+	if len(secrets) > 0 {
+		if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+			return nil, err
+		}
+	}
 
-	for _, f := range files {
+	for _, f := range manifests {
 		path := filepath.Join(manifestsDir, f.Filename)
 		if err := os.WriteFile(path, f.Body, 0o644); err != nil {
 			return nil, fmt.Errorf("write %s: %w", path, err)
 		}
 	}
+	for _, f := range secrets {
+		path := filepath.Join(secretsDir, f.Filename)
+		if err := os.WriteFile(path, f.Body, 0o600); err != nil {
+			return nil, fmt.Errorf("write %s: %w", path, err)
+		}
+	}
 
 	// Persist spec docs alongside the rendered output: selection, inputs,
-	// the resolved function-chain, and a manifest index for downstream tools.
+	// optional facts, the resolved function-chain, and a manifest index for
+	// downstream tools.
 	if err := writeYAML(filepath.Join(specDir, "selection.yaml"), opts.Selection); err != nil {
 		return nil, err
 	}
 	if err := writeYAML(filepath.Join(specDir, "inputs.yaml"), opts.Inputs); err != nil {
 		return nil, err
 	}
+	if opts.Facts != nil {
+		if err := writeYAML(filepath.Join(specDir, "facts.yaml"), opts.Facts); err != nil {
+			return nil, err
+		}
+	}
 	if err := writeYAML(filepath.Join(specDir, "function-chain.yaml"), chain); err != nil {
 		return nil, err
 	}
-	if err := writeManifestIndex(filepath.Join(specDir, "manifest-index.yaml"), opts.Loaded.Package, files); err != nil {
+	// The manifest index records only non-sensitive files; secrets are tracked
+	// separately and never uploaded.
+	if err := writeManifestIndex(filepath.Join(specDir, "manifest-index.yaml"), opts.Loaded.Package, manifests); err != nil {
 		return nil, err
 	}
 
 	return &Result{
-		OutDir: outDir,
-		Files:  files,
-		Chain:  chain,
+		OutDir:    outDir,
+		Manifests: manifests,
+		Secrets:   secrets,
+		Chain:     chain,
 	}, nil
 }
 
