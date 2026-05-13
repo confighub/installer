@@ -205,6 +205,9 @@ installed, the same commands work via `cub install ...`.
 
 ## Roadmap
 
+- Bundling
+- Secrets
+- Use for worker installation
 - Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
@@ -214,3 +217,7 @@ installed, the same commands work via `cub install ...`.
 - Real packages: llm-d, KServe, vLLM production stack
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
 - AppConfig support.
+- Change of selections and inputs
+- TBD: Hooks
+- TBD: upgrade
+- TBD: variant creation
