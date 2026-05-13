@@ -37,36 +37,26 @@ spec:
       default: kuberay-system
       prompt: Namespace for the KubeRay operator
       required: true
-    - name: operator_image
-      type: string
-      default: quay.io/kuberay/operator:v1.6.1
-      prompt: Operator container image
 
   functionChainTemplate:
-    # Name the Namespace resource. set-namespace below does not rename
-    # Namespace resources, so we scope set-name to v1/Namespace.
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
-      description: Name the operator's Namespace resource.
-      invocations:
-        - name: set-name
-          args: ["{{ .Inputs.namespace }}"]
-
-    # Set metadata.namespace on every namespaced resource. ensure-namespaces
-    # adds the field where missing; set-namespace then writes the value, and
-    # also fixes up RoleBinding/ClusterRoleBinding subjects.
+    # Rename the operator's Namespace resource, set metadata.namespace on
+    # every namespace-scoped resource, and upsert subjects[].namespace on
+    # every ServiceAccount subject in the operator's RoleBinding and
+    # ClusterRoleBinding.
     - toolchain: Kubernetes/YAML
       whereResource: ""
-      description: Set metadata.namespace (and RBAC subject namespaces) on every namespaced resource.
+      description: Set the namespace on every namespaced resource and RBAC ServiceAccount subject.
       invocations:
-        - name: ensure-namespaces
         - name: set-namespace
           args: ["{{ .Inputs.namespace }}"]
 
-    # Override the operator container image.
+    # Rewrite the operator image to a fully-qualified, version-pinned ref.
+    # Upstream manager.yaml ships `image: kuberay/operator` (no registry, no
+    # tag); the kuberay project publishes to quay.io, not Docker Hub. Bump
+    # the tag in lockstep with metadata.version above when refreshing.
     - toolchain: Kubernetes/YAML
       whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
       description: Set the kuberay-operator container image.
       invocations:
         - name: set-container-image
-          args: ["kuberay-operator", "{{ .Inputs.operator_image }}"]
+          args: ["kuberay-operator", "quay.io/kuberay/operator:v1.6.1"]

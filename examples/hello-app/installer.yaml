@@ -36,48 +36,13 @@ spec:
       default: hello
       prompt: Kubernetes namespace
       required: true
-    - name: image
-      type: string
-      default: nginxdemos/hello:plain-text
-      prompt: Container image
-    - name: hostname
-      type: string
-      default: hello.local
-      prompt: Hostname for the Ingress (only used if ingress component is selected)
 
   functionChainTemplate:
-    # Set the Namespace resource's own name. set-namespace (below) does not
-    # rename Namespace resources, so we scope set-name to v1/Namespace.
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
-      description: Name the Namespace resource.
-      invocations:
-        - name: set-name
-          args: ["{{ .Inputs.namespace }}"]
-
-    # ensure-namespaces adds metadata.namespace where missing (set-namespace
-    # alone is a no-op on resources that don't already carry the field).
-    # set-namespace then sets the value on every namespaced resource.
+    # Rename the Namespace resource and set metadata.namespace on every
+    # namespace-scoped resource.
     - toolchain: Kubernetes/YAML
       whereResource: ""
-      description: Set metadata.namespace on every namespaced resource.
+      description: Set the namespace on every namespaced resource.
       invocations:
-        - name: ensure-namespaces
         - name: set-namespace
           args: ["{{ .Inputs.namespace }}"]
-
-    # Override the Deployment container image with the user's chosen image.
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
-      description: Set the application container image.
-      invocations:
-        - name: set-container-image
-          args: ["app", "{{ .Inputs.image }}"]
-
-    # Set the Ingress host (no-op if the ingress component was not selected).
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'networking.k8s.io/v1/Ingress'"
-      description: Set the Ingress host.
-      invocations:
-        - name: set-hostname
-          args: ["{{ .Inputs.hostname }}"]
