@@ -158,6 +158,15 @@ intra-Space NeedsProvides links.`,
 					return err
 				}
 			}
+
+			// Record the parent package's install in the per-user
+			// state file (~/.confighub/installer/state.yaml). Other
+			// commands (notably `installer new`) read this to find
+			// kubernetes-resources without re-asking the operator.
+			// Best-effort: failure here should NOT fail the upload.
+			if err := recordUploadInUserState(cmd.Context(), packages); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not record install in user state: %v\n", err)
+			}
 			return nil
 		},
 	}

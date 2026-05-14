@@ -31,6 +31,8 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 	root.AddCommand(
 		// Author
 		newInitCmd(),
+		newNewCmd(),
+		newEditCmd(),
 		newVetCmd(),
 		// Inspect / discover
 		newDocCmd(),
