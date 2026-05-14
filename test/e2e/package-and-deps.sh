@@ -216,6 +216,55 @@ with open(p, 'w') as f:
     fail "second update should not open a ChangeSet (no changes)"
   fi
   echo "update: applied 1 change in ChangeSet; second run is no-op"
+
+  log "upgrade with edited package source surfaces a real diff"
+  EDITED_SRC="$WORK_TMP/example-stack-edited"
+  cp -r "$REPO_ROOT/examples/example-stack" "$EDITED_SRC"
+  python3 -c "
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f: docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if isinstance(d, dict) and isinstance(d.get('metadata'), dict):
+        labels = d['metadata'].setdefault('labels', {})
+        labels['installer-e2e-upgrade-marker'] = 'true'
+        break
+with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, sort_keys=False)
+" "$EDITED_SRC/bases/default/deployment.yaml"
+
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-edit.out"
+  if ! grep -q "to change" "$WORK_TMP/upgrade-edit.out"; then
+    fail "upgrade after edit should plan a change"
+  fi
+  if ! grep -q "installer-e2e-upgrade-marker" "$WORK_TMP/upgrade-edit.out"; then
+    fail "upgrade plan should mention the new label"
+  fi
+  if [[ ! -d "$WORK_TMP/.upgrade/package" ]]; then
+    fail "upgrade should leave .upgrade/package staged"
+  fi
+  echo "upgrade: edited source → diff plan; .upgrade/ staged"
+
+  log "upgrade-apply applies the edit with an upgrade-named ChangeSet"
+  "$BIN" upgrade-apply "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/upgrade-apply-edit.out"
+  if ! grep -qE "^Applied: [0-9]+ created, [1-9][0-9]* updated, [0-9]+ deleted\\.$" "$WORK_TMP/upgrade-apply-edit.out"; then
+    fail "upgrade-apply should report at least 1 update"
+  fi
+  if ! grep -q "installer-upgrade-" "$WORK_TMP/upgrade-apply-edit.out"; then
+    fail "upgrade-apply should open an installer-upgrade-* ChangeSet"
+  fi
+  if [[ -d "$WORK_TMP/.upgrade" ]]; then
+    fail "upgrade-apply should remove .upgrade/ after promoting"
+  fi
+  if [[ ! -d "$WORK_TMP/.upgrade-prev" ]]; then
+    fail "upgrade-apply should archive prior tree to .upgrade-prev/"
+  fi
+
+  log "upgrade re-run against the same edited source converges"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-converge.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/upgrade-converge.out"; then
+    fail "second upgrade against the same edited source should be No changes"
+  fi
+  echo "upgrade: edit→apply→re-upgrade converges; ChangeSet named installer-upgrade-*"
 fi
 
 log "OK"

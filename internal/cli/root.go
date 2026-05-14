@@ -43,6 +43,8 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		newRenderCmd(),
 		newPlanCmd(),
 		newUpdateCmd(),
+		newUpgradeCmd(),
+		newUpgradeApplyCmd(),
 		newPreflightCmd(),
 		newUploadCmd(),
 		// Publish

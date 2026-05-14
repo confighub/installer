@@ -409,6 +409,23 @@ func ask(p survey.Prompt, response any, opts AskOptions, extra ...survey.AskOpt)
 	return survey.AskOne(p, response, askOpts...)
 }
 
+// StringifyAny is the exported wrapper around stringifyAny — used by
+// `installer upgrade` to round-trip prior typed values back through
+// RawAnswers.
+func StringifyAny(v any) string { return stringifyAny(v) }
+
+// AskOneInput prompts interactively for a single input declaration
+// using the same widget the wizard uses inline (text / select / bool).
+// Used by `installer upgrade` to ask for new required inputs that the
+// prior install did not answer.
+func AskOneInput(in api.Input) (string, error) {
+	out := RawAnswers{Inputs: map[string]string{}}
+	if err := promptInput(&in, nil, &out, AskOptions{}); err != nil {
+		return "", err
+	}
+	return out.Inputs[in.Name], nil
+}
+
 // stringifyAny renders an input value in the form the non-interactive
 // path expects: every value is a string and coerceInputs at Run time
 // re-types it from in.Type.
