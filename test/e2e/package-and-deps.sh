@@ -155,6 +155,50 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
     echo "  $s"
     cub unit list --space "$s" 2>&1 | awk 'NR>1 {print "    "$1}'
   done
+
+  log "plan against unchanged work-dir"
+  "$BIN" plan "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-clean.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/plan-clean.out"; then
+    fail "plan against just-uploaded work-dir should report No changes"
+  fi
+
+  log "plan after editing one rendered manifest"
+  # Pick the first .yaml file under example-base manifests and inject a
+  # marker label so the plan must surface a change.
+  PARENT_DIR="$WORK_TMP/out/example-base/manifests"
+  if [[ ! -d "$PARENT_DIR" ]]; then
+    PARENT_DIR="$WORK_TMP/out/manifests"
+  fi
+  EDIT_FILE=$(ls "$PARENT_DIR"/*.yaml 2>/dev/null | head -1)
+  [[ -n "$EDIT_FILE" ]] || fail "no rendered manifest to edit under $PARENT_DIR"
+  python3 -c "
+import sys
+p = sys.argv[1]
+with open(p) as f:
+    data = f.read()
+# Idempotent injection: append a label under metadata.labels (or create
+# a labels block). Trivial line-edit avoids a full YAML parse here.
+if 'installer-e2e-marker:' not in data:
+    out = []
+    inserted = False
+    for line in data.splitlines():
+        out.append(line)
+        if not inserted and line.startswith('metadata:'):
+            out.append('  labels:')
+            out.append('    installer-e2e-marker: \"true\"')
+            inserted = True
+    open(p, 'w').write('\n'.join(out) + '\n')
+" "$EDIT_FILE"
+
+  "$BIN" plan "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-edited.out"
+  if ! grep -q "^Plan: 0 to add, 1 to change, 0 to delete\\.$" "$WORK_TMP/plan-edited.out"; then
+    fail "plan after edit should report 1 change"
+  fi
+  EDIT_SLUG=$(basename "$EDIT_FILE" .yaml)
+  if ! grep -q "~ $EDIT_SLUG" "$WORK_TMP/plan-edited.out"; then
+    fail "plan after edit should name the edited slug ($EDIT_SLUG)"
+  fi
+  echo "plan: clean → No changes; edit → 1 change naming $EDIT_SLUG"
 fi
 
 log "OK"

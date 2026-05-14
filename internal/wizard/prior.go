@@ -97,13 +97,13 @@ func parentSpaceSlug(u *api.Upload) string {
 }
 
 func fetchFromConfigHub(ctx context.Context, parentSlug string, u *api.Upload) (*PriorState, error) {
-	cmd := exec.CommandContext(ctx, "cub", "unit", "get",
-		"--space", parentSlug, upload.InstallerRecordSlug, "-o", "body")
+	cmd := exec.CommandContext(ctx, "cub", "unit", "data",
+		"--space", parentSlug, upload.InstallerRecordSlug)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cub unit get installer-record: %w\n%s", err, stderr.String())
+		return nil, fmt.Errorf("cub unit data installer-record: %w\n%s", err, stderr.String())
 	}
 	rec, err := upload.SplitInstallerRecord(stdout.Bytes())
 	if err != nil {
