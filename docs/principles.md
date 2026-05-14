@@ -71,18 +71,16 @@ mutations and call the wizard simple.
 
 ## 4. Optimize for the zero-override case
 
-For an off-the-shelf package the operator should be able to install with
-defaults and walk away. Common overrides — image mirrors, patch
-releases, replica counts — should exist as well-marked levers; the rest
-should not be visible in the wizard at all.
-
 We want to keep inputs as minimal as possible, similar to installing an
-application on your phone or laptop. If there is a reasonable default for a
-field, and especially if it a standard Kubernetes API field with functions
-available to discover and modify the value, such as container images, then it
-should be just changed post-install rather than adding an input parameter. Even
-application-specific configuration properties should not necessarily be added
-as inputs. Provide specifications of configurable properties instead.
+application on your phone or laptop. For kicking the tires, the defaults
+should just work. Even for production use we want to rely mostly on defaults,
+automatic discovery using the fact collection mechanism, and post-installation
+customization. If there is a reasonable default for a field, and especially
+if it a standard Kubernetes API field with functions available to discover and
+modify the value, such as container images, then it should be just changed
+post-install rather than adding an input parameter. Even application-specific
+configuration properties should not necessarily be added as inputs. Provide
+specifications of configurable properties instead.
 
 Concretely:
 
