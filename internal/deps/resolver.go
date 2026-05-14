@@ -9,6 +9,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	"github.com/confighubai/installer/internal/sign"
 	"github.com/confighubai/installer/pkg/api"
 )
 
@@ -186,6 +187,14 @@ func (r *resolver) visit(ctx context.Context, parent *api.Package, parentName st
 	res, err := r.src.Inspect(ctx, ref)
 	if err != nil {
 		return fmt.Errorf("%s/%s: inspect %s: %w", parentName, dep.Name, ref, err)
+	}
+
+	// Policy gate: if a signing policy is configured to enforce, verify
+	// the resolved manifest digest before pinning it in the lock. We
+	// build a digest-pinned ref so retagging upstream cannot bypass.
+	pinned := pinDigestRef(ref, res.ManifestDigest)
+	if err := sign.EnforceVerification(ctx, pinned); err != nil {
+		return fmt.Errorf("%s/%s: verify %s: %w", parentName, dep.Name, pinned, err)
 	}
 
 	// Collectors are not supported on dependencies yet: they only run via

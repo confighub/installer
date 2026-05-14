@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#
+# package-and-deps.sh — end-to-end smoke for the package + dependency
+# pipeline. Drives the installer binary through:
+#
+#   build → start registry → push example-base → wizard → deps update →
+#   render → assertions → (optional) upload to ConfigHub.
+#
+# Requirements:
+#   - go and a working build environment
+#   - docker (registry:2 is pulled on demand)
+#   - kustomize on PATH (render shells out to it)
+#
+# Optional:
+#   - cub on PATH and authenticated (INSTALLER_E2E_CONFIGHUB=1 runs upload
+#     against the live server). Upload uses Spaces prefixed
+#     installer-e2e-* and tears them down on exit.
+#
+# Exit codes:
+#   0  pipeline succeeded
+#   1  pipeline failed; failure point printed on stderr
+#
+# All temp state lives in $(mktemp -d) and is removed on exit unless
+# INSTALLER_E2E_KEEP=1.
+
+set -euo pipefail
+
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+WORK_TMP=
+REGISTRY_NAME=installer-e2e-registry
+REGISTRY_PORT=5555
+DO_UPLOAD=${INSTALLER_E2E_CONFIGHUB:-0}
+KEEP=${INSTALLER_E2E_KEEP:-0}
+
+# Spaces created by the upload step. Names track the --space-pattern
+# below; cleaned up on exit.
+UPLOAD_SPACES=(installer-e2e-example-stack installer-e2e-example-base)
+
+log() { printf '\n=== %s ===\n' "$*"; }
+fail() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
+
+cleanup() {
+  set +e
+  if [[ "$DO_UPLOAD" = "1" ]]; then
+    for s in "${UPLOAD_SPACES[@]}"; do
+      cub space delete --recursive --quiet "$s" >/dev/null 2>&1
+    done
+  fi
+  docker rm -f "$REGISTRY_NAME" >/dev/null 2>&1
+  if [[ "$KEEP" != "1" && -n "$WORK_TMP" ]]; then
+    rm -rf "$WORK_TMP"
+  else
+    echo "preserved: $WORK_TMP"
+  fi
+}
+trap cleanup EXIT
+
+# 1. Build.
+log "build installer"
+( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
+BIN="$REPO_ROOT/bin/installer"
+
+# 2. Registry.
+log "start registry:2 on :$REGISTRY_PORT"
+docker rm -f "$REGISTRY_NAME" >/dev/null 2>&1
+docker run -d --name "$REGISTRY_NAME" -p "$REGISTRY_PORT:5000" registry:2 >/dev/null
+for i in {1..30}; do
+  if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$REGISTRY_PORT/v2/" | grep -q 200; then break; fi
+  sleep 0.2
+done
+
+# 3. Push example-base.
+log "push example-base"
+"$BIN" push "$REPO_ROOT/examples/example-base" \
+  "oci://localhost:$REGISTRY_PORT/installer-e2e/example-base:0.1.0" >/dev/null
+
+# 4. Wizard + deps update + render.
+WORK_TMP=$(mktemp -d -t installer-e2e.XXXXXX)
+log "wizard"
+"$BIN" wizard "$REPO_ROOT/examples/example-stack" \
+  --work-dir "$WORK_TMP" \
+  --non-interactive \
+  --namespace e2e-ns >/dev/null
+
+log "deps update"
+"$BIN" deps update "$WORK_TMP"
+
+log "render"
+"$BIN" render "$WORK_TMP"
+
+# 5. Assertions.
+log "assertions"
+parent_manifests="$WORK_TMP/out/manifests"
+dep_manifests="$WORK_TMP/out/base/manifests"
+lock="$WORK_TMP/out/spec/lock.yaml"
+
+[[ -d "$parent_manifests" ]] || fail "parent manifests dir missing: $parent_manifests"
+[[ -d "$dep_manifests"    ]] || fail "dep manifests dir missing: $dep_manifests"
+[[ -f "$lock"             ]] || fail "lock file missing: $lock"
+
+# Parent should render exactly the Deployment.
+parent_count=$(find "$parent_manifests" -type f -name '*.yaml' | wc -l | tr -d ' ')
+[[ "$parent_count" = "1" ]] || fail "parent has $parent_count manifests, want 1"
+grep -q 'kind: Deployment' "$parent_manifests"/*.yaml || fail "parent manifest is not a Deployment"
+grep -q '^  namespace: e2e-ns' "$parent_manifests"/*.yaml || fail "parent Deployment missing namespace: e2e-ns"
+
+# Dep should render exactly Namespace + ConfigMap, both in e2e-ns.
+dep_count=$(find "$dep_manifests" -type f -name '*.yaml' | wc -l | tr -d ' ')
+[[ "$dep_count" = "2" ]] || fail "dep has $dep_count manifests, want 2"
+ns_file="$dep_manifests/namespace-e2e-ns.yaml"
+cm_file="$dep_manifests/configmap-e2e-ns-example-base-defaults.yaml"
+[[ -f "$ns_file" ]] || fail "missing $ns_file"
+[[ -f "$cm_file" ]] || fail "missing $cm_file"
+grep -q '^  name: e2e-ns$' "$ns_file" || fail "Namespace not renamed to e2e-ns"
+
+# Lock should pin the dep digest.
+grep -q 'name: base' "$lock" || fail "lock missing dep entry"
+grep -q '^      digest: sha256:' "$lock" || fail "lock missing pinned digest"
+
+echo "render assertions passed: parent=1 manifest, dep=2 manifests, lock has pinned digest"
+
+# 6. Determinism: re-render and confirm every output file's sha256 matches.
+log "determinism"
+WORK_TMP2=$(mktemp -d -t installer-e2e-2.XXXXXX)
+"$BIN" wizard "$REPO_ROOT/examples/example-stack" \
+  --work-dir "$WORK_TMP2" --non-interactive --namespace e2e-ns >/dev/null
+"$BIN" deps update "$WORK_TMP2" >/dev/null
+"$BIN" render "$WORK_TMP2" >/dev/null
+diff -q -r \
+  <(find "$WORK_TMP/out" -type f -not -path '*/vendor/*' -exec shasum -a 256 {} \; | awk '{print $1, $2}' | sed "s|$WORK_TMP/||" | sort) \
+  <(find "$WORK_TMP2/out" -type f -not -path '*/vendor/*' -exec shasum -a 256 {} \; | awk '{print $1, $2}' | sed "s|$WORK_TMP2/||" | sort) \
+  >/dev/null || fail "rendered output differs across two runs"
+echo "determinism: out/ trees byte-identical across two renders"
+rm -rf "$WORK_TMP2"
+
+# 7. Optional upload to ConfigHub.
+if [[ "$DO_UPLOAD" = "1" ]]; then
+  log "upload to ConfigHub (--space-pattern installer-e2e-{{.PackageName}})"
+  if ! command -v cub >/dev/null 2>&1; then
+    fail "INSTALLER_E2E_CONFIGHUB=1 but cub not on PATH"
+  fi
+  if ! cub space list >/dev/null 2>&1; then
+    fail "cub auth not configured (run \`cub auth login\`)"
+  fi
+  # Prefix all Spaces so cleanup picks them up.
+  "$BIN" upload "$WORK_TMP" --space-pattern 'installer-e2e-{{.PackageName}}'
+
+  for s in "${UPLOAD_SPACES[@]}"; do
+    if ! cub space list 2>/dev/null | awk '{print $1}' | grep -qx "$s"; then
+      fail "expected Space $s not found after upload"
+    fi
+  done
+  echo "Spaces created:"
+  for s in "${UPLOAD_SPACES[@]}"; do
+    echo "  $s"
+    cub unit list --space "$s" 2>&1 | awk 'NR>1 {print "    "$1}'
+  done
+fi
+
+log "OK"

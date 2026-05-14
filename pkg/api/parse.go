@@ -117,6 +117,34 @@ func ParseLock(data []byte) (*Lock, error) {
 	return &l, nil
 }
 
+// ParseSigningPolicy parses ~/.config/installer/policy.yaml.
+func ParseSigningPolicy(data []byte) (*SigningPolicy, error) {
+	var p SigningPolicy
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return nil, fmt.Errorf("parse SigningPolicy: %w", err)
+	}
+	if p.Kind != "" && p.Kind != KindSigningPolicy {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", p.Kind, KindSigningPolicy)
+	}
+	if p.Spec.Enforce && len(p.Spec.TrustedKeys) == 0 && len(p.Spec.TrustedKeyless) == 0 {
+		return nil, fmt.Errorf("SigningPolicy enforces verification but has no trustedKeys or trustedKeyless entries")
+	}
+	for i, k := range p.Spec.TrustedKeys {
+		if k.PublicKey == "" {
+			return nil, fmt.Errorf("spec.trustedKeys[%d]: publicKey is required", i)
+		}
+	}
+	for i, k := range p.Spec.TrustedKeyless {
+		if k.Identity == "" {
+			return nil, fmt.Errorf("spec.trustedKeyless[%d]: identity is required", i)
+		}
+		if k.Issuer == "" {
+			return nil, fmt.Errorf("spec.trustedKeyless[%d]: issuer is required", i)
+		}
+	}
+	return &p, nil
+}
+
 // ParseSelection parses selection.yaml bytes into a Selection.
 func ParseSelection(data []byte) (*Selection, error) {
 	var s Selection

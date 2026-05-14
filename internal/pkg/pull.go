@@ -16,6 +16,7 @@ import (
 	"oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
 
+	"github.com/confighubai/installer/internal/sign"
 	"github.com/confighubai/installer/pkg/api"
 )
 
@@ -102,6 +103,15 @@ func pullOCI(ctx context.Context, ref, dest string) (string, error) {
 		return "", fmt.Errorf("digest mismatch on %s: pinned %s but registry returned %s", ref, want, desc.Digest)
 	}
 
+	// Policy gate: if ~/.config/installer/policy.yaml enforces
+	// verification, refuse to extract an unverified artifact. We verify
+	// the resolved digest so a registry that returns a different artifact
+	// after our resolve can't slip past.
+	pinnedRef := joinRefForVerify(repoRef, desc.Digest.String())
+	if err := sign.EnforceVerification(ctx, pinnedRef); err != nil {
+		return "", fmt.Errorf("verify %s: %w", ref, err)
+	}
+
 	// Peek at the manifest to choose the extraction path. Native installer
 	// artifacts have artifactType set to api.ArtifactType; everything else
 	// (notably Helm-OCI charts) takes the file-store fallback.
@@ -167,6 +177,12 @@ func pullHelmShaped(ctx context.Context, repo *remote.Repository, byDigest strin
 		return extracted, nil
 	}
 	return resolveSingleSubdir(dest), nil
+}
+
+// joinRefForVerify combines a repo and digest into the canonical
+// oci://repo@sha256:... form passed to cosign.
+func joinRefForVerify(repoRef, digest string) string {
+	return "oci://" + repoRef + "@" + digest
 }
 
 // fetchManifest fetches and decodes an OCI image manifest by descriptor.

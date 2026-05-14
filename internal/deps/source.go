@@ -55,5 +55,11 @@ func joinRef(repo, tag string) string {
 	return "oci://" + stripOCIPrefix(repo) + ":" + tag
 }
 
+// pinDigestRef appends @<digest> to a tag-pinned oci ref. Used to give
+// cosign a fully-pinned reference for verification.
+func pinDigestRef(ref, digest string) string {
+	return ref + "@" + digest
+}
+
 // _ ensures the api package import is retained.
 var _ = api.KindLock

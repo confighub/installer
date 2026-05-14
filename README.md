@@ -193,18 +193,36 @@ installed, the same commands work via `cub install ...`.
 
 - [Package and dependency management](docs/package-management.md) — spec for
   bundling, OCI publish, dependency declaration, and resolution.
-- [Implementation plan](docs/package-management-plan.md) — phased build plan;
-  Phase 0 (CLI scaffolding) is in place. Commands marked
-  "(not yet implemented)" in `installer --help` correspond to phases here.
+- [Implementation plan](docs/package-management-plan.md) — phased build plan.
+  Phases 0–7 are in place: `installer package` (deterministic bundle),
+  `push` / `pull` / `inspect` / `list` / `tag` / `login` / `logout` (OCI
+  artifacts), `deps update` / `deps tree` (SemVer resolver + lock),
+  multi-package render and upload (per-dep Spaces + cross-Space Links),
+  and `sign` / `verify` with a `~/.config/installer/policy.yaml` trust
+  policy that gates `pull` and `deps update`.
+
+## Multi-package example
+
+`examples/example-stack` depends on `examples/example-base`. To exercise
+the full pipeline locally:
+
+```bash
+test/e2e/package-and-deps.sh
+```
+
+That script starts `registry:2`, pushes `example-base`, runs
+`wizard → deps update → render`, asserts the output layout + digest
+stability, and (when `INSTALLER_E2E_CONFIGHUB=1`) also runs
+`installer upload --space-pattern 'installer-e2e-{{.PackageName}}'` and
+cleans the resulting Spaces on exit.
 
 ## Roadmap
 
-- Bundling — see [package-management-plan.md](docs/package-management-plan.md)
-  Phase 1.
-- Secrets (currently we use a hack during fact collection)
 - Annotate created units with package metadata and add a change description
 - Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
+  Use cub unit update --merge-external-source "source" --dry-run -o mutations
+- Secrets (currently we use a hack during fact collection)
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
   namespaced resources, etc.) inferred from resource kind plus the existing

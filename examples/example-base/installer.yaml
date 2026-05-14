@@ -1,0 +1,25 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: example-base
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: Shared Namespace + ConfigMap for downstream packages.
+
+  functionChainTemplate:
+    # Rename the Namespace resource to the install-time --namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}"]
+    # Set metadata.namespace on every namespaced resource.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
