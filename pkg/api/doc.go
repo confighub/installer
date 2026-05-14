@@ -19,14 +19,22 @@ const (
 	KindSelection     = "Selection"
 	KindFunctionChain = "FunctionChain"
 	KindFacts         = "Facts"
+	KindLock          = "Lock"
 )
 
 // Metadata is the common metadata block on every installer doc.
+//
+// KubeVersion and InstallerVersion are only meaningful on a Package, but
+// live here so the same block round-trips through MarshalYAML for every
+// kind. Both are SemVer range strings (e.g. ">= 1.28"); empty means
+// unconstrained.
 type Metadata struct {
-	Name        string            `yaml:"name" json:"name"`
-	Version     string            `yaml:"version,omitempty" json:"version,omitempty"`
-	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
+	Name             string            `yaml:"name" json:"name"`
+	Version          string            `yaml:"version,omitempty" json:"version,omitempty"`
+	KubeVersion      string            `yaml:"kubeVersion,omitempty" json:"kubeVersion,omitempty"`
+	InstallerVersion string            `yaml:"installerVersion,omitempty" json:"installerVersion,omitempty"`
+	Labels           map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+	Annotations      map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
 }
 
 // Header pairs APIVersion + Kind for sniffing.

@@ -145,10 +145,17 @@ func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target) (*PushR
 	}, nil
 }
 
+// InspectResult is what Inspect returns: the OCI manifest digest plus the
+// decoded config blob.
+type InspectResult struct {
+	ManifestDigest string
+	Config         *api.ConfigBlob
+}
+
 // Inspect fetches only the manifest + config blob for a native installer
 // artifact. The layer is not pulled, making this cheap enough for the
 // resolver to call on every dependency candidate.
-func Inspect(ctx context.Context, ref string) (*api.ConfigBlob, error) {
+func Inspect(ctx context.Context, ref string) (*InspectResult, error) {
 	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
 		return nil, err
@@ -167,7 +174,7 @@ func Inspect(ctx context.Context, ref string) (*api.ConfigBlob, error) {
 // inspectFromTarget reads the manifest at ref from any oras target and
 // decodes the config blob. Used by Inspect against a remote.Repository and by
 // tests against an in-memory store.
-func inspectFromTarget(ctx context.Context, target oras.Target, ref string, want digest.Digest) (*api.ConfigBlob, error) {
+func inspectFromTarget(ctx context.Context, target oras.Target, ref string, want digest.Digest) (*InspectResult, error) {
 	desc, err := target.Resolve(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", ref, err)
@@ -205,7 +212,10 @@ func inspectFromTarget(ctx context.Context, target oras.Target, ref string, want
 	if err := json.Unmarshal(cbBytes, &cb); err != nil {
 		return nil, fmt.Errorf("decode config blob: %w", err)
 	}
-	return &cb, nil
+	return &InspectResult{
+		ManifestDigest: desc.Digest.String(),
+		Config:         &cb,
+	}, nil
 }
 
 // List returns the tags of repoRef. The endpoint is `/tags/list` per the OCI

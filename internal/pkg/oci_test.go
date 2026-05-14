@@ -71,10 +71,14 @@ func TestStageAndInspectRoundTrip(t *testing.T) {
 		t.Fatalf("file list mismatch: got %v want %v", pushed.Files, wantFiles)
 	}
 
-	cb, err := inspectFromTarget(ctx, mem, "v1", "")
+	got, err := inspectFromTarget(ctx, mem, "v1", "")
 	if err != nil {
 		t.Fatalf("inspectFromTarget: %v", err)
 	}
+	if got.ManifestDigest != pushed.ManifestDigest {
+		t.Fatalf("manifest digest mismatch: inspect=%s pushed=%s", got.ManifestDigest, pushed.ManifestDigest)
+	}
+	cb := got.Config
 	if cb.Manifest.Metadata.Name != "ocitest" || cb.Manifest.Metadata.Version != "1.2.3" {
 		t.Fatalf("manifest metadata wrong: %+v", cb.Manifest.Metadata)
 	}

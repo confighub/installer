@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,15 @@ import (
 	ipkg "github.com/confighubai/installer/internal/pkg"
 	"github.com/confighubai/installer/pkg/api"
 )
+
+func sortedMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func newDocCmd() *cobra.Command {
 	var (
@@ -61,6 +71,12 @@ func printPackageDoc(p *api.Package) {
 	if p.Metadata.Version != "" {
 		fmt.Printf("Version: %s\n", p.Metadata.Version)
 	}
+	if p.Metadata.KubeVersion != "" {
+		fmt.Printf("Kubernetes: %s\n", p.Metadata.KubeVersion)
+	}
+	if p.Metadata.InstallerVersion != "" {
+		fmt.Printf("Installer:  %s\n", p.Metadata.InstallerVersion)
+	}
 	fmt.Println()
 
 	fmt.Println("Bases:")
@@ -92,6 +108,79 @@ func printPackageDoc(p *api.Package) {
 			if len(c.ValidForBases) > 0 {
 				fmt.Printf("      valid-for-bases: %s\n", strings.Join(c.ValidForBases, ", "))
 			}
+		}
+		fmt.Println()
+	}
+
+	if len(p.Spec.Dependencies) > 0 {
+		fmt.Println("Dependencies:")
+		for _, d := range p.Spec.Dependencies {
+			line := fmt.Sprintf("  - %s -> %s", d.Name, d.Package)
+			if d.Version != "" {
+				line += " " + d.Version
+			}
+			fmt.Println(line)
+			if d.Optional {
+				cond := "optional"
+				if d.WhenComponent != "" {
+					cond = "optional, follows when component " + d.WhenComponent
+				}
+				fmt.Printf("      %s\n", cond)
+			} else if d.WhenComponent != "" {
+				fmt.Printf("      follows when component %s is selected\n", d.WhenComponent)
+			}
+			if d.Selection != nil {
+				if d.Selection.Base != "" {
+					fmt.Printf("      base: %s\n", d.Selection.Base)
+				}
+				if len(d.Selection.Components) > 0 {
+					fmt.Printf("      components: %s\n", strings.Join(d.Selection.Components, ", "))
+				}
+			}
+			if len(d.Inputs) > 0 {
+				keys := sortedMapKeys(d.Inputs)
+				fmt.Printf("      inputs: %s\n", strings.Join(keys, ", "))
+			}
+			if len(d.Satisfies) > 0 {
+				parts := make([]string, 0, len(d.Satisfies))
+				for _, s := range d.Satisfies {
+					p := string(s.Kind)
+					if s.Name != "" {
+						p += "/" + s.Name
+					} else if s.Capability != "" {
+						p += " capability=" + s.Capability
+					}
+					parts = append(parts, p)
+				}
+				fmt.Printf("      satisfies: %s\n", strings.Join(parts, ", "))
+			}
+		}
+		fmt.Println()
+	}
+
+	if len(p.Spec.Conflicts) > 0 {
+		fmt.Println("Conflicts:")
+		for _, c := range p.Spec.Conflicts {
+			line := "  - " + c.Package
+			if c.Version != "" {
+				line += " " + c.Version
+			}
+			if c.Reason != "" {
+				line += "  (" + c.Reason + ")"
+			}
+			fmt.Println(line)
+		}
+		fmt.Println()
+	}
+
+	if len(p.Spec.Replaces) > 0 {
+		fmt.Println("Replaces:")
+		for _, r := range p.Spec.Replaces {
+			line := "  - " + r.Package
+			if r.Version != "" {
+				line += " " + r.Version
+			}
+			fmt.Println(line)
 		}
 		fmt.Println()
 	}

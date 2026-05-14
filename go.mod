@@ -3,6 +3,7 @@ module github.com/confighubai/installer
 go 1.25.0
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/confighub/sdk/core v0.1.42
 	github.com/confighub/sdk/function-impl v0.1.42
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00

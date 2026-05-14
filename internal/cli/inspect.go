@@ -25,16 +25,18 @@ package layer when only metadata is needed.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			cb, err := ipkg.Inspect(ctx, args[0])
+			res, err := ipkg.Inspect(ctx, args[0])
 			if err != nil {
 				return err
 			}
 			if asJSON {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
-				return enc.Encode(cb)
+				return enc.Encode(res)
 			}
-			fmt.Printf("Package: %s@%s\n", cb.Manifest.Metadata.Name, cb.Manifest.Metadata.Version)
+			cb := res.Config
+			fmt.Printf("Package:  %s@%s\n", cb.Manifest.Metadata.Name, cb.Manifest.Metadata.Version)
+			fmt.Printf("Manifest: %s\n", res.ManifestDigest)
 			if cb.Bundle.InstallerVersion != "" {
 				fmt.Printf("Built with installer %s\n", cb.Bundle.InstallerVersion)
 			}
