@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello-backup
+  namespace: confighubplaceholder
+  labels:
+    app: hello-app
+    job: backup
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: ghcr.io/acme/backup-tool:v1.0.0
+              command: ["./backup", "--compress"]
+              envFrom:
+                - secretRef:
+                    name: hello-db-credentials

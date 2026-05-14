@@ -232,13 +232,22 @@ installed, the same commands work via `cub install ...`.
 │   └── sign/                   # cosign sign + verify
 ├── pkg/api/                    # Package, Selection, Inputs, FunctionChain,
 │                               # Lock, Upload schemas
-├── examples/
+├── packages/                   # "published" packages bundled in this repo
+│   ├── kubernetes-resources/   # 11 canonical resource templates with
+│   │                           # per-type defaults (used by `installer new`)
+│   └── worker/                 # ConfigHub bridge worker
+├── examples/                   # test fixtures for the e2e + unit tests
 │   ├── hello-app/              # single-package end-to-end test package
 │   ├── example-base/           # multi-package: shared base
 │   └── example-stack/          # multi-package: depends on example-base
 ├── docs/                       # design + implementation plans (see below)
 └── cub-plugin.yaml             # cub plugin manifest
 ```
+
+The `packages/` subdirectory holds packages that are intended for
+publication; we'll move them to a separate repo as the catalog
+grows. `examples/` stays in this repo as test fixtures the e2e and
+unit tests exercise.
 
 ## User docs
 

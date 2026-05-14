@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-db
+  namespace: confighubplaceholder
+  labels:
+    app: hello-db
+spec:
+  clusterIP: None
+  selector:
+    app: hello-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hello-db
+  namespace: confighubplaceholder
+  labels:
+    app: hello-db
+spec:
+  serviceName: hello-db
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-db
+  template:
+    metadata:
+      labels:
+        app: hello-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16.3
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: hello-db-credentials
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

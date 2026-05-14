@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# All 11 example resources, derived from
+# confighub-skills/skills/skill-examples-bootstrap/examples/. Each
+# file may declare one or more resources; render's per-resource
+# split lands one Unit per top-level resource.
+#
+# `installer new` (in the installer CLI) looks these up by their
+# rendered Unit slugs and pulls each as a starting template for
+# operator-authored resources.
+resources:
+  - hello-ns.yaml
+  - hello-app.yaml
+  - hello-statefulset.yaml
+  - hello-daemonset.yaml
+  - hello-job.yaml
+  - hello-cronjob.yaml
+  - hello-ingress.yaml
+  - hello-netpol.yaml
+  - hello-rbac.yaml
+  - hello-hpa.yaml
+  - hello-pdb.yaml
