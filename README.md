@@ -207,7 +207,6 @@ installed, the same commands work via `cub install ...`.
 
 - Bundling
 - Secrets
-- Use for worker installation
 - Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
 - `installer preflight` — evaluate `externalRequires` against a live cluster.

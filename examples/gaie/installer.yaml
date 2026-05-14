@@ -30,21 +30,15 @@ spec:
     - { kind: CRD, name: inferencemodelrewrites.inference.networking.x-k8s.io }
     - { kind: CRD, name: inferencepoolimports.inference.networking.x-k8s.io }
 
-  inputs:
-    - name: namespace
-      type: string
-      default: inference
-      prompt: Namespace for InferencePool/InferenceObjective custom resources (only used by sample-pool)
-      required: true
-
   functionChainTemplate:
     # Rename the sample-pool Namespace resource (when sample-pool is selected)
-    # and set metadata.namespace on every namespace-scoped resource. The base
-    # is CRDs only (cluster-scoped), so this is a no-op when no components
-    # are selected.
+    # and set metadata.namespace on every namespace-scoped resource. The
+    # namespace comes from the wizard's --namespace flag. The base is CRDs
+    # only (cluster-scoped), so this is a no-op when no components are
+    # selected.
     - toolchain: Kubernetes/YAML
       whereResource: ""
       description: Set the namespace on every namespaced resource.
       invocations:
         - name: set-namespace
-          args: ["{{ .Inputs.namespace }}"]
+          args: ["{{ .Namespace }}"]

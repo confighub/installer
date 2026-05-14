@@ -47,6 +47,9 @@ type Result struct {
 // packageDir is the absolute path to the loaded package working copy; the
 // collector runs with that as its working directory.
 func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outDir string) (*Result, error) {
+	if raw.Namespace == "" {
+		return nil, fmt.Errorf("namespace is required and must be non-empty")
+	}
 	values, err := coerceInputs(pkg, raw.Inputs)
 	if err != nil {
 		return nil, err

@@ -31,24 +31,18 @@ spec:
     - kind: leader-election-lease
       name: kuberay-operator
 
-  inputs:
-    - name: namespace
-      type: string
-      default: kuberay-system
-      prompt: Namespace for the KubeRay operator
-      required: true
-
   functionChainTemplate:
     # Rename the operator's Namespace resource, set metadata.namespace on
     # every namespace-scoped resource, and upsert subjects[].namespace on
     # every ServiceAccount subject in the operator's RoleBinding and
-    # ClusterRoleBinding.
+    # ClusterRoleBinding. The namespace comes from the wizard's --namespace
+    # flag.
     - toolchain: Kubernetes/YAML
       whereResource: ""
       description: Set the namespace on every namespaced resource and RBAC ServiceAccount subject.
       invocations:
         - name: set-namespace
-          args: ["{{ .Inputs.namespace }}"]
+          args: ["{{ .Namespace }}"]
 
     # Rewrite the operator image to a fully-qualified, version-pinned ref.
     # Upstream manager.yaml ships `image: kuberay/operator` (no registry, no
