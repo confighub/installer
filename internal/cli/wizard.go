@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighubai/installer/internal/cubctx"
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/wizard"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/cubctx"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/wizard"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func newWizardCmd() *cobra.Command {

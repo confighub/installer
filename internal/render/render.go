@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Options controls Render. All fields are required except Facts.

@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighubai/installer/internal/sign"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/sign"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func newVerifyCmd() *cobra.Command {

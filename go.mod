@@ -1,4 +1,4 @@
-module github.com/confighubai/installer
+module github.com/confighub/installer
 
 go 1.25.0
 

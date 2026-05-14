@@ -10,8 +10,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // applyImageOverrides runs `kustomize edit set image <name>=<ref>` for

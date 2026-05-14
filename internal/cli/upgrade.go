@@ -12,14 +12,14 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighubai/installer/internal/cubctx"
-	"github.com/confighubai/installer/internal/deps"
-	"github.com/confighubai/installer/internal/diff"
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/render"
-	"github.com/confighubai/installer/internal/upload"
-	"github.com/confighubai/installer/internal/wizard"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/deps"
+	"github.com/confighub/installer/internal/diff"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/render"
+	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/internal/wizard"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // upgradeStageDir is the sibling of work-dir/package and work-dir/out

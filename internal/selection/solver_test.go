@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/confighubai/installer/internal/selection"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/selection"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func mkPkg() *api.Package {

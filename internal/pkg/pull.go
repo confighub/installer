@@ -16,8 +16,8 @@ import (
 	"oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
 
-	"github.com/confighubai/installer/internal/sign"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/sign"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Pull resolves a package reference to a local directory ready for Load.

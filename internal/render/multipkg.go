@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/selection"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/selection"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Fetcher resolves a locked dependency to a local directory the renderer

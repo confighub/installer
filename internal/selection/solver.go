@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Resolve takes the package manifest, the user's chosen base name (may be ""),

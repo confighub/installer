@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/confighubai/installer/internal/collector"
-	"github.com/confighubai/installer/internal/selection"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/collector"
+	"github.com/confighub/installer/internal/selection"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // RawAnswers are CLI-flag-shaped: parsed but not yet validated against the

@@ -10,11 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighubai/installer/internal/changeset"
-	"github.com/confighubai/installer/internal/cubctx"
-	"github.com/confighubai/installer/internal/diff"
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/upload"
+	"github.com/confighub/installer/internal/changeset"
+	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/diff"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/upload"
 )
 
 // refreshInstallerRecordHook builds an Apply PostSpaceHook that

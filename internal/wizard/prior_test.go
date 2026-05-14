@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/confighubai/installer/internal/upload"
+	"github.com/confighub/installer/internal/upload"
 )
 
 func TestLoadPriorStateNone(t *testing.T) {

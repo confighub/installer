@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighubai/installer/internal/deps"
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/deps"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func newDepsCmd() *cobra.Command {

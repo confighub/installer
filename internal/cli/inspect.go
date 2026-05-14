@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
+	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newInspectCmd() *cobra.Command {

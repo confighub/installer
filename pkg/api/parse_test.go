@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 const validPackage = `apiVersion: installer.confighub.com/v1alpha1
