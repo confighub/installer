@@ -240,7 +240,28 @@ installed, the same commands work via `cub install ...`.
 └── cub-plugin.yaml             # cub plugin manifest
 ```
 
+## User docs
+
+For people using the installer (writing packages, installing them, or
+managing day-2 changes). These are how-to and reference; the design
+docs below explain _why_ the installer works the way it does.
+
+- [Author guide](docs/author-guide.md) — for package authors. Schema
+  reference for `installer.yaml`, file organization, how the install
+  pipeline consumes your declarations, authoring best practices,
+  publishing, signing, and version-to-version evolution.
+- [Author tutorial](docs/author-tutorial.md) — hands-on walkthrough
+  of building a small package from an empty directory to a signed OCI
+  artifact. ~30 minutes. Read this before the author guide if you
+  prefer learning by example.
+- [Consumer guide](docs/consumer-guide.md) — for operators consuming
+  packages. Find a package, install it, make day-2 changes, upgrade,
+  revert. Plus a troubleshooting section for the common errors.
+
 ## Design docs
+
+For contributors to the installer itself. If you're using or
+authoring packages, the user docs above are what you want.
 
 - [Design principles](docs/principles.md) — the seven principles the
   installer is anchored to (package files are read-only; spec is the
@@ -278,7 +299,6 @@ upgrade --set-image preflight rejection`. Spaces created with the
 
 ## Roadmap
 
-- Documentation for package authors and for package consumers.
 - Secrets (currently we use a hack during fact collection).
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
