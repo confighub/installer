@@ -30,19 +30,13 @@ spec:
           name: cert-manager
           issuerKind: ClusterIssuer
 
-  inputs:
-    - name: namespace
-      type: string
-      default: hello
-      prompt: Kubernetes namespace
-      required: true
-
   functionChainTemplate:
     # Rename the Namespace resource and set metadata.namespace on every
-    # namespace-scoped resource.
+    # namespace-scoped resource. The namespace comes from the wizard's
+    # --namespace flag.
     - toolchain: Kubernetes/YAML
       whereResource: ""
       description: Set the namespace on every namespaced resource.
       invocations:
         - name: set-namespace
-          args: ["{{ .Inputs.namespace }}"]
+          args: ["{{ .Namespace }}"]

@@ -104,7 +104,8 @@ Only --non-interactive mode is implemented today: pass --base, --select, and
 	}
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&baseName, "base", "", "base name (default: package's default base)")
-	cmd.Flags().StringVar(&namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }})")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required and must be non-empty.")
+	_ = cmd.MarkFlagRequired("namespace")
 	cmd.Flags().StringSliceVar(&selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically)")
 	cmd.Flags().StringSliceVar(&inputFlags, "input", nil, "input value as key=value (repeatable)")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")

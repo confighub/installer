@@ -38,7 +38,7 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 	outDir := filepath.Join(tmp, "out")
 
 	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
-		Inputs:             map[string]string{"namespace": "demo"},
+		Namespace:          "demo",
 		SelectedComponents: []string{"monitoring"},
 	}, loaded.Root, outDir)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 	outDir := filepath.Join(tmp, "out")
 
 	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
-		Inputs:             map[string]string{"namespace": "raysystem"},
+		Namespace:          "raysystem",
 		SelectedComponents: []string{"sample-cluster"},
 	}, loaded.Root, outDir)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	outDir := filepath.Join(tmp, "out")
 
 	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
-		Inputs:             map[string]string{"namespace": "inferdemo"},
+		Namespace:          "inferdemo",
 		SelectedComponents: []string{"sample-pool"},
 	}, loaded.Root, outDir)
 	if err != nil {
