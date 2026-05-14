@@ -302,6 +302,55 @@ spec: {spaces: []}
 	}
 }
 
+func TestInputsImageOverridesRoundTrip(t *testing.T) {
+	in := &api.Inputs{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindInputs,
+		Metadata:   api.Metadata{Name: "io-test-inputs"},
+		Spec: api.InputsSpec{
+			Package:   "io-test",
+			Namespace: "demo",
+			Values:    map[string]any{"replicas": 3},
+			ImageOverrides: map[string]string{
+				"hello":   "hello:v2",
+				"sidecar": "sidecar:1.4",
+			},
+		},
+	}
+	data, err := api.MarshalYAML(in)
+	if err != nil {
+		t.Fatalf("MarshalYAML: %v", err)
+	}
+	if !strings.Contains(string(data), "imageOverrides:") {
+		t.Errorf("expected imageOverrides field in YAML, got:\n%s", data)
+	}
+	got, err := api.ParseInputs(data)
+	if err != nil {
+		t.Fatalf("ParseInputs: %v", err)
+	}
+	if got.Spec.ImageOverrides["hello"] != "hello:v2" {
+		t.Errorf("hello override lost: %+v", got.Spec.ImageOverrides)
+	}
+	if got.Spec.ImageOverrides["sidecar"] != "sidecar:1.4" {
+		t.Errorf("sidecar override lost: %+v", got.Spec.ImageOverrides)
+	}
+
+	// Empty ImageOverrides must omitempty — no field in YAML.
+	emptyIn := &api.Inputs{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindInputs,
+		Metadata:   api.Metadata{Name: "no-io"},
+		Spec:       api.InputsSpec{Package: "x", Namespace: "y", Values: map[string]any{}},
+	}
+	data, err = api.MarshalYAML(emptyIn)
+	if err != nil {
+		t.Fatalf("MarshalYAML empty: %v", err)
+	}
+	if strings.Contains(string(data), "imageOverrides") {
+		t.Errorf("empty ImageOverrides should be omitted, got:\n%s", data)
+	}
+}
+
 func TestMarshalRoundTrip(t *testing.T) {
 	sel := &api.Selection{
 		APIVersion: api.APIVersion,

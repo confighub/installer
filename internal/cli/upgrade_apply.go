@@ -159,6 +159,7 @@ func runUpgradeApply(ctx context.Context, workDir string, newPkg *api.Package, y
 		Yes:                  yes,
 		ChangeSetSlug:        csSlug,
 		ChangeSetDescription: upgradeChangeSetDescription(priorPkg, newPkg),
+		PostSpaceHook:        refreshInstallerRecordHook(packages),
 	})
 	if err != nil {
 		return err

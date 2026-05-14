@@ -12,6 +12,13 @@ import (
 	"github.com/confighubai/installer/internal/upload"
 )
 
+// PackageRefresher is the hook Apply calls after each Space's Unit
+// changes (and link reconcile) to give the caller a chance to refresh
+// per-package state in ConfigHub — notably the installer-record Unit
+// whose body must stay in sync with the local spec/. Returning an
+// error fails Apply.
+type PackageRefresher func(ctx context.Context, sp SpacePlan) error
+
 // ApplyOptions tunes Apply's behavior. Zero value is the safe default
 // (interactive confirmation for deletes; no extra Unit flags).
 type ApplyOptions struct {
@@ -40,6 +47,10 @@ type ApplyOptions struct {
 	// Tests pass buffers to capture output.
 	Stdout io.Writer
 	Stderr io.Writer
+	// PostSpaceHook runs after each Space's Unit + link changes. The
+	// CLI passes a hook that refreshes the installer-record Unit so
+	// the cub-side spec stays in sync with local. Nil = no-op.
+	PostSpaceHook PackageRefresher
 }
 
 // ApplyResult reports what Apply did, suitable for the CLI's final
@@ -140,6 +151,11 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 		// Re-run link inference now that the Unit set has changed.
 		if err := upload.ReconcileLinks(ctx, sp.SpaceSlug, sp.Package); err != nil {
 			return res, err
+		}
+		if opts.PostSpaceHook != nil {
+			if err := opts.PostSpaceHook(ctx, sp); err != nil {
+				return res, fmt.Errorf("post-space hook for %s: %w", sp.SpaceSlug, err)
+			}
 		}
 	}
 	return res, nil

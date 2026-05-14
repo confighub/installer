@@ -25,6 +25,7 @@ func newWizardCmd() *cobra.Command {
 		nonInteractive bool
 		reuse          bool
 		preset         string
+		setImage       []string
 	)
 	cmd := &cobra.Command{
 		Use:   "wizard <package-ref>",
@@ -108,6 +109,14 @@ Pass --non-interactive to script the wizard with --base, --components,
 			if err != nil {
 				return err
 			}
+			imgOverrides, err := wizard.ParseSetImageFlags(setImage)
+			if err != nil {
+				return err
+			}
+			raw.ImageOverrides = imgOverrides
+			if prior != nil && prior.Inputs != nil {
+				raw.PriorImageOverrides = prior.Inputs.Spec.ImageOverrides
+			}
 
 			outDir := filepath.Join(absWork, "out")
 			res, err := wizard.Run(ctx, loaded.Package, raw, loaded.Root, outDir)
@@ -132,6 +141,7 @@ Pass --non-interactive to script the wizard with --base, --components,
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
 	cmd.Flags().BoolVar(&reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
+	cmd.Flags().StringSliceVar(&setImage, "set-image", nil, "image override as name=ref (repeatable); applied via `kustomize edit set image` against the chosen base before render. The base's kustomization.yaml must declare an `images:` block.")
 	return cmd
 }
 

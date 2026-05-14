@@ -265,6 +265,46 @@ with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, so
     fail "second upgrade against the same edited source should be No changes"
   fi
   echo "upgrade: edit→apply→re-upgrade converges; ChangeSet named installer-upgrade-*"
+
+  log "upgrade --set-image bumps the image and the override carries forward"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" \
+    --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2 --apply --yes 2>&1 \
+    | tee "$WORK_TMP/upgrade-setimg.out"
+  if ! grep -qE "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upgrade-setimg.out"; then
+    fail "upgrade --set-image --apply should report exactly 1 update (the image bump)"
+  fi
+  if ! grep -q "plain-text-v2" "$WORK_TMP/upgrade-setimg.out"; then
+    fail "Images footer should reflect the new tag"
+  fi
+
+  log "upgrade re-run WITHOUT --set-image carries the override forward (no-op)"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-carry.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/upgrade-carry.out"; then
+    fail "subsequent upgrade should be No changes (override carried via installer-record)"
+  fi
+  if ! grep -q "plain-text-v2" "$WORK_TMP/upgrade-carry.out"; then
+    fail "Images footer should still show the carried-forward tag"
+  fi
+  echo "upgrade --set-image: bump applied; override round-trips through installer-record"
+
+  log "upgrade --set-image against a package without images: block fails fast"
+  NO_IMG_SRC="$WORK_TMP/example-stack-no-images"
+  cp -r "$EDITED_SRC" "$NO_IMG_SRC"
+  python3 -c "
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f: d = yaml.safe_load(f)
+d.pop('images', None)
+with open(p, 'w') as f: yaml.safe_dump(d, f, sort_keys=False)
+" "$NO_IMG_SRC/bases/default/kustomization.yaml"
+  if "$BIN" upgrade "$WORK_TMP" "$NO_IMG_SRC" --set-image foo=bar:1 2>&1 \
+      | tee "$WORK_TMP/upgrade-noimg.out"; then
+    fail "upgrade --set-image against package without images: block should fail"
+  fi
+  if ! grep -q "no \`images:\` block" "$WORK_TMP/upgrade-noimg.out"; then
+    fail "preflight error should name the missing images: block"
+  fi
+  echo "preflight: package without images: block correctly rejected"
 fi
 
 log "OK"

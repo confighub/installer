@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -229,6 +230,44 @@ func BuildInstallerRecord(pkg Package) ([]byte, error) {
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes(), nil
+}
+
+// RefreshInstallerRecord rebuilds the installer-record Unit body from
+// pkg's local files and uploads it to ConfigHub. Used after
+// `installer update` / `installer upgrade-apply` mutates the local
+// spec so the cub-side record stays in sync — without this refresh,
+// a subsequent upgrade reads stale inputs (notably ImageOverrides)
+// from ConfigHub via wizard.LoadPriorState.
+//
+// Idempotent: cub unit update --merge-external-source upserts
+// against the prior MergeExternal recorded under the same source
+// name (installer-record).
+func RefreshInstallerRecord(ctx context.Context, pkg Package) error {
+	body, err := BuildInstallerRecord(pkg)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp("", "installer-record-*.yaml")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+	cmd := exec.CommandContext(ctx, "cub", "unit", "update",
+		"--space", pkg.SpaceSlug,
+		"--merge-external-source", InstallerRecordSlug,
+		InstallerRecordSlug, tmp.Name(),
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("refresh installer-record in %s: %w\n%s", pkg.SpaceSlug, err, stderr.String())
+	}
+	return nil
 }
 
 // SplitInstallerRecord is the inverse of BuildInstallerRecord: it

@@ -17,6 +17,26 @@ import (
 	"github.com/confighubai/installer/internal/upload"
 )
 
+// refreshInstallerRecordHook builds an Apply PostSpaceHook that
+// matches each SpacePlan to its upload.Package by space slug and
+// upserts the installer-record Unit so the cub-side spec body stays
+// in sync with the local out/spec/. Without this, a subsequent
+// `installer upgrade` reads stale state (notably ImageOverrides)
+// from ConfigHub via wizard.LoadPriorState.
+func refreshInstallerRecordHook(packages []upload.Package) diff.PackageRefresher {
+	bySlug := make(map[string]upload.Package, len(packages))
+	for _, p := range packages {
+		bySlug[p.SpaceSlug] = p
+	}
+	return func(ctx context.Context, sp diff.SpacePlan) error {
+		pkg, ok := bySlug[sp.SpaceSlug]
+		if !ok {
+			return nil
+		}
+		return upload.RefreshInstallerRecord(ctx, pkg)
+	}
+}
+
 func newUpdateCmd() *cobra.Command {
 	var (
 		yes           bool
@@ -118,6 +138,7 @@ that would clobber post-install metadata edits in ConfigHub.`,
 				Target:               target,
 				Annotations:          annotations,
 				Labels:               labels,
+				PostSpaceHook:        refreshInstallerRecordHook(packages),
 			})
 			if err != nil {
 				return err

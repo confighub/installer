@@ -34,7 +34,9 @@ const upgradePrevDir = ".upgrade-prev"
 
 func newUpgradeCmd() *cobra.Command {
 	var (
-		apply bool
+		apply    bool
+		yes      bool
+		setImage []string
 	)
 	cmd := &cobra.Command{
 		Use:   "upgrade <work-dir> <ref>",
@@ -122,6 +124,14 @@ re-render.`,
 			if err != nil {
 				return err
 			}
+			imgOverrides, err := wizard.ParseSetImageFlags(setImage)
+			if err != nil {
+				return err
+			}
+			raw.ImageOverrides = imgOverrides
+			if prior.Inputs != nil {
+				raw.PriorImageOverrides = prior.Inputs.Spec.ImageOverrides
+			}
 
 			outDir := filepath.Join(stageDir, "out")
 			res, err := wizard.Run(ctx, loaded.Package, raw, pkgDir, outDir)
@@ -161,13 +171,15 @@ re-render.`,
 				fmt.Println()
 				fmt.Println("--apply: chaining `installer upgrade-apply`")
 				priorPkg := prior.PriorPackage
-				return runUpgradeApply(ctx, workDir, loaded.Package, false /*yes*/, priorPkg)
+				return runUpgradeApply(ctx, workDir, loaded.Package, yes, priorPkg)
 			}
 			fmt.Printf("\nNext: installer upgrade-apply %s   (or rerun with --apply)\n", workDir)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&apply, "apply", false, "after staging, immediately run `installer upgrade-apply` (one-shot upgrade + execute)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "with --apply, skip confirmation for any deletes the resulting update would perform")
+	cmd.Flags().StringSliceVar(&setImage, "set-image", nil, "image override as name=ref (repeatable); applied via `kustomize edit set image` against the chosen base before render. Carries forward across upgrades unless replaced.")
 	return cmd
 }
 
