@@ -77,6 +77,7 @@ Units are never linked to themselves; duplicate edges are collapsed.`,
 				slug := trimExt(e.Name())
 				path := filepath.Join(manifestsDir, e.Name())
 				cubArgs := []string{"unit", "create", "--space", space}
+				cubArgs = append(cubArgs, "--merge-external-source", e.Name())
 				if target != "" {
 					cubArgs = append(cubArgs, "--target", target)
 				}

@@ -29,13 +29,28 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		SilenceUsage: true,
 	}
 	root.AddCommand(
+		// Inspect / discover
 		newDocCmd(),
 		newPullCmd(),
+		newInspectCmd(),
+		newListCmd(),
+		// Registry auth
+		newLoginCmd(),
+		newLogoutCmd(),
+		// Install lifecycle
 		newWizardCmd(),
+		newDepsCmd(),
 		newRenderCmd(),
 		newPlanCmd(),
 		newPreflightCmd(),
 		newUploadCmd(),
+		// Publish
+		newPackageCmd(),
+		newPushCmd(),
+		newTagCmd(),
+		// Trust
+		newSignCmd(),
+		newVerifyCmd(),
 	)
 	return root
 }

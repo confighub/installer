@@ -4,17 +4,19 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
+
+	"github.com/confighubai/installer/pkg/api"
 )
 
 // Pull resolves a package reference to a local directory ready for Load.
@@ -79,21 +81,35 @@ func pullLocal(src, dest string) (string, error) {
 }
 
 func pullOCI(ctx context.Context, ref, dest string) (string, error) {
-	// ref is e.g. ghcr.io/owner/repo:tag
-	colon := strings.LastIndex(ref, ":")
-	if colon < 0 {
-		return "", fmt.Errorf("oci reference %q missing :tag", ref)
-	}
-	repoRef, tag := ref[:colon], ref[colon+1:]
-	repo, err := remote.NewRepository(repoRef)
+	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
-		return "", fmt.Errorf("oras: %w", err)
+		return "", err
 	}
-	repo.Client = &auth.Client{
-		Client:     retry.DefaultClient,
-		Cache:      auth.NewCache(),
-		Credential: auth.StaticCredential(repo.Reference.Registry, auth.EmptyCredential),
+	repo, err := newRepo(repoRef)
+	if err != nil {
+		return "", err
 	}
+
+	resolveRef := tag
+	if tag == "" {
+		resolveRef = want.String()
+	}
+	desc, err := repo.Resolve(ctx, resolveRef)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", ref, err)
+	}
+	if want != "" && desc.Digest != want {
+		return "", fmt.Errorf("digest mismatch on %s: pinned %s but registry returned %s", ref, want, desc.Digest)
+	}
+
+	// Peek at the manifest to choose the extraction path. Native installer
+	// artifacts have artifactType set to api.ArtifactType; everything else
+	// (notably Helm-OCI charts) takes the file-store fallback.
+	manifest, err := fetchManifest(ctx, repo, desc)
+	if err != nil {
+		return "", err
+	}
+
 	if dest == "" {
 		dest, err = os.MkdirTemp("", "installer-oci-*")
 		if err != nil {
@@ -102,26 +118,73 @@ func pullOCI(ctx context.Context, ref, dest string) (string, error) {
 	} else if err := os.MkdirAll(dest, 0o755); err != nil {
 		return "", err
 	}
+
+	if manifest.ArtifactType == api.ArtifactType {
+		return pullNative(ctx, repo, manifest, dest)
+	}
+	return pullHelmShaped(ctx, repo, desc.Digest.String(), dest)
+}
+
+// pullNative extracts the single tar.gz layer of a native installer artifact
+// into <dest>/package/, mirroring the single-subdir shape of Helm pulls.
+func pullNative(ctx context.Context, repo *remote.Repository, manifest *ocispec.Manifest, dest string) (string, error) {
+	if len(manifest.Layers) != 1 {
+		return "", fmt.Errorf("native installer artifact must have exactly 1 layer, got %d", len(manifest.Layers))
+	}
+	layer := manifest.Layers[0]
+	if layer.MediaType != api.LayerMediaType {
+		return "", fmt.Errorf("native installer artifact has unexpected layer mediaType %q", layer.MediaType)
+	}
+	pkgDir := filepath.Join(dest, api.LayerTitle)
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		return "", err
+	}
+	rc, err := repo.Fetch(ctx, layer)
+	if err != nil {
+		return "", fmt.Errorf("fetch layer: %w", err)
+	}
+	defer rc.Close()
+	if err := extractTarGz(rc, pkgDir); err != nil {
+		return "", err
+	}
+	return pkgDir, nil
+}
+
+// pullHelmShaped is the legacy file-store path: copy the layer to disk via
+// oras.Copy and post-extract any single .tgz file. Used for Helm-OCI charts.
+func pullHelmShaped(ctx context.Context, repo *remote.Repository, byDigest string, dest string) (string, error) {
 	store, err := file.New(dest)
 	if err != nil {
 		return "", err
 	}
 	defer store.Close()
-	// Allow Helm chart blobs (which are tar.gz layers) to be unpacked into the
-	// destination. The file store handles the unpacking based on layer media
-	// types and titles in the manifest.
-	if _, err := oras.Copy(ctx, repo, tag, store, tag, oras.DefaultCopyOptions); err != nil {
-		return "", fmt.Errorf("oras copy %s: %w", ref, err)
+	if _, err := oras.Copy(ctx, repo, byDigest, store, byDigest, oras.DefaultCopyOptions); err != nil {
+		return "", fmt.Errorf("oras copy %s: %w", byDigest, err)
 	}
-	// Helm OCI artifacts have a single .tgz layer named like <chart>-<ver>.tgz.
-	// oras-go's file store writes that as a regular file in dest. Detect and
-	// extract.
 	if extracted, ok, err := tryExtractHelmTGZ(dest); err != nil {
 		return "", err
 	} else if ok {
 		return extracted, nil
 	}
 	return resolveSingleSubdir(dest), nil
+}
+
+// fetchManifest fetches and decodes an OCI image manifest by descriptor.
+func fetchManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (*ocispec.Manifest, error) {
+	rc, err := repo.Manifests().Fetch(ctx, desc)
+	if err != nil {
+		return nil, fmt.Errorf("fetch manifest: %w", err)
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	var m ocispec.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("decode manifest: %w", err)
+	}
+	return &m, nil
 }
 
 // tryExtractHelmTGZ looks for a single .tgz file at the top level of dest and,

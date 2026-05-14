@@ -12,6 +12,7 @@ settings are deferred until after installation. Configuration as data makes this
 by storing the configuration data rather than re-rendering from scratch. That decouples
 [configuration authoring](https://docs.confighub.com/guide/authoring-config/) from
 [configuration editing](https://itnext.io/configuration-editing-is-imperative-fa9db379fbe4).
+Changes [can be merged](https://docs.confighub.com/guide/variants/#merging-external-sources-into-confighub).
 
 An installer should only present the minimal number of high-level decisions, such as
 which components to install and where to install them. To simplify the component decision,
@@ -20,7 +21,7 @@ recommended to set reasonable defaults as much as possible.
 
 For cases where installation decisions depend on hardware, operating system, networking,
 or other details of the deployment Target, we plan to add a mechanism for retrieving discovered
-Target facts.
+Target facts. Currently there's a local fact collection extension point.
 
 This tool renders kustomize-based packages — wrapped with an `installer.yaml`
 manifest that declares components, dependencies, inputs, and a function chain —
@@ -30,10 +31,10 @@ can be uploaded to ConfigHub for delivery via ArgoCD, Flux, or direct apply.
 
 The "code" lives in the installer (kustomize composition + ConfigHub function
 chain). The "config" stays as data (literal YAML in ConfigHub Units). For post-installation
-customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions) includes functions for changing
-commonly changed Kubernetes resource properties, such as `set-container-image`,
-`set-container-resources`, `set-replicas`, and `set-env-var`, and general-purpose
-editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
+customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions)
+includes functions for changing commonly changed Kubernetes resource properties, such as
+`set-container-image`, `set-container-resources`, `set-replicas`, `set-env`, and `set-hostname`,
+and general-purpose editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
 
 Why not just [kustomize](https://kustomize.io), or [kpt](https://kpt.dev)? Neither tool
 was really designed to be an installer. A lot was learned from kustomize and kpt, but
@@ -72,9 +73,7 @@ bin/installer wizard ./examples/hello-app \
   --work-dir /tmp/hello \
   --non-interactive \
   --select monitoring --select ingress \
-  --input namespace=demo \
-  --input image=nginxdemos/hello:latest \
-  --input hostname=greet.example.com
+  --namespace demo
 
 # 3. Render: composes the kustomization, runs kustomize, runs the function
 #    chain, writes one file per resource to /tmp/hello/out/manifests/.
@@ -144,26 +143,13 @@ spec:
   provides: [] # cluster-scope resources this package installs (CRDs, etc.)
   clusterSingleton: [] # leader-election leases this package claims
   externalManifests: [] # remote release-tarball manifests to fetch + merge
-  inputs: # wizard prompts
-    - { name: namespace, type: string, default: my-app }
-    - { name: app_name, type: string, required: true }
+  inputs: [] # wizard prompts
   functionChainTemplate: # one or more groups of function invocations
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
-      invocations:
-        - name: set-name
-          args: ["{{ .Inputs.namespace }}"]
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
-        - name: ensure-namespaces
         - name: set-namespace
-          args: ["{{ .Inputs.namespace }}"]
-    - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
-      invocations:
-        - name: set-container-image
-          args: ["app", "{{ .Inputs.image }}"]
+          args: ["{{ .Namespace }}"]
 ```
 
 See `examples/hello-app/` for a complete working package.
@@ -203,10 +189,20 @@ installed, the same commands work via `cub install ...`.
 └── cub-plugin.yaml             # cub plugin manifest
 ```
 
+## Design docs
+
+- [Package and dependency management](docs/package-management.md) — spec for
+  bundling, OCI publish, dependency declaration, and resolution.
+- [Implementation plan](docs/package-management-plan.md) — phased build plan;
+  Phase 0 (CLI scaffolding) is in place. Commands marked
+  "(not yet implemented)" in `installer --help` correspond to phases here.
+
 ## Roadmap
 
-- Bundling
-- Secrets
+- Bundling — see [package-management-plan.md](docs/package-management-plan.md)
+  Phase 1.
+- Secrets (currently we use a hack during fact collection)
+- Annotate created units with package metadata and add a change description
 - Interactive wizard (e.g., `survey`).
 - `installer plan` — diff next render vs. previous render and vs. ConfigHub.
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
@@ -217,6 +213,7 @@ installed, the same commands work via `cub install ...`.
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
 - AppConfig support.
 - Change of selections and inputs
-- TBD: Hooks
-- TBD: upgrade
-- TBD: variant creation
+- TBD: Hooks, in-cluster and local
+- TBD: image upgrades using cub function set set-container-image or other function
+- TBD: config updates using cub unit update --merge-external-source
+- TBD: variant creation and promotion
