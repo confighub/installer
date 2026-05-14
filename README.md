@@ -7,6 +7,14 @@ This tool is intended to play the role of an
 [installer wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
 and a [package dependency manager](https://medium.com/@sdboyer/so-you-want-to-write-a-package-manager-4ae9c17d9527).
 
+This installer aims to present only the minimal number of high-level decisions, such as
+which components to install and where to install them. It is recommended to set reasonable
+defaults as much as possible.
+
+For cases where installation decisions depend on hardware, operating system, networking,
+or other details of the deployment Target, we plan to add a mechanism for retrieving discovered
+Target facts. Currently there's a local fact collection extension point.
+
 As with installer wizards for systems other than Kubernetes, changes to detailed default
 settings are deferred until after installation. Configuration as data makes this possible
 by storing the configuration data rather than re-rendering from scratch. That decouples
@@ -14,31 +22,28 @@ by storing the configuration data rather than re-rendering from scratch. That de
 [configuration editing](https://itnext.io/configuration-editing-is-imperative-fa9db379fbe4).
 Changes [can be merged](https://docs.confighub.com/guide/variants/#merging-external-sources-into-confighub).
 
-An installer should only present the minimal number of high-level decisions, such as
-which components to install and where to install them. To simplify the component decision,
-it is recommended to offer a working default selection of components. In general, it is
-recommended to set reasonable defaults as much as possible.
+More explanation of the tool's approach can be found in [Design principles](docs/principles.md).
 
-For cases where installation decisions depend on hardware, operating system, networking,
-or other details of the deployment Target, we plan to add a mechanism for retrieving discovered
-Target facts. Currently there's a local fact collection extension point.
+With the configuration-as-data approach, code that operates on configuration is separate from
+the data, which is plain YAML (and other formats in the future). The "code" lives in the installer.
 
-This tool renders kustomize-based packages — wrapped with an `installer.yaml`
-manifest that declares components, dependencies, inputs, and a function chain —
-into per-resource Kubernetes YAML, customized at install time with ConfigHub
-functions executed locally via the SDK. Output goes to plain YAML files that
-can be uploaded to ConfigHub for delivery via ArgoCD, Flux, or direct apply.
+This tool leverages kustomize for its foundational composition and customization. It adds a Package manifest
+named `installer.yaml` that declares bases, available components, dependencies, and inputs. It also contains
+a sequence of ConfigHub functions executed at install (render) time locally via the SDK.
 
-The "code" lives in the installer (kustomize composition + ConfigHub function
-chain). The "config" stays as data (literal YAML in ConfigHub Units). For post-installation
-customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions)
-includes functions for changing commonly changed Kubernetes resource properties, such as
-`set-container-image`, `set-container-resources`, `set-replicas`, `set-env`, and `set-hostname`,
+Output from the rendering process goes to plain YAML files that can be uploaded to ConfigHub for delivery
+via ArgoCD or Flux, or could be committed to git to be deployed by ArgoCD, Flux, or other Kubernetes
+deployment tool.
+
+For post-installation customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions) includes functions for changing commonly changed Kubernetes resource properties,
+such as `set-container-image`, `set-container-resources`, `set-replicas`, `set-env`, and `set-hostname`,
 and general-purpose editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
 
 Why not just [kustomize](https://kustomize.io), or [kpt](https://kpt.dev)? Neither tool
-was really designed to be an installer. A lot was learned from kustomize and kpt, but
-starting afresh made it easier to experiment with different design choices.
+was really designed to be a full-blown installer, and package management was explicitly
+[out of scope](https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/scope.md)
+for kustomize and kubectl. A lot was learned from kustomize and kpt, but starting afresh made it
+easier to experiment with different design choices.
 
 ## Status
 
@@ -308,14 +313,14 @@ upgrade --set-image preflight rejection`. Spaces created with the
 
 ## Roadmap
 
-- Secrets (currently we use a hack during fact collection).
+- AppConfig support.
+- Better Secrets support (currently we generate secrets during fact collection).
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
   namespaced resources, etc.) inferred from resource kind plus the existing
   link graph — no per-package phase declarations.
-- Real packages: llm-d, KServe, vLLM production stack
+- Real packages: ArgoCD, Flux, llm-d, KServe, vLLM production stack
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
-- AppConfig support.
 - TBD: Hooks, in-cluster and local.
 - TBD: variant creation and promotion.
 - TBD: support deploying via ArgoCD and Flux directly.
