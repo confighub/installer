@@ -64,6 +64,10 @@ render.
 each rendered manifest Unit. They do NOT apply to the installer-record
 Unit (which must remain untargeted).
 
+Every Unit and Link created by upload also carries a "Component" label
+whose value is the package name (the parent's name for cross-Space dep
+links), so all entities belonging to one package can be queried together.
+
 After per-Space upload, the existing get-resources / get-references /
 get-workload-labels link-inference runs once per Space to materialize
 intra-Space NeedsProvides links.`,
@@ -138,6 +142,16 @@ intra-Space NeedsProvides links.`,
 				return err
 			}
 
+			// Persist where this work-dir is being uploaded before any
+			// cub calls so the upload.yaml is included in each parent's
+			// installer-record body. Subsequent `installer wizard /
+			// plan / update / upgrade` invocations read it to re-enter
+			// from ConfigHub and to sanity-check the active cub
+			// context.
+			if err := upload.WriteUploadDoc(cmd.Context(), workDir, pattern, packages); err != nil {
+				return fmt.Errorf("write upload.yaml: %w", err)
+			}
+
 			for _, pkg := range packages {
 				if err := uploadOnePackage(pkg, target, annotations, labels); err != nil {
 					return err
@@ -171,6 +185,8 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		return err
 	}
 
+	componentLabel := "Component=" + pkg.Name
+
 	entries, err := os.ReadDir(pkg.ManifestsDir)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", pkg.ManifestsDir, err)
@@ -181,7 +197,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		}
 		slug := trimExt(e.Name())
 		path := filepath.Join(pkg.ManifestsDir, e.Name())
-		cubArgs := []string{"unit", "create", "--space", pkg.SpaceSlug, "--merge-external-source", e.Name()}
+		cubArgs := []string{"unit", "create", "--space", pkg.SpaceSlug, "--merge-external-source", e.Name(), "--label", componentLabel}
 		if target != "" {
 			cubArgs = append(cubArgs, "--target", target)
 		}
@@ -203,7 +219,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 	if err := createInstallerRecordUnit(pkg); err != nil {
 		return err
 	}
-	return createInferredLinks(pkg.SpaceSlug)
+	return createInferredLinks(pkg.SpaceSlug, pkg.Name)
 }
 
 // ensureSpace creates the Space if it does not exist. Idempotent via
@@ -240,6 +256,7 @@ func createInstallerRecordUnit(pkg upload.Package) error {
 		"--space", pkg.SpaceSlug,
 		"--annotation", "installer.confighub.com/role=installer-record",
 		"--annotation", "installer.confighub.com/package="+pkg.Name,
+		"--label", "Component="+pkg.Name,
 		upload.InstallerRecordSlug, tmp.Name(),
 	)
 	ccmd.Stdout = os.Stdout
@@ -255,6 +272,7 @@ func createInstallerRecordUnit(pkg upload.Package) error {
 func createCrossSpaceLink(l upload.CrossSpaceLink) error {
 	ccmd := exec.Command("cub", "link", "create",
 		"--space", l.FromSpace, "--quiet",
+		"--label", "Component="+l.Component,
 		l.Slug, l.FromUnit, l.ToUnit, l.ToSpace,
 	)
 	ccmd.Stderr = os.Stderr
@@ -299,8 +317,9 @@ type linkEdge struct {
 // createInferredLinks runs get-resources, get-references, and
 // get-workload-labels on the just-uploaded space, plus a yq call against any
 // CRDs to learn their group/Kind, then creates links for every reference,
-// selector match, and custom-resource → CRD pair.
-func createInferredLinks(space string) error {
+// selector match, and custom-resource → CRD pair. Each link is labeled
+// Component=<component> so it can be filtered alongside the package's units.
+func createInferredLinks(space, component string) error {
 	resources, err := loadResources(space)
 	if err != nil {
 		return err
@@ -326,7 +345,9 @@ func createInferredLinks(space string) error {
 
 	for _, e := range edges {
 		slug := "-"
-		ccmd := exec.Command("cub", "link", "create", "--space", space, "--quiet", slug, e.fromUnit, e.toUnit)
+		ccmd := exec.Command("cub", "link", "create", "--space", space, "--quiet",
+			"--label", "Component="+component,
+			slug, e.fromUnit, e.toUnit)
 		ccmd.Stderr = os.Stderr
 		if err := ccmd.Run(); err != nil {
 			return fmt.Errorf("cub link create %s (%s -> %s): %w", slug, e.fromUnit, e.toUnit, err)

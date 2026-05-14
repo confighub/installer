@@ -181,6 +181,18 @@ func ParseFacts(data []byte) (*Facts, error) {
 	return &f, nil
 }
 
+// ParseUpload parses upload.yaml bytes into an Upload.
+func ParseUpload(data []byte) (*Upload, error) {
+	var u Upload
+	if err := yaml.Unmarshal(data, &u); err != nil {
+		return nil, fmt.Errorf("parse Upload: %w", err)
+	}
+	if u.Kind != "" && u.Kind != KindUpload {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", u.Kind, KindUpload)
+	}
+	return &u, nil
+}
+
 // ParseFunctionChain parses function-chain.yaml bytes.
 func ParseFunctionChain(data []byte) (*FunctionChain, error) {
 	var c FunctionChain

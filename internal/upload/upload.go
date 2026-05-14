@@ -14,13 +14,16 @@ package upload
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 
+	"github.com/confighubai/installer/internal/cubctx"
 	"github.com/confighubai/installer/pkg/api"
 )
 
@@ -178,10 +181,16 @@ func vendorSlug(name, version string) string {
 // carries installer.yaml + spec docs (no Target). One per Space.
 const InstallerRecordSlug = "installer-record"
 
+// UploadDocFilename is the basename of the persisted Upload doc inside
+// the parent's spec dir.
+const UploadDocFilename = "upload.yaml"
+
 // BuildInstallerRecord builds the multi-doc YAML body for the per-Space
 // installer-record Unit. The result is `installer.yaml` followed by every
 // YAML doc in pkg.SpecDir (in lexicographic order), separated by `---`.
-// Files outside spec/ are not included.
+// Files outside spec/ are not included. upload.yaml (if present) is
+// included so a freshly cloned work-dir can re-derive everything,
+// including where it was uploaded, from ConfigHub alone.
 func BuildInstallerRecord(pkg Package) ([]byte, error) {
 	paths := []string{filepath.Join(pkg.PackageDir, "installer.yaml")}
 	entries, err := os.ReadDir(pkg.SpecDir)
@@ -222,12 +231,139 @@ func BuildInstallerRecord(pkg Package) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// SplitInstallerRecord is the inverse of BuildInstallerRecord: it
+// splits a multi-doc body into one decoded value per kind. Unknown
+// kinds are silently skipped — the body is forward-compatible with
+// future spec docs. installer.yaml is parsed as Package; everything
+// else is keyed by Kind.
+type RecordContents struct {
+	Package   *api.Package
+	Selection *api.Selection
+	Inputs    *api.Inputs
+	Facts     *api.Facts
+	Lock      *api.Lock
+	Upload    *api.Upload
+}
+
+// SplitInstallerRecord parses a multi-doc YAML stream produced by
+// BuildInstallerRecord. It is tolerant of new kinds being added later.
+func SplitInstallerRecord(body []byte) (*RecordContents, error) {
+	docs, err := api.SplitMultiDoc(body)
+	if err != nil {
+		return nil, fmt.Errorf("split installer-record: %w", err)
+	}
+	out := &RecordContents{}
+	for i, d := range docs {
+		_, kind, err := api.SniffKind(d)
+		if err != nil {
+			return nil, fmt.Errorf("doc %d: %w", i, err)
+		}
+		switch kind {
+		case api.KindPackage:
+			p, err := api.ParsePackage(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Package): %w", i, err)
+			}
+			out.Package = p
+		case api.KindSelection:
+			s, err := api.ParseSelection(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Selection): %w", i, err)
+			}
+			out.Selection = s
+		case api.KindInputs:
+			ins, err := api.ParseInputs(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Inputs): %w", i, err)
+			}
+			out.Inputs = ins
+		case api.KindFacts:
+			f, err := api.ParseFacts(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Facts): %w", i, err)
+			}
+			out.Facts = f
+		case api.KindLock:
+			l, err := api.ParseLock(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Lock): %w", i, err)
+			}
+			out.Lock = l
+		case api.KindUpload:
+			u, err := api.ParseUpload(d)
+			if err != nil {
+				return nil, fmt.Errorf("doc %d (Upload): %w", i, err)
+			}
+			out.Upload = u
+		default:
+			// Unknown kind — ignore for forward compatibility.
+		}
+	}
+	return out, nil
+}
+
+// WriteUploadDoc writes <work-dir>/out/spec/upload.yaml from the
+// discovered package set. Reads the active cub context to record the
+// organization ID and server URL alongside the resolved Space slugs.
+//
+// Called by the CLI at the end of a successful `installer upload`. Safe
+// to call when packages contains only the parent (no deps).
+func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages []Package) error {
+	if len(packages) == 0 || !packages[0].IsParent {
+		return fmt.Errorf("WriteUploadDoc: packages must start with the parent")
+	}
+	parent := packages[0]
+	cc, err := cubctx.Get(ctx)
+	if err != nil {
+		// Don't fail the upload — record what we have. The org/server
+		// check on subsequent commands will still flag a true mismatch
+		// (against an empty value the check is a no-op, which is the
+		// right behavior for an installer that ran before cubctx
+		// existed).
+		cc = &cubctx.Context{}
+	}
+	doc := &api.Upload{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindUpload,
+		Metadata:   api.Metadata{Name: parent.Name + "-upload"},
+		Spec: api.UploadSpec{
+			Package:        parent.Name,
+			PackageVersion: parent.Version,
+			SpacePattern:   spacePattern,
+			Spaces:         make([]api.UploadedSpace, 0, len(packages)),
+			UploadedAt:     time.Now().UTC().Format(time.RFC3339),
+			Server:         cc.ServerURL,
+			OrganizationID: cc.OrganizationID,
+		},
+	}
+	for _, p := range packages {
+		doc.Spec.Spaces = append(doc.Spec.Spaces, api.UploadedSpace{
+			Package:  p.Name,
+			Version:  p.Version,
+			Slug:     p.SpaceSlug,
+			IsParent: p.IsParent,
+		})
+	}
+	data, err := api.MarshalYAML(doc)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(workDir, "out", "spec", UploadDocFilename)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 // CrossSpaceLink describes one parent-to-dep edge to materialize as a
 // ConfigHub Link spanning two Spaces. Both ends point at each Space's
 // installer-record Unit.
 type CrossSpaceLink struct {
 	// Slug is the link's deterministic slug, derived from the dep name.
 	Slug string
+	// Component is the parent package name, used as the value of the
+	// "Component" label on the created link.
+	Component string
 	// FromSpace is the parent's Space; FromUnit is the parent's
 	// installer-record Unit slug.
 	FromSpace string
@@ -255,6 +391,7 @@ func PlanCrossSpaceLinks(packages []Package) []CrossSpaceLink {
 	for _, dep := range packages[1:] {
 		out = append(out, CrossSpaceLink{
 			Slug:      "dep-" + dep.LocalHandle,
+			Component: parent.Name,
 			FromSpace: parent.SpaceSlug,
 			FromUnit:  InstallerRecordSlug,
 			ToSpace:   dep.SpaceSlug,

@@ -42,12 +42,7 @@ starting afresh made it easier to experiment with different design choices.
 
 ## Status
 
-First-iteration wedge. Working: package format, local + OCI pull, non-
-interactive wizard, kustomize composition, function chain execution, per-
-resource splitting, deterministic output. Stubbed: interactive wizard,
-preflight (cluster-side constraint checks), plan (diff vs. previous render or
-ConfigHub), upload (currently shells out to `cub unit create` per file; the
-cleaner `cub unit create -f <dir>` bulk mode is a planned cub addition).
+TODO
 
 ## Build
 
@@ -218,10 +213,7 @@ cleans the resulting Spaces on exit.
 
 ## Roadmap
 
-- Annotate created units with package metadata and add a change description
-- Interactive wizard (e.g., `survey`).
-- `installer plan` — diff next render vs. previous render and vs. ConfigHub.
-  Use cub unit update --merge-external-source "source" --dry-run -o mutations
+- Documentation for package authors and for package consumers
 - Secrets (currently we use a hack during fact collection)
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
@@ -230,8 +222,6 @@ cleans the resulting Spaces on exit.
 - Real packages: llm-d, KServe, vLLM production stack
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
 - AppConfig support.
-- Change of selections and inputs
 - TBD: Hooks, in-cluster and local
-- TBD: image upgrades using cub function set set-container-image or other function
-- TBD: config updates using cub unit update --merge-external-source
 - TBD: variant creation and promotion
+- TBD: support deploying via ArgoCD and Flux directly?
