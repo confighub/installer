@@ -10,6 +10,21 @@ with your package, then come back here. For a hands-on walkthrough of
 authoring a small package from scratch, see [the author
 tutorial](./author-tutorial.md).
 
+The CLI provides four authoring shortcuts:
+
+- `installer init <dir>` — scaffold a new package with the
+  recommended defaults.
+- `installer new <kind> <name>` — clone a Kubernetes resource
+  template from the bootstrapped `kubernetes-resources` package.
+- `installer edit add/remove/set input|component|dependency` —
+  mutate `installer.yaml` fields (no hand-editing YAML).
+- `installer vet <work-dir>` — run the package's validators against
+  the existing render without re-rendering.
+
+These all operate on package source on disk; there's no ConfigHub
+interaction except `installer new`, which fetches templates from
+the bootstrapped kubernetes-resources Space.
+
 > **Note.** This guide describes _what_ to put in a package and _why_.
 > The doctrine the installer is anchored to lives in
 > [docs/principles.md](./principles.md). When in doubt, that's the
@@ -52,6 +67,20 @@ my-package/
         ├── kustomization.yaml
         └── ...resources...
 ```
+
+The fastest way to get this layout is:
+
+```bash
+installer init ./my-package
+```
+
+`installer init` scaffolds the manifest (with the recommended
+validator chain — see [Validators](#specvalidators) below), an
+empty `bases/default/`, an empty `components/`, and an empty
+`validation/`. From there, drop your kustomize resources into
+`bases/default/` and either hand-author them or use `installer new
+<kind> <name>` to clone canonical templates from the
+[`kubernetes-resources`](#kubernetes-resources-package) package.
 
 A typical package with optional components, validation, and a
 collector:
@@ -232,6 +261,64 @@ is "optimize for the zero-override case." If you have ten required
 inputs, your package needs a sensible default profile, not ten more
 prompts.
 
+### `spec.validators`
+
+A list of validating-function invocation groups, run automatically
+at the end of every `installer render` against the post-mutation
+output. Each group has the same shape as
+[`functionChainTemplate`](#specfunctionchaintemplate) — a toolchain,
+optional `whereResource` filter, ordered `invocations` — but every
+named function must be a Validating function (`Mutating: false`,
+`Validating: true`). Validators do not modify the rendered
+manifests; render fails fast if any returns `Passed=false`.
+
+```yaml
+spec:
+  validators:
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format
+```
+
+`installer init` seeds `vet-schemas`, `vet-merge-keys`, and
+`vet-format` by default. `vet-placeholders` is intentionally NOT
+seeded — packages that ship cloneable bases (with
+`confighubplaceholder` fields) would fail it.
+
+Edit the list with `installer edit add/remove validator <name>`
+(coming in a follow-up) or by hand. The full list of available
+validators:
+
+```bash
+cub function list --where "Validating = TRUE" --toolchain Kubernetes/YAML
+```
+
+Frequently used:
+
+| Validator | Catches |
+| --- | --- |
+| `vet-schemas` | Resources that don't validate against their Kubernetes schema. |
+| `vet-merge-keys` | Duplicate strategic-merge-patch keys (e.g., two containers with the same name). |
+| `vet-format` | YAML format issues — anchors/aliases, empty values, duplicate keys, truthy values, old-style octals. |
+| `vet-placeholders` | `confighubplaceholder`-bearing fields — install-time placeholder leaking into output. |
+| `vet-images` | Container images that fail an allow/deny filter. |
+| `vet-cel` | Custom CEL expressions per resource. |
+| `vet-celexpr` | Custom CEL expression across all resources. |
+| `vet-jsonschema` | Resources that don't validate against a custom JSONSchema. |
+| `vet-starlark` | Custom Starlark validation. |
+| `vet-values` | Field values outside an allowed set. |
+
+When the list changes, run `installer vet <work-dir>` against an
+existing render to check the new validators without re-rendering.
+
+`whereResource` filters in `validators[].whereResource` use the same
+qualified path syntax as
+[`functionChainTemplate`](#specfunctionchaintemplate) —
+`ConfigHub.ResourceType = 'apps/v1/Deployment'`, etc.
+
 ### `spec.functionChainTemplate`
 
 A list of function-invocation groups. At render time the template is
@@ -260,7 +347,11 @@ spec:
   Each group declares its own toolchain so a single chain can mutate
   raw Kubernetes YAML and AppConfig units in the same render.
 - `whereResource` — a function-executor filter expression scoping
-  this group to a subset of resources. Empty = all.
+  this group to a subset of resources. Empty = all. **Path
+  qualifier required**: use `ConfigHub.ResourceType` (with prefix),
+  not bare `ResourceType`. Bare `ResourceType` parses but matches
+  zero resources, so the function silently no-ops. Example:
+  `ConfigHub.ResourceType IN ('apps/v1/Deployment', 'apps/v1/StatefulSet')`.
 - `invocations` — ordered. Each invocation names a function and its
   string args (templated).
 
@@ -511,6 +602,55 @@ what isn't.
    re-renders; your input schema diff (across versions) drives what an
    upgrade prompts for vs carries forward silently.
 
+## kubernetes-resources package
+
+`packages/kubernetes-resources/` (in this repo) ships eleven
+canonical Kubernetes resource templates — Namespace, Deployment +
+Service, StatefulSet + headless Service, DaemonSet, Job, CronJob,
+Ingress, NetworkPolicy pair, RBAC bundle, HPA, PDB — each with the
+recommended defaults pre-applied via per-type ConfigHub functions
+(resource requests, probes, securityContext,
+automountServiceAccountToken=false, pod-security labels on
+Namespace, etc.).
+
+Once installed in your ConfigHub organization, `installer new
+<kind> <name>` clones any of these templates into your package's
+`bases/default/` with operator customizations applied (renamed,
+optional `--image` / `--port` / `--replicas`, namespace replaced
+with `confighubplaceholder` so your package's own `set-namespace`
+function rewrites it at install time).
+
+Bootstrap the package once per organization:
+
+```bash
+installer wizard ./packages/kubernetes-resources \
+    --work-dir /tmp/k8s-res \
+    --non-interactive --namespace kubernetes-resources
+installer render /tmp/k8s-res
+installer upload /tmp/k8s-res --space kubernetes-resources
+```
+
+The `installer upload` step records the install in
+`~/.confighub/installer/state.yaml`; subsequent `installer new`
+calls find it automatically.
+
+After bootstrap, scaffold a Deployment into your package:
+
+```bash
+installer new deployment my-app \
+    --image myorg/my-app:1.0.0 --port 8080 --replicas 3
+```
+
+Supported kinds: `cronjob`, `daemonset`, `deployment`, `hpa`
+(alias for `horizontalpodautoscaler`), `ingress`, `job`,
+`namespace`, `networkpolicy`, `pdb` (alias for
+`poddisruptionbudget`), `role`, `rolebinding`, `service`,
+`serviceaccount`, `statefulset`.
+
+`installer new --update-kustomization` (default true) appends the
+new file to your package's `bases/default/kustomization.yaml`'s
+resources list.
+
 ## Authoring best practices
 
 These are the prescriptive ones. The full doctrine is
@@ -716,33 +856,87 @@ refuses to render against incompatible cluster + installer versions.
 
 ## Common author tasks
 
+### Start a new package
+
+```bash
+installer init ./my-package
+```
+
+Scaffolds `installer.yaml` (with the recommended validators),
+`bases/default/kustomization.yaml`, `bases/default/`,
+`components/`, `validation/`. Drop your kustomize resources into
+`bases/default/`, then add inputs / components / dependencies via
+`installer edit add` or hand-edit `installer.yaml`.
+
+### Add a Kubernetes resource
+
+```bash
+installer new deployment my-app --image myorg/my-app:1.0 --port 8080
+```
+
+Clones the `kubernetes-resources` Deployment template (defaults
+already applied) into `bases/default/deployment-my-app.yaml` and
+appends it to `bases/default/kustomization.yaml`. See
+[kubernetes-resources package](#kubernetes-resources-package) for
+the full kind list and prerequisites.
+
+For resource shapes the template doesn't cover, hand-author the
+YAML and add it to `bases/default/kustomization.yaml`.
+
 ### Add an opt-in component
 
-1. `mkdir components/<name>`, drop a kustomize Component
-   (`kind: Component`) `kustomization.yaml` + the resources that
-   layer in.
-2. Add an entry under `spec.components`. Set `default: true` if the
-   component should be part of the recommended install.
-3. Declare any preconditions in `externalRequires`.
-4. If the component depends on another component in your package,
-   list it under `requires:`.
+```bash
+mkdir -p components/monitoring
+# drop kustomization.yaml + resources into components/monitoring/
+installer edit add component monitoring \
+    --path components/monitoring \
+    --default \
+    --description "Adds a ServiceMonitor for Prometheus scraping."
+```
+
+`installer edit add component` writes the entry under
+`spec.components` and re-validates the manifest. Use `--requires`,
+`--conflicts`, `--valid-for-bases` (each repeatable) for
+constraints.
 
 ### Add an input
 
-1. Add an entry under `spec.inputs` with `name`, `type`, and a
-   `default:` whenever you can name one.
-2. Reference the value from `functionChainTemplate` invocations as
-   `{{ .Inputs.<name> }}`, or rely on a kustomize transformer
-   reading it (e.g., via a generator).
+```bash
+installer edit add input replicas \
+    --type int --default 2 \
+    --prompt "Number of replicas"
+```
+
+Then reference it from `functionChainTemplate` invocations as
+`{{ .Inputs.replicas }}`. Use `installer edit set input <name>` to
+modify, `installer edit remove input <name>` to drop.
 
 ### Depend on another installer package
 
-1. Add an entry under `spec.dependencies` with `name`, `package`
-   (OCI ref without tag), `version` (SemVer range).
-2. Optionally pre-answer the dep's wizard via `selection:` and
-   `inputs:`.
-3. If the dep covers an `externalRequires` of yours, list it under
-   `satisfies:` so the resolver marks the requirement satisfied.
+```bash
+installer edit add dependency gateway-api \
+    --package-ref oci://ghcr.io/myorg/gateway-api \
+    --version "^1.2.0"
+# Optionally:
+installer edit set dependency gateway-api --when-component ingress
+```
+
+For more nuanced fields (`selection`, `inputs`, `satisfies`), edit
+`spec.dependencies` directly — they have nested structure that
+`installer edit` doesn't model in v1.
+
+### Re-vet after editing the validator list
+
+```bash
+installer vet <work-dir>
+```
+
+Runs `spec.validators` against the existing `out/manifests/`
+without re-running kustomize + the function chain. Useful when you
+added a new validator (e.g., `vet-images`) and want to check the
+existing render before re-rendering. (Render auto-runs validators
+too; `vet` is for the validator-list-changed-but-render-unchanged
+case.)
 
 ### Cut a release
 

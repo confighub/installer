@@ -41,7 +41,17 @@ configured separately).
 ## Find a package
 
 Today, package discovery is convention-based — you find a package by
-its OCI ref (`oci://host/repo:tag`). Once you have a candidate ref:
+its OCI ref (`oci://host/repo:tag`). The installer repo ships two
+packages under `packages/` as starting points:
+
+- `packages/kubernetes-resources/` — eleven canonical Kubernetes
+  resource templates with best-practice defaults pre-applied. Used
+  by `installer new` to scaffold resources into your own packages
+  (see [author guide](./author-guide.md#kubernetes-resources-package)).
+- `packages/worker/` — the ConfigHub bridge worker.
+
+These will move to a separate registry as the catalog grows. Once
+you have a candidate ref:
 
 ```bash
 # What's in this artifact? Reads only the manifest + config blob,

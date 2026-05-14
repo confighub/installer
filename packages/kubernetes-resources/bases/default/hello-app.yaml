@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-app
+  namespace: confighubplaceholder
+  labels:
+    app: hello-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app
+    spec:
+      serviceAccountName: hello-app
+      containers:
+        - name: main
+          image: ghcr.io/acme/hello-app:v0.1.0
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-app
+  namespace: confighubplaceholder
+  labels:
+    app: hello-app
+spec:
+  selector:
+    app: hello-app
+  ports:
+    - port: 80
+      targetPort: 8080

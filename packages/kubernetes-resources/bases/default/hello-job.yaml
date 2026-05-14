@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello-migrate
+  namespace: confighubplaceholder
+  labels:
+    app: hello-app
+    job: db-migrate
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/acme/hello-app:v0.1.0
+          command: ["./migrate", "--target", "latest"]
+          envFrom:
+            - secretRef:
+                name: hello-db-credentials

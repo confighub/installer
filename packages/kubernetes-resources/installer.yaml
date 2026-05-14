@@ -1,0 +1,60 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: kubernetes-resources
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        Eleven canonical Kubernetes resource templates — Namespace,
+        Deployment + Service, StatefulSet + headless Service,
+        DaemonSet, Job, CronJob, Ingress, NetworkPolicy pair, RBAC
+        bundle, HPA, PDB. Each is rendered with the recommended
+        defaults applied via per-type ConfigHub function groups.
+        `installer new <kind> <name>` pulls these as starting
+        templates so operators don't author Kubernetes YAML from
+        scratch.
+
+  functionChainTemplate:
+    # 1. Set the namespace on every namespaced resource. The
+    #    Namespace resource itself gets renamed by `set-namespace`.
+    - toolchain: Kubernetes/YAML
+      description: Set the namespace on every namespaced resource.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+
+    # 2. On every workload (Deployment, StatefulSet, DaemonSet,
+    #    Job, CronJob): apply the canonical defaults from the
+    #    kubernetes-resources skill — resource requests/limits,
+    #    liveness/readiness/startup probes, pod & container
+    #    securityContext (incl. readOnlyRootFilesystem:true),
+    #    automountServiceAccountToken:false. Order matters:
+    #    ensure-namespaces is unnecessary here (set-namespace ran
+    #    above) but kept for parity with the skill.
+    - toolchain: Kubernetes/YAML
+      whereResource: ConfigHub.ResourceType IN ('apps/v1/Deployment','apps/v1/StatefulSet','apps/v1/DaemonSet','batch/v1/Job','batch/v1/CronJob')
+      description: Apply workload defaults — resources, probes, security context.
+      invocations:
+        - name: set-container-resources-defaults
+        - name: set-container-probe-defaults
+        - name: set-pod-container-security-context-defaults
+        - name: set-automount-service-account-token-false
+
+    # 3. Namespace gets pod-security labels.
+    - toolchain: Kubernetes/YAML
+      whereResource: ConfigHub.ResourceType = 'v1/Namespace'
+      description: Apply pod-security labels to Namespace.
+      invocations:
+        - name: set-pod-security-defaults
+
+  validators:
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format
