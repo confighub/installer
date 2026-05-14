@@ -172,22 +172,17 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
   EDIT_FILE=$(ls "$PARENT_DIR"/*.yaml 2>/dev/null | head -1)
   [[ -n "$EDIT_FILE" ]] || fail "no rendered manifest to edit under $PARENT_DIR"
   python3 -c "
-import sys
+import sys, yaml
 p = sys.argv[1]
 with open(p) as f:
-    data = f.read()
-# Idempotent injection: append a label under metadata.labels (or create
-# a labels block). Trivial line-edit avoids a full YAML parse here.
-if 'installer-e2e-marker:' not in data:
-    out = []
-    inserted = False
-    for line in data.splitlines():
-        out.append(line)
-        if not inserted and line.startswith('metadata:'):
-            out.append('  labels:')
-            out.append('    installer-e2e-marker: \"true\"')
-            inserted = True
-    open(p, 'w').write('\n'.join(out) + '\n')
+    docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if isinstance(d, dict) and isinstance(d.get('metadata'), dict):
+        labels = d['metadata'].setdefault('labels', {})
+        labels['installer-e2e-marker'] = 'true'
+        break
+with open(p, 'w') as f:
+    yaml.safe_dump_all(docs, f, default_flow_style=False, sort_keys=False)
 " "$EDIT_FILE"
 
   "$BIN" plan "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-edited.out"
@@ -199,6 +194,28 @@ if 'installer-e2e-marker:' not in data:
     fail "plan after edit should name the edited slug ($EDIT_SLUG)"
   fi
   echo "plan: clean → No changes; edit → 1 change naming $EDIT_SLUG"
+
+  log "update applies the diff"
+  "$BIN" update "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/update.out"
+  if ! grep -q "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/update.out"; then
+    fail "update should apply 1 change"
+  fi
+  if ! grep -q "ChangeSet: " "$WORK_TMP/update.out"; then
+    fail "update should open and name a ChangeSet"
+  fi
+  if ! grep -q "Updates revertable via:" "$WORK_TMP/update.out"; then
+    fail "update should print revert command"
+  fi
+
+  log "update converges (re-run is no-op)"
+  "$BIN" update "$WORK_TMP" 2>&1 | tee "$WORK_TMP/update-converge.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/update-converge.out"; then
+    fail "second update on the same work-dir should be No changes"
+  fi
+  if grep -q "ChangeSet: " "$WORK_TMP/update-converge.out"; then
+    fail "second update should not open a ChangeSet (no changes)"
+  fi
+  echo "update: applied 1 change in ChangeSet; second run is no-op"
 fi
 
 log "OK"

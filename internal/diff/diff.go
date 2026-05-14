@@ -212,6 +212,13 @@ func listCurrentSlugs(ctx context.Context, space, pkg string) ([]string, error) 
 // dryRunMutations runs `cub unit update --merge-external-source ...
 // --dry-run -o mutations` and returns the cleaned diff text. Empty
 // string means no changes.
+//
+// Mutations whose only content is ConfigHub bookkeeping (the
+// confighub.com/ResourceMergeID annotation injected by every
+// merge-external-source apply) are dropped — without this filter
+// `installer update` does not converge on its second run, because the
+// new file body lacks the annotation that cub injected on the prior
+// merge.
 func dryRunMutations(ctx context.Context, space, slug, sourceName, path string) (string, error) {
 	cmd := exec.CommandContext(ctx, "cub", "unit", "update",
 		"--space", space,
@@ -228,18 +235,130 @@ func dryRunMutations(ctx context.Context, space, slug, sourceName, path string) 
 	if isNoChange(clean) {
 		return "", nil
 	}
-	return clean, nil
+	filtered := filterBookkeepingMutations(clean)
+	if isNoChange(filtered) {
+		return "", nil
+	}
+	return filtered, nil
 }
 
 func isNoChange(s string) bool {
 	t := strings.TrimSpace(s)
-	return t == "" || strings.Contains(t, "No new changes")
+	if t == "" || strings.Contains(t, "No new changes") {
+		return true
+	}
+	// After bookkeeping filtering, the diff may consist of only the
+	// "New changes from update from <path>:" preamble with no
+	// Resource: blocks. Treat that as no change too.
+	if !strings.Contains(t, "Resource:") {
+		return true
+	}
+	return false
 }
 
-var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+var (
+	ansiRE        = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	mutationLine  = regexp.MustCompile(`^\s*[+~-]\s*\[(?:Add|Update|Delete)\]\s`)
+	resourceLine  = regexp.MustCompile(`^Resource:\s`)
+	bookkeepingRE = regexp.MustCompile(`^\s*confighub\.com/`)
+)
 
 func stripANSI(s string) string {
 	return ansiRE.ReplaceAllString(s, "")
+}
+
+// filterBookkeepingMutations walks the cub -o mutations output and
+// drops any mutation whose body contains only confighub.com/* keys
+// (currently just ResourceMergeID — see internal/models/mutation.go in
+// confighub3). Resources whose mutations are all dropped are removed
+// too. Format is parsed line-by-line:
+//
+//	Resource: <type> <name>            <- resource header
+//	  ~ [Update] <path>  (#N)          <- mutation header
+//	    <content lines, indented more> <- mutation body
+//
+// Robust against the New-changes prefix and the resource-no-changes
+// case. Conservative: when in doubt, keeps the mutation.
+func filterBookkeepingMutations(in string) string {
+	lines := strings.Split(in, "\n")
+	type block struct {
+		header  string
+		body    []string
+		dropped bool
+	}
+	var (
+		out         []string
+		currentRes  []string
+		blocks      []block
+		flushRes    func()
+	)
+	flushBlocks := func() {
+		for _, b := range blocks {
+			if b.dropped {
+				continue
+			}
+			currentRes = append(currentRes, b.header)
+			currentRes = append(currentRes, b.body...)
+		}
+		blocks = nil
+	}
+	flushRes = func() {
+		flushBlocks()
+		// Only emit the resource header if at least one mutation
+		// survived. currentRes[0] is the "Resource:" header line.
+		if len(currentRes) > 1 {
+			out = append(out, currentRes...)
+		}
+		currentRes = nil
+	}
+	var pendingBlock *block
+	closePending := func() {
+		if pendingBlock == nil {
+			return
+		}
+		// A mutation is bookkeeping iff it has body lines AND every
+		// body line is a confighub.com/ key. Empty-body mutations
+		// (like "+ [Add] metadata.labels.foo") are real changes —
+		// the path in the header is the diff. Bookkeeping mutations
+		// also need their path to look like an annotations path
+		// (a body-only diff for a non-annotations path is not
+		// bookkeeping even if the body line happens to start with
+		// confighub.com).
+		bodyHasContent := false
+		bodyAllBookkeeping := true
+		for _, l := range pendingBlock.body {
+			t := strings.TrimSpace(l)
+			if t == "" {
+				continue
+			}
+			bodyHasContent = true
+			if !bookkeepingRE.MatchString(l) {
+				bodyAllBookkeeping = false
+				break
+			}
+		}
+		pendingBlock.dropped = bodyHasContent && bodyAllBookkeeping
+		blocks = append(blocks, *pendingBlock)
+		pendingBlock = nil
+	}
+	for _, line := range lines {
+		switch {
+		case resourceLine.MatchString(line):
+			closePending()
+			flushRes()
+			currentRes = []string{line}
+		case mutationLine.MatchString(line):
+			closePending()
+			pendingBlock = &block{header: line}
+		case pendingBlock != nil:
+			pendingBlock.body = append(pendingBlock.body, line)
+		default:
+			out = append(out, line)
+		}
+	}
+	closePending()
+	flushRes()
+	return strings.Join(out, "\n")
 }
 
 func sortedKeys[V any](m map[string]V) []string {
