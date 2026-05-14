@@ -86,6 +86,25 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		}
 	}
 
+	// 3a. Run validators against the mutated output. Validators are
+	// templated against the same context as the function chain, so an
+	// author can pass {{ .Inputs.foo }} into a vet-cel expression. Any
+	// failing validator surfaces as a render error — render produces
+	// no manifests when validation fails.
+	if len(opts.Loaded.Package.Spec.Validators) > 0 {
+		validators, err := resolveValidatorTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
+		if err != nil {
+			return nil, err
+		}
+		failures, err := runValidators(ctx, validators, mutated)
+		if err != nil {
+			return nil, err
+		}
+		if len(failures) > 0 {
+			return nil, fmt.Errorf("validation failed:\n%s", FormatValidatorFailures(failures))
+		}
+	}
+
 	// 4. Split into per-resource files with deterministic naming.
 	files, err := splitForUnits(mutated)
 	if err != nil {

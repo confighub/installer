@@ -72,6 +72,20 @@ type PackageSpec struct {
 	// and whereResource filter, output of each group feeding the next.
 	FunctionChainTemplate []FunctionGroup `yaml:"functionChainTemplate,omitempty" json:"functionChainTemplate,omitempty"`
 
+	// Validators is a list of validating-function invocation groups, run
+	// at the end of render against the mutated output. Same shape as
+	// FunctionChainTemplate, but every named function must be a
+	// Validating function (Mutating=false). Validators do not modify
+	// the rendered manifests; they fail render if any validator
+	// returns Passed=false.
+	//
+	// The `installer init` command seeds new packages with vet-schemas,
+	// vet-merge-keys, and vet-format. Authors can edit this list with
+	// `installer edit validator add/remove`. The full list of available
+	// validators can be discovered with
+	//   `cub function list --where "Validating = TRUE" --toolchain Kubernetes/YAML`.
+	Validators []FunctionGroup `yaml:"validators,omitempty" json:"validators,omitempty"`
+
 	// Dependencies declares other installer packages this package composes
 	// with. Each entry pins an OCI ref + SemVer constraint; the resolver
 	// (Phase 4) walks the DAG and writes out/spec/lock.yaml. Parse-only in
