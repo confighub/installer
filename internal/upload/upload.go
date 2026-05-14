@@ -24,8 +24,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/confighubai/installer/internal/cubctx"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Package is one unit-of-upload — the parent or a locked dep.

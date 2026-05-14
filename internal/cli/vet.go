@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/render"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/render"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func newVetCmd() *cobra.Command {

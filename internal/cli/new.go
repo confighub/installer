@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/confighubai/installer/internal/cubctx"
-	"github.com/confighubai/installer/internal/userconfig"
+	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/userconfig"
 )
 
 // kubernetesResourcesPackageName must match

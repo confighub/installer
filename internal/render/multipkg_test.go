@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/confighubai/installer/internal/render"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/render"
+	"github.com/confighub/installer/pkg/api"
 )
 
 const depPackageYAML = `apiVersion: installer.confighub.com/v1alpha1

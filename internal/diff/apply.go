@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/confighubai/installer/internal/changeset"
-	"github.com/confighubai/installer/internal/upload"
+	"github.com/confighub/installer/internal/changeset"
+	"github.com/confighub/installer/internal/upload"
 )
 
 // PackageRefresher is the hook Apply calls after each Space's Unit

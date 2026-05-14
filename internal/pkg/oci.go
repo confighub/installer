@@ -20,9 +20,9 @@ import (
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 
-	"github.com/confighubai/installer/internal/bundle"
-	"github.com/confighubai/installer/internal/version"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/bundle"
+	"github.com/confighub/installer/internal/version"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // PushResult is what Push returns about a completed push.

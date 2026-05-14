@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/sign"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/sign"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // TestCosignSignAndVerify exercises the real cosign binary against a local

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighubai/installer/internal/sign"
+	"github.com/confighub/installer/internal/sign"
 )
 
 func newSignCmd() *cobra.Command {

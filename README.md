@@ -201,7 +201,7 @@ The binary doubles as a `cub` plugin. After publishing a release that includes
 a platform binary at the path `bin/installer`, install with:
 
 ```bash
-cub plugin install confighubai/installer
+cub plugin install confighub/installer
 ```
 
 The `cub-plugin.yaml` at the repo root tells cub the entry point. Once
@@ -282,10 +282,10 @@ authoring packages, the user docs above are what you want.
   phased build plan for bundling, OCI publish, dependency declaration
   and resolution, and signing. Phases 0–8 shipped.
 - [Day-2 lifecycle: interactive wizard, plan, update, upgrade](docs/lifecycle.md)
-  + [implementation plan](docs/lifecycle-plan.md) — spec and phased
-  build plan for the interactive wizard, prior-state re-entry, plan
-  vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
-  schema-diff, and `--set-image` overrides. Phases A–E shipped.
+  - [implementation plan](docs/lifecycle-plan.md) — spec and phased
+    build plan for the interactive wizard, prior-state re-entry, plan
+    vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
+    schema-diff, and `--set-image` overrides. Phases A–E shipped.
 
 ## Multi-package example
 

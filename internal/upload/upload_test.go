@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func TestRenderSpaceSlug(t *testing.T) {

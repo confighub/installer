@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/confighubai/installer/internal/upload"
+	"github.com/confighub/installer/internal/upload"
 )
 
 // Plan is the diff between a work-dir's rendered output and the live

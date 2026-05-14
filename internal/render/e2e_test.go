@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/internal/render"
-	"github.com/confighubai/installer/internal/selection"
-	"github.com/confighubai/installer/internal/wizard"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/render"
+	"github.com/confighub/installer/internal/selection"
+	"github.com/confighub/installer/internal/wizard"
 )
 
 // TestEndToEnd_HelloApp drives the example package through wizard → render

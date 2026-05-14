@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // InputDiff is the result of comparing the input schemas of an old

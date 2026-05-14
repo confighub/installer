@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Annotation key under which the resolver records a hash of the root

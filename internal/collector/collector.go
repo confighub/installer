@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 

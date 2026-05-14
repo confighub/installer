@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighubai/installer/internal/bundle"
-	ipkg "github.com/confighubai/installer/internal/pkg"
+	"github.com/confighub/installer/internal/bundle"
+	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newPackageCmd() *cobra.Command {

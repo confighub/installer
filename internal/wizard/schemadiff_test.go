@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func TestDiffInputs_Carry(t *testing.T) {

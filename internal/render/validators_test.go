@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // passingResource is a minimal valid Deployment manifest. Used as the

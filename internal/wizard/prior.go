@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/confighubai/installer/internal/upload"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // PriorState bundles the documents we recover from a prior install. Any

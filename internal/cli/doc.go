@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	ipkg "github.com/confighubai/installer/internal/pkg"
-	"github.com/confighubai/installer/pkg/api"
+	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func sortedMapKeys(m map[string]any) []string {

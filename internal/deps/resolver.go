@@ -9,8 +9,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
-	"github.com/confighubai/installer/internal/sign"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/sign"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Options configure a Resolve call.

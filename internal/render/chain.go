@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 	fapi "github.com/confighub/sdk/core/function/api"
 	"github.com/confighub/sdk/core/workerapi"
 	funcimpl "github.com/confighub/sdk/function-impl"

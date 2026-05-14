@@ -10,8 +10,8 @@ import (
 	"github.com/opencontainers/go-digest"
 	"oras.land/oras-go/v2/content/memory"
 
-	"github.com/confighubai/installer/internal/bundle"
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/internal/bundle"
+	"github.com/confighub/installer/pkg/api"
 )
 
 const testInstallerYAML = `apiVersion: installer.confighub.com/v1alpha1

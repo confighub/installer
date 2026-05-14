@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/confighubai/installer/internal/cubctx"
-	"github.com/confighubai/installer/internal/upload"
-	"github.com/confighubai/installer/internal/userconfig"
+	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/internal/userconfig"
 )
 
 // recordedPackages is the allowlist of package names whose upload

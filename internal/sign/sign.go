@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/confighubai/installer/pkg/api"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // Defaults

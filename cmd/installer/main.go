@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/confighubai/installer/internal/cli"
+	"github.com/confighub/installer/internal/cli"
 )
 
 func main() {
