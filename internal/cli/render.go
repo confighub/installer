@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/confighubai/installer/internal/deps"
 	ipkg "github.com/confighubai/installer/internal/pkg"
 	"github.com/confighubai/installer/internal/render"
 	"github.com/confighubai/installer/pkg/api"
@@ -70,6 +71,26 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				return err
 			}
 
+			// Lock-state preflight: fail fast before any output is written
+			// if the package declares dependencies but the lock is missing
+			// or stale. Read the lock here; render reuses it after the
+			// parent renders.
+			var lock *api.Lock
+			if len(loaded.Package.Spec.Dependencies) > 0 {
+				lock, err = deps.ReadLock(workDir)
+				if err != nil {
+					return err
+				}
+				if lock == nil {
+					return fmt.Errorf("package declares dependencies but %s does not exist; run `installer deps update %s`",
+						deps.LockPath(workDir), workDir)
+				}
+				if deps.IsStale(lock, loaded.Package) {
+					return fmt.Errorf("lock at %s is stale (installer.yaml's dependencies have changed); run `installer deps update %s`",
+						deps.LockPath(workDir), workDir)
+				}
+			}
+
 			ctx := context.Background()
 			result, err := render.Render(ctx, render.Options{
 				Loaded:    loaded,
@@ -86,6 +107,26 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(result.Secrets), outDir)
 			}
 			fmt.Printf("Spec docs in %s\n", specDir)
+
+			// Multi-package render: lock was preflighted above; render each
+			// dependency into its own subtree under out/<dep-name>/.
+			if lock != nil {
+				depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
+					Lock:         lock,
+					ParentInputs: inputs,
+					WorkDir:      workDir,
+				})
+				if err != nil {
+					return err
+				}
+				for _, dr := range depResults {
+					fmt.Printf("Rendered dep %s: %d manifest(s) to %s\n", dr.Name, len(dr.Manifests), filepath.Join(dr.OutDir, "manifests"))
+					if len(dr.Secrets) > 0 {
+						fmt.Printf("  secrets: %d (not uploaded)\n", len(dr.Secrets))
+					}
+				}
+			}
+
 			fmt.Printf("Next: installer upload %s --space <slug>\n", workDir)
 			return nil
 		},

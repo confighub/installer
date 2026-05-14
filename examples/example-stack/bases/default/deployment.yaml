@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: example-stack
+  template:
+    metadata:
+      labels:
+        app: example-stack
+    spec:
+      containers:
+        - name: app
+          image: nginxdemos/hello:plain-text
+          ports:
+            - containerPort: 80
+              name: http
+          envFrom:
+            - configMapRef:
+                name: example-base-defaults

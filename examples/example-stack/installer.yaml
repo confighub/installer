@@ -1,0 +1,26 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: example-stack
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: An app Deployment that depends on example-base.
+
+  # The dep ref is hard-coded to the e2e registry on :5555. See README.md
+  # in this directory for how to bootstrap or how to repoint at your own
+  # registry.
+  dependencies:
+    - name: base
+      package: oci://localhost:5555/installer-e2e/example-base
+      version: "^0.1.0"
+
+  functionChainTemplate:
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]

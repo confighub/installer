@@ -49,6 +49,99 @@ func ParsePackage(data []byte) (*Package, error) {
 	if defaults > 1 {
 		return nil, fmt.Errorf("only one base may set default: true")
 	}
+	if err := validateDependencies(&p); err != nil {
+		return nil, err
+	}
+	if err := validateConflictReplaces(&p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// validateDependencies enforces structural rules on spec.dependencies:
+// names are required and unique, package is required, WhenComponent (if
+// set) must reference a declared Component.
+func validateDependencies(p *Package) error {
+	if len(p.Spec.Dependencies) == 0 {
+		return nil
+	}
+	componentNames := make(map[string]struct{}, len(p.Spec.Components))
+	for _, c := range p.Spec.Components {
+		componentNames[c.Name] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(p.Spec.Dependencies))
+	for i, d := range p.Spec.Dependencies {
+		where := fmt.Sprintf("spec.dependencies[%d]", i)
+		if d.Name == "" {
+			return fmt.Errorf("%s: name is required", where)
+		}
+		if d.Package == "" {
+			return fmt.Errorf("%s (%s): package is required", where, d.Name)
+		}
+		if _, dup := seen[d.Name]; dup {
+			return fmt.Errorf("%s: duplicate dependency name %q", where, d.Name)
+		}
+		seen[d.Name] = struct{}{}
+		if d.WhenComponent != "" {
+			if _, ok := componentNames[d.WhenComponent]; !ok {
+				return fmt.Errorf("%s (%s): whenComponent %q does not match any declared component", where, d.Name, d.WhenComponent)
+			}
+		}
+	}
+	return nil
+}
+
+func validateConflictReplaces(p *Package) error {
+	for i, c := range p.Spec.Conflicts {
+		if c.Package == "" {
+			return fmt.Errorf("spec.conflicts[%d]: package is required", i)
+		}
+	}
+	for i, r := range p.Spec.Replaces {
+		if r.Package == "" {
+			return fmt.Errorf("spec.replaces[%d]: package is required", i)
+		}
+	}
+	return nil
+}
+
+// ParseLock parses lock.yaml bytes into a Lock.
+func ParseLock(data []byte) (*Lock, error) {
+	var l Lock
+	if err := yaml.Unmarshal(data, &l); err != nil {
+		return nil, fmt.Errorf("parse Lock: %w", err)
+	}
+	if l.Kind != "" && l.Kind != KindLock {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", l.Kind, KindLock)
+	}
+	return &l, nil
+}
+
+// ParseSigningPolicy parses ~/.config/installer/policy.yaml.
+func ParseSigningPolicy(data []byte) (*SigningPolicy, error) {
+	var p SigningPolicy
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return nil, fmt.Errorf("parse SigningPolicy: %w", err)
+	}
+	if p.Kind != "" && p.Kind != KindSigningPolicy {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", p.Kind, KindSigningPolicy)
+	}
+	if p.Spec.Enforce && len(p.Spec.TrustedKeys) == 0 && len(p.Spec.TrustedKeyless) == 0 {
+		return nil, fmt.Errorf("SigningPolicy enforces verification but has no trustedKeys or trustedKeyless entries")
+	}
+	for i, k := range p.Spec.TrustedKeys {
+		if k.PublicKey == "" {
+			return nil, fmt.Errorf("spec.trustedKeys[%d]: publicKey is required", i)
+		}
+	}
+	for i, k := range p.Spec.TrustedKeyless {
+		if k.Identity == "" {
+			return nil, fmt.Errorf("spec.trustedKeyless[%d]: identity is required", i)
+		}
+		if k.Issuer == "" {
+			return nil, fmt.Errorf("spec.trustedKeyless[%d]: issuer is required", i)
+		}
+	}
 	return &p, nil
 }
 

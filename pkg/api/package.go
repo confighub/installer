@@ -71,6 +71,27 @@ type PackageSpec struct {
 	// group is executed by funcimpl.NewStandardExecutor with its own toolchain
 	// and whereResource filter, output of each group feeding the next.
 	FunctionChainTemplate []FunctionGroup `yaml:"functionChainTemplate,omitempty" json:"functionChainTemplate,omitempty"`
+
+	// Dependencies declares other installer packages this package composes
+	// with. Each entry pins an OCI ref + SemVer constraint; the resolver
+	// (Phase 4) walks the DAG and writes out/spec/lock.yaml. Parse-only in
+	// Phase 3 — wizard, render, and upload ignore this field.
+	Dependencies []Dependency `yaml:"dependencies,omitempty" json:"dependencies,omitempty"`
+
+	// Conflicts hard-excludes other packages from the resolution set.
+	// Mirrors Debian's Conflicts:.
+	Conflicts []ConflictRef `yaml:"conflicts,omitempty" json:"conflicts,omitempty"`
+
+	// Replaces declares packages this one supersedes (typically across a
+	// rename). The resolver treats a request for a Replaces[i].Package
+	// matching the version range as satisfied by this package. Mirrors
+	// Debian's Replaces:.
+	Replaces []ReplaceRef `yaml:"replaces,omitempty" json:"replaces,omitempty"`
+
+	// BundleExamples controls whether the examples/ subtree is included by
+	// `installer package`. Default behavior (when nil) is true — examples
+	// are bundled. Set to false to exclude them from published artifacts.
+	BundleExamples *bool `yaml:"bundleExamples,omitempty" json:"bundleExamples,omitempty"`
 }
 
 type Base struct {
