@@ -100,6 +100,18 @@ Goal: parent and each dep render into their own subtrees, deterministically.
 
 Acceptance: re-rendering the same lock + inputs produces byte-identical `out/` trees.
 
+### Phase 5 limits
+
+- **Collectors on dependencies are not supported.** Collectors run via the
+  wizard, which is not invoked per-dep — the dep's Selection/Inputs come
+  straight from the lock. `installer deps update` rejects any candidate
+  whose installer.yaml declares `spec.collector` so the user discovers the
+  limit at resolve time, not at render. Lifting the limit means either
+  running the collector at render time for deps (and dragging the
+  collector's runtime requirements — e.g. `cub` on PATH — into render) or
+  defining a smaller resolve-time fact-collection contract. Deferred until
+  a real dep needs it.
+
 ## Phase 6 — Upload: per-dep Spaces + installer-record Unit + cross-Space links
 
 Goal: each package gets its own Space; the lock survives as a Unit.

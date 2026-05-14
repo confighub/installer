@@ -274,6 +274,20 @@ func TestResolveRootConflict(t *testing.T) {
 	}
 }
 
+func TestResolveRejectsDepWithCollector(t *testing.T) {
+	ctx := context.Background()
+	src := newMockSource()
+	withCollector := pkgWith("b", "0.2.0")
+	withCollector.Spec.Collector = &api.Collector{Command: "./collect.sh"}
+	src.publish("reg/b", "0.2.0", withCollector)
+	a := pkgWith("a", "0.1.0", api.Dependency{Name: "b", Package: "oci://reg/b", Version: "*"})
+
+	_, err := Resolve(ctx, a, src, Options{})
+	if err == nil || !strings.Contains(err.Error(), "spec.collector") {
+		t.Fatalf("expected collector-not-supported error, got %v", err)
+	}
+}
+
 func TestRootDepsHashStable(t *testing.T) {
 	a := pkgWith("a", "0.1.0",
 		api.Dependency{Name: "b", Package: "oci://reg/b", Version: "^0.2"},

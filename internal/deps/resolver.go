@@ -188,6 +188,15 @@ func (r *resolver) visit(ctx context.Context, parent *api.Package, parentName st
 		return fmt.Errorf("%s/%s: inspect %s: %w", parentName, dep.Name, ref, err)
 	}
 
+	// Collectors are not supported on dependencies yet: they only run via
+	// the wizard, which is not invoked per-dep. Reject at resolve time so
+	// the user discovers the limit immediately rather than at render. See
+	// docs/package-management-plan.md (Phase 5 limits).
+	if res.Config != nil && res.Config.Manifest != nil && res.Config.Manifest.Spec.Collector != nil {
+		return fmt.Errorf("%s/%s: package %s declares spec.collector; collectors are not yet supported on dependencies — pick a version without one or open an issue",
+			parentName, dep.Name, ref)
+	}
+
 	entry := &resolvedEntry{
 		repo:        repo,
 		name:        dep.Name,
