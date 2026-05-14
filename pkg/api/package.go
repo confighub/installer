@@ -113,6 +113,10 @@ type Component struct {
 	// Path is the directory in the package tree containing the kind: Component
 	// kustomization.yaml.
 	Path string `yaml:"path" json:"path"`
+	// Default selects this component when the user picks the `default`
+	// preset in the wizard. Components without `default: true` are only
+	// installed under the `all` preset or via explicit selection.
+	Default bool `yaml:"default,omitempty" json:"default,omitempty"`
 	// Description is shown by `installer doc`.
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 	// Requires names other Components that must be selected. Closure is

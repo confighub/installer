@@ -42,12 +42,36 @@ starting afresh made it easier to experiment with different design choices.
 
 ## Status
 
-First-iteration wedge. Working: package format, local + OCI pull, non-
-interactive wizard, kustomize composition, function chain execution, per-
-resource splitting, deterministic output. Stubbed: interactive wizard,
-preflight (cluster-side constraint checks), plan (diff vs. previous render or
-ConfigHub), upload (currently shells out to `cub unit create` per file; the
-cleaner `cub unit create -f <dir>` bulk mode is a planned cub addition).
+Working:
+
+- **Package authoring + distribution.** `installer package` (deterministic
+  bundle), `push` / `pull` / `inspect` / `list` / `tag` /
+  `login` / `logout` (OCI artifacts), `sign` / `verify` (cosign keyed +
+  keyless) with a `~/.config/installer/policy.yaml` trust policy that
+  gates `pull` and `deps update`.
+- **Dependencies.** SemVer resolver + lock (`deps update`, `deps tree`),
+  multi-package render into per-dep subtrees, upload into per-dep Spaces
+  with cross-Space Links.
+- **Install lifecycle.** Interactive + non-interactive wizard with
+  high-level component presets (`minimal` / `default` / `all` /
+  `selected`), prior-state re-entry from ConfigHub (via the persisted
+  `installer-record` Unit) or local `out/spec/`, organization + server
+  sanity-check against the active cub context.
+- **Day-2 lifecycle.** `installer plan` / `update` / `upgrade` /
+  `upgrade-apply`. Plan is read-only; update wraps mutations in a
+  ChangeSet so updates are revertable; upgrade stages a re-pull +
+  re-render in `.upgrade/`, then `upgrade-apply` atomically promotes
+  it. `--merge-external-source` is the change predicate, so
+  post-install ConfigHub edits survive re-render. The
+  `installer-record` Unit is refreshed in cub after each apply so the
+  next upgrade re-enters from up-to-date state.
+- **Image overrides.** `installer wizard --set-image` and
+  `installer upgrade --set-image` apply `kustomize edit set image`
+  before render. Overrides round-trip via `Inputs.Spec.ImageOverrides`
+  and carry forward across upgrades. The chosen base must declare an
+  `images:` block; render fails fast otherwise.
+
+Stubbed: `installer preflight` — cluster-side constraint checks.
 
 ## Build
 
@@ -79,9 +103,20 @@ bin/installer wizard ./examples/hello-app \
 #    chain, writes one file per resource to /tmp/hello/out/manifests/.
 bin/installer render /tmp/hello
 
-# 4. (later) Upload to ConfigHub. Today this requires the cub CLI on PATH
-#    and creates one Unit per file. A future bulk mode will batch this.
+# 4. Upload to ConfigHub. Records the destination Space(s) in
+#    out/spec/upload.yaml so subsequent plan / update / upgrade
+#    re-enter the same Space without operator re-typing.
 bin/installer upload /tmp/hello --space my-greeter
+
+# 5. Day-2: edit a rendered file, see what update would do, apply.
+$EDITOR /tmp/hello/out/manifests/deployment-demo-hello-app.yaml
+bin/installer plan /tmp/hello              # read-only diff vs ConfigHub
+bin/installer update /tmp/hello --yes      # apply inside a ChangeSet
+
+# 6. Upgrade: re-pull, re-render, plan, then apply atomically.
+bin/installer upgrade /tmp/hello ./examples/hello-app \
+  --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
+bin/installer upgrade-apply /tmp/hello     # promote .upgrade/ + run update
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -180,26 +215,47 @@ installed, the same commands work via `cub install ...`.
 ├── internal/
 │   ├── cli/                    # cobra subcommands
 │   ├── pkg/                    # package load + OCI pull (oras-go)
+│   ├── bundle/                 # deterministic tarball for `installer package`
 │   ├── selection/              # required-deps closure + conflict detection
-│   ├── wizard/                 # non-interactive answer collection
-│   └── render/                 # kustomize compose + chain execution + split
-├── pkg/api/                    # Package, Selection, Inputs, FunctionChain schemas
+│   ├── wizard/                 # interactive + non-interactive answer collection,
+│   │                           # prior-state load, schema diff for upgrades
+│   ├── collector/              # in-package fact collectors run by the wizard
+│   ├── render/                 # kustomize compose + chain execution + split,
+│   │                           # --set-image (kustomize edit) + image extraction
+│   ├── deps/                   # SemVer resolver + lock writer
+│   ├── upload/                 # discover Spaces, build/split installer-record,
+│   │                           # write upload.yaml, intra-Space link inference
+│   ├── diff/                   # plan compute (cub list + dry-run mutations) +
+│   │                           # apply (with ChangeSet) + image footer
+│   ├── changeset/              # cub changeset open + restore-command formatter
+│   ├── cubctx/                 # active cub context (org / server) + sanity check
+│   └── sign/                   # cosign sign + verify
+├── pkg/api/                    # Package, Selection, Inputs, FunctionChain,
+│                               # Lock, Upload schemas
 ├── examples/
-│   └── hello-app/              # end-to-end test package
+│   ├── hello-app/              # single-package end-to-end test package
+│   ├── example-base/           # multi-package: shared base
+│   └── example-stack/          # multi-package: depends on example-base
+├── docs/                       # design + implementation plans (see below)
 └── cub-plugin.yaml             # cub plugin manifest
 ```
 
 ## Design docs
 
-- [Package and dependency management](docs/package-management.md) — spec for
-  bundling, OCI publish, dependency declaration, and resolution.
-- [Implementation plan](docs/package-management-plan.md) — phased build plan.
-  Phases 0–7 are in place: `installer package` (deterministic bundle),
-  `push` / `pull` / `inspect` / `list` / `tag` / `login` / `logout` (OCI
-  artifacts), `deps update` / `deps tree` (SemVer resolver + lock),
-  multi-package render and upload (per-dep Spaces + cross-Space Links),
-  and `sign` / `verify` with a `~/.config/installer/policy.yaml` trust
-  policy that gates `pull` and `deps update`.
+- [Design principles](docs/principles.md) — the seven principles the
+  installer is anchored to (package files are read-only; spec is the
+  round-trippable source of truth; two layers of override; optimize
+  for the zero-override case; image management; defer to ConfigHub
+  for what ConfigHub does well; configuration as data, not templates).
+- [Package and dependency management](docs/package-management.md) +
+  [implementation plan](docs/package-management-plan.md) — spec and
+  phased build plan for bundling, OCI publish, dependency declaration
+  and resolution, and signing. Phases 0–8 shipped.
+- [Day-2 lifecycle: interactive wizard, plan, update, upgrade](docs/lifecycle.md)
+  + [implementation plan](docs/lifecycle-plan.md) — spec and phased
+  build plan for the interactive wizard, prior-state re-entry, plan
+  vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
+  schema-diff, and `--set-image` overrides. Phases A–E shipped.
 
 ## Multi-package example
 
@@ -212,17 +268,18 @@ test/e2e/package-and-deps.sh
 
 That script starts `registry:2`, pushes `example-base`, runs
 `wizard → deps update → render`, asserts the output layout + digest
-stability, and (when `INSTALLER_E2E_CONFIGHUB=1`) also runs
-`installer upload --space-pattern 'installer-e2e-{{.PackageName}}'` and
-cleans the resulting Spaces on exit.
+stability, and (when `INSTALLER_E2E_CONFIGHUB=1`) drives the full
+day-2 flow against the live server:
+`upload → plan (clean) → edit → plan (diff) → update → update (no-op) →
+upgrade (edit) → upgrade-apply → upgrade (carry-forward) →
+upgrade --set-image → upgrade (override carries forward) →
+upgrade --set-image preflight rejection`. Spaces created with the
+`installer-e2e-*` prefix are cleaned on exit.
 
 ## Roadmap
 
-- Annotate created units with package metadata and add a change description
-- Interactive wizard (e.g., `survey`).
-- `installer plan` — diff next render vs. previous render and vs. ConfigHub.
-  Use cub unit update --merge-external-source "source" --dry-run -o mutations
-- Secrets (currently we use a hack during fact collection)
+- Documentation for package authors and for package consumers.
+- Secrets (currently we use a hack during fact collection).
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
   namespaced resources, etc.) inferred from resource kind plus the existing
@@ -230,8 +287,6 @@ cleans the resulting Spaces on exit.
 - Real packages: llm-d, KServe, vLLM production stack
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
 - AppConfig support.
-- Change of selections and inputs
-- TBD: Hooks, in-cluster and local
-- TBD: image upgrades using cub function set set-container-image or other function
-- TBD: config updates using cub unit update --merge-external-source
-- TBD: variant creation and promotion
+- TBD: Hooks, in-cluster and local.
+- TBD: variant creation and promotion.
+- TBD: support deploying via ArgoCD and Flux directly.

@@ -4,3 +4,11 @@ resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
+# images: declares the names overridable by `installer wizard
+# --set-image` and `installer upgrade --set-image`. The default values
+# match what's hard-coded in deployment.yaml; --set-image rewrites
+# them at render time without editing the source.
+images:
+  - name: nginxdemos/hello
+    newName: nginxdemos/hello
+    newTag: plain-text

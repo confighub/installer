@@ -155,6 +155,156 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
     echo "  $s"
     cub unit list --space "$s" 2>&1 | awk 'NR>1 {print "    "$1}'
   done
+
+  log "plan against unchanged work-dir"
+  "$BIN" plan "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-clean.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/plan-clean.out"; then
+    fail "plan against just-uploaded work-dir should report No changes"
+  fi
+
+  log "plan after editing one rendered manifest"
+  # Pick the first .yaml file under example-base manifests and inject a
+  # marker label so the plan must surface a change.
+  PARENT_DIR="$WORK_TMP/out/example-base/manifests"
+  if [[ ! -d "$PARENT_DIR" ]]; then
+    PARENT_DIR="$WORK_TMP/out/manifests"
+  fi
+  EDIT_FILE=$(ls "$PARENT_DIR"/*.yaml 2>/dev/null | head -1)
+  [[ -n "$EDIT_FILE" ]] || fail "no rendered manifest to edit under $PARENT_DIR"
+  python3 -c "
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f:
+    docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if isinstance(d, dict) and isinstance(d.get('metadata'), dict):
+        labels = d['metadata'].setdefault('labels', {})
+        labels['installer-e2e-marker'] = 'true'
+        break
+with open(p, 'w') as f:
+    yaml.safe_dump_all(docs, f, default_flow_style=False, sort_keys=False)
+" "$EDIT_FILE"
+
+  "$BIN" plan "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-edited.out"
+  if ! grep -q "^Plan: 0 to add, 1 to change, 0 to delete\\.$" "$WORK_TMP/plan-edited.out"; then
+    fail "plan after edit should report 1 change"
+  fi
+  EDIT_SLUG=$(basename "$EDIT_FILE" .yaml)
+  if ! grep -q "~ $EDIT_SLUG" "$WORK_TMP/plan-edited.out"; then
+    fail "plan after edit should name the edited slug ($EDIT_SLUG)"
+  fi
+  echo "plan: clean → No changes; edit → 1 change naming $EDIT_SLUG"
+
+  log "update applies the diff"
+  "$BIN" update "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/update.out"
+  if ! grep -q "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/update.out"; then
+    fail "update should apply 1 change"
+  fi
+  if ! grep -q "ChangeSet: " "$WORK_TMP/update.out"; then
+    fail "update should open and name a ChangeSet"
+  fi
+  if ! grep -q "Updates revertable via:" "$WORK_TMP/update.out"; then
+    fail "update should print revert command"
+  fi
+
+  log "update converges (re-run is no-op)"
+  "$BIN" update "$WORK_TMP" 2>&1 | tee "$WORK_TMP/update-converge.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/update-converge.out"; then
+    fail "second update on the same work-dir should be No changes"
+  fi
+  if grep -q "ChangeSet: " "$WORK_TMP/update-converge.out"; then
+    fail "second update should not open a ChangeSet (no changes)"
+  fi
+  echo "update: applied 1 change in ChangeSet; second run is no-op"
+
+  log "upgrade with edited package source surfaces a real diff"
+  EDITED_SRC="$WORK_TMP/example-stack-edited"
+  cp -r "$REPO_ROOT/examples/example-stack" "$EDITED_SRC"
+  python3 -c "
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f: docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if isinstance(d, dict) and isinstance(d.get('metadata'), dict):
+        labels = d['metadata'].setdefault('labels', {})
+        labels['installer-e2e-upgrade-marker'] = 'true'
+        break
+with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, sort_keys=False)
+" "$EDITED_SRC/bases/default/deployment.yaml"
+
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-edit.out"
+  if ! grep -q "to change" "$WORK_TMP/upgrade-edit.out"; then
+    fail "upgrade after edit should plan a change"
+  fi
+  if ! grep -q "installer-e2e-upgrade-marker" "$WORK_TMP/upgrade-edit.out"; then
+    fail "upgrade plan should mention the new label"
+  fi
+  if [[ ! -d "$WORK_TMP/.upgrade/package" ]]; then
+    fail "upgrade should leave .upgrade/package staged"
+  fi
+  echo "upgrade: edited source → diff plan; .upgrade/ staged"
+
+  log "upgrade-apply applies the edit with an upgrade-named ChangeSet"
+  "$BIN" upgrade-apply "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/upgrade-apply-edit.out"
+  if ! grep -qE "^Applied: [0-9]+ created, [1-9][0-9]* updated, [0-9]+ deleted\\.$" "$WORK_TMP/upgrade-apply-edit.out"; then
+    fail "upgrade-apply should report at least 1 update"
+  fi
+  if ! grep -q "installer-upgrade-" "$WORK_TMP/upgrade-apply-edit.out"; then
+    fail "upgrade-apply should open an installer-upgrade-* ChangeSet"
+  fi
+  if [[ -d "$WORK_TMP/.upgrade" ]]; then
+    fail "upgrade-apply should remove .upgrade/ after promoting"
+  fi
+  if [[ ! -d "$WORK_TMP/.upgrade-prev" ]]; then
+    fail "upgrade-apply should archive prior tree to .upgrade-prev/"
+  fi
+
+  log "upgrade re-run against the same edited source converges"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-converge.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/upgrade-converge.out"; then
+    fail "second upgrade against the same edited source should be No changes"
+  fi
+  echo "upgrade: edit→apply→re-upgrade converges; ChangeSet named installer-upgrade-*"
+
+  log "upgrade --set-image bumps the image and the override carries forward"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" \
+    --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2 --apply --yes 2>&1 \
+    | tee "$WORK_TMP/upgrade-setimg.out"
+  if ! grep -qE "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upgrade-setimg.out"; then
+    fail "upgrade --set-image --apply should report exactly 1 update (the image bump)"
+  fi
+  if ! grep -q "plain-text-v2" "$WORK_TMP/upgrade-setimg.out"; then
+    fail "Images footer should reflect the new tag"
+  fi
+
+  log "upgrade re-run WITHOUT --set-image carries the override forward (no-op)"
+  "$BIN" upgrade "$WORK_TMP" "$EDITED_SRC" 2>&1 | tee "$WORK_TMP/upgrade-carry.out"
+  if ! grep -q "^No changes\\.$" "$WORK_TMP/upgrade-carry.out"; then
+    fail "subsequent upgrade should be No changes (override carried via installer-record)"
+  fi
+  if ! grep -q "plain-text-v2" "$WORK_TMP/upgrade-carry.out"; then
+    fail "Images footer should still show the carried-forward tag"
+  fi
+  echo "upgrade --set-image: bump applied; override round-trips through installer-record"
+
+  log "upgrade --set-image against a package without images: block fails fast"
+  NO_IMG_SRC="$WORK_TMP/example-stack-no-images"
+  cp -r "$EDITED_SRC" "$NO_IMG_SRC"
+  python3 -c "
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f: d = yaml.safe_load(f)
+d.pop('images', None)
+with open(p, 'w') as f: yaml.safe_dump(d, f, sort_keys=False)
+" "$NO_IMG_SRC/bases/default/kustomization.yaml"
+  if "$BIN" upgrade "$WORK_TMP" "$NO_IMG_SRC" --set-image foo=bar:1 2>&1 \
+      | tee "$WORK_TMP/upgrade-noimg.out"; then
+    fail "upgrade --set-image against package without images: block should fail"
+  fi
+  if ! grep -q "no \`images:\` block" "$WORK_TMP/upgrade-noimg.out"; then
+    fail "preflight error should name the missing images: block"
+  fi
+  echo "preflight: package without images: block correctly rejected"
 fi
 
 log "OK"

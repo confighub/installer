@@ -173,6 +173,61 @@ func TestBuildInstallerRecord(t *testing.T) {
 	}
 }
 
+func TestSplitInstallerRecord(t *testing.T) {
+	work := t.TempDir()
+	pkgDir := filepath.Join(work, "package")
+	specDir := filepath.Join(work, "out", "spec")
+	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), minimalParentYAML)
+	writeFile(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata: {name: parent-selection}
+spec:
+  package: parent
+  base: default
+  components: [a, b]
+`)
+	writeFile(t, filepath.Join(specDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata: {name: parent-inputs}
+spec:
+  package: parent
+  namespace: demo
+  values: {greeting: hi}
+`)
+	writeFile(t, filepath.Join(specDir, "upload.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Upload
+metadata: {name: parent-upload}
+spec:
+  package: parent
+  packageVersion: 0.1.0
+  spaces:
+    - {package: parent, version: 0.1.0, slug: parent, isParent: true}
+  organizationID: org_test
+  server: https://hub.example.com
+`)
+
+	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, SpecDir: specDir})
+	if err != nil {
+		t.Fatalf("BuildInstallerRecord: %v", err)
+	}
+	got, err := SplitInstallerRecord(body)
+	if err != nil {
+		t.Fatalf("SplitInstallerRecord: %v", err)
+	}
+	if got.Package == nil || got.Package.Metadata.Name != "parent" {
+		t.Errorf("Package missing or wrong: %+v", got.Package)
+	}
+	if got.Selection == nil || got.Selection.Spec.Base != "default" {
+		t.Errorf("Selection missing or wrong: %+v", got.Selection)
+	}
+	if got.Inputs == nil || got.Inputs.Spec.Namespace != "demo" {
+		t.Errorf("Inputs missing or wrong: %+v", got.Inputs)
+	}
+	if got.Upload == nil || got.Upload.Spec.OrganizationID != "org_test" {
+		t.Errorf("Upload missing or wrong: %+v", got.Upload)
+	}
+}
+
 func TestPlanCrossSpaceLinks(t *testing.T) {
 	packages := []Package{
 		{Name: "parent", SpaceSlug: "parent-space", IsParent: true},
@@ -191,6 +246,9 @@ func TestPlanCrossSpaceLinks(t *testing.T) {
 	}
 	if links[0].FromUnit != InstallerRecordSlug || links[0].ToUnit != InstallerRecordSlug {
 		t.Errorf("link[0] units should be the record slug: %+v", links[0])
+	}
+	if links[0].Component != "parent" {
+		t.Errorf("link[0].Component = %q want %q", links[0].Component, "parent")
 	}
 }
 

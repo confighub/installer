@@ -51,6 +51,14 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, fmt.Errorf("Render: Inputs is required")
 	}
 
+	// 0. Apply per-image overrides (if any) by running `kustomize edit
+	//    set image` against the chosen base's kustomization.yaml. The
+	//    chosen base must declare an `images:` block; render fails fast
+	//    otherwise.
+	if err := applyImageOverrides(opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides); err != nil {
+		return nil, err
+	}
+
 	// 1. Compose the top-level kustomization in a temp dir, run kustomize build.
 	composeDir, err := composeKustomization(opts.Loaded, opts.Selection)
 	if err != nil {

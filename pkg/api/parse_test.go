@@ -21,6 +21,7 @@ spec:
     - name: foo
       path: components/foo
       requires: [bar]
+      default: true
     - name: bar
       path: components/bar
   inputs:
@@ -48,6 +49,9 @@ func TestParsePackage(t *testing.T) {
 	}
 	if len(p.Spec.Components) != 2 {
 		t.Errorf("components = %d, want 2", len(p.Spec.Components))
+	}
+	if !p.Spec.Components[0].Default || p.Spec.Components[1].Default {
+		t.Errorf("default flag mismatch: %+v", p.Spec.Components)
 	}
 	if len(p.Spec.FunctionChainTemplate) != 1 ||
 		p.Spec.FunctionChainTemplate[0].Toolchain != "Kubernetes/YAML" {
@@ -250,6 +254,100 @@ spec:
 	}
 	if len(l.Spec.Resolved) != 1 || l.Spec.Resolved[0].Digest != "sha256:bbbbbbbb" {
 		t.Errorf("resolved mismatch: %+v", l.Spec.Resolved)
+	}
+}
+
+func TestParseUploadRoundTrip(t *testing.T) {
+	u := &api.Upload{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindUpload,
+		Metadata:   api.Metadata{Name: "stack-upload"},
+		Spec: api.UploadSpec{
+			Package:        "stack",
+			PackageVersion: "0.3.0",
+			SpacePattern:   "{{.PackageName}}",
+			Spaces: []api.UploadedSpace{
+				{Package: "stack", Version: "0.3.0", Slug: "stack", IsParent: true},
+				{Package: "dep", Version: "0.2.0", Slug: "dep"},
+			},
+			UploadedAt:     "2026-05-14T10:21:00Z",
+			Server:         "https://hub.confighub.com",
+			OrganizationID: "org_01JDQP70M348Z3M2FK7ZKS9Q1A",
+		},
+	}
+	data, err := api.MarshalYAML(u)
+	if err != nil {
+		t.Fatalf("MarshalYAML: %v", err)
+	}
+	got, err := api.ParseUpload(data)
+	if err != nil {
+		t.Fatalf("ParseUpload: %v", err)
+	}
+	if got.Spec.OrganizationID != u.Spec.OrganizationID {
+		t.Errorf("organizationID round-trip lost: %q", got.Spec.OrganizationID)
+	}
+	if len(got.Spec.Spaces) != 2 || !got.Spec.Spaces[0].IsParent || got.Spec.Spaces[1].IsParent {
+		t.Errorf("spaces round-trip mismatch: %+v", got.Spec.Spaces)
+	}
+}
+
+func TestParseUploadRejectsBadKind(t *testing.T) {
+	bad := []byte(`apiVersion: installer.confighub.com/v1alpha1
+kind: NotAnUpload
+metadata: {name: x}
+spec: {spaces: []}
+`)
+	if _, err := api.ParseUpload(bad); err == nil {
+		t.Fatal("expected error for wrong kind")
+	}
+}
+
+func TestInputsImageOverridesRoundTrip(t *testing.T) {
+	in := &api.Inputs{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindInputs,
+		Metadata:   api.Metadata{Name: "io-test-inputs"},
+		Spec: api.InputsSpec{
+			Package:   "io-test",
+			Namespace: "demo",
+			Values:    map[string]any{"replicas": 3},
+			ImageOverrides: map[string]string{
+				"hello":   "hello:v2",
+				"sidecar": "sidecar:1.4",
+			},
+		},
+	}
+	data, err := api.MarshalYAML(in)
+	if err != nil {
+		t.Fatalf("MarshalYAML: %v", err)
+	}
+	if !strings.Contains(string(data), "imageOverrides:") {
+		t.Errorf("expected imageOverrides field in YAML, got:\n%s", data)
+	}
+	got, err := api.ParseInputs(data)
+	if err != nil {
+		t.Fatalf("ParseInputs: %v", err)
+	}
+	if got.Spec.ImageOverrides["hello"] != "hello:v2" {
+		t.Errorf("hello override lost: %+v", got.Spec.ImageOverrides)
+	}
+	if got.Spec.ImageOverrides["sidecar"] != "sidecar:1.4" {
+		t.Errorf("sidecar override lost: %+v", got.Spec.ImageOverrides)
+	}
+
+	// Empty ImageOverrides must omitempty — no field in YAML.
+	emptyIn := &api.Inputs{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindInputs,
+		Metadata:   api.Metadata{Name: "no-io"},
+		Spec:       api.InputsSpec{Package: "x", Namespace: "y", Values: map[string]any{}},
+	}
+	data, err = api.MarshalYAML(emptyIn)
+	if err != nil {
+		t.Fatalf("MarshalYAML empty: %v", err)
+	}
+	if strings.Contains(string(data), "imageOverrides") {
+		t.Errorf("empty ImageOverrides should be omitted, got:\n%s", data)
 	}
 }
 

@@ -30,6 +30,17 @@ type RawAnswers struct {
 	// Namespace is the Kubernetes namespace from --namespace. Persisted to
 	// inputs.yaml and exposed to function-chain templates as {{ .Namespace }}.
 	Namespace string
+	// ImageOverrides is the map from --set-image name=ref. Merged with
+	// PriorImageOverrides (this run's overrides win on conflict) and
+	// persisted into Inputs.Spec.ImageOverrides so render can apply
+	// `kustomize edit set image` for each entry before kustomize build.
+	ImageOverrides map[string]string
+	// PriorImageOverrides is the carry-forward set from a prior
+	// install's Inputs.Spec.ImageOverrides. Wizard merges it under
+	// ImageOverrides (this run wins on conflict) so an upgrade
+	// without --set-image preserves the operator's existing
+	// overrides.
+	PriorImageOverrides map[string]string
 }
 
 // Result bundles the documents the wizard produces. Facts is nil if the
@@ -71,6 +82,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 			PackageVersion: pkg.Metadata.Version,
 			Namespace:      raw.Namespace,
 			Values:         values,
+			ImageOverrides: mergeImageOverrides(raw.PriorImageOverrides, raw.ImageOverrides),
 		},
 	}
 
@@ -225,6 +237,23 @@ func writeYAML(path string, v any) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+// mergeImageOverrides combines prior + new into a single map, with
+// new winning on conflict. Returns nil when both are empty so the
+// emitted YAML omits the field entirely.
+func mergeImageOverrides(prior, next map[string]string) map[string]string {
+	if len(prior) == 0 && len(next) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(prior)+len(next))
+	for k, v := range prior {
+		out[k] = v
+	}
+	for k, v := range next {
+		out[k] = v
+	}
+	return out
+}
+
 // ParseInputFlags parses --input k=v repeated occurrences into a map.
 func ParseInputFlags(flags []string) (map[string]string, error) {
 	out := map[string]string{}
@@ -232,6 +261,21 @@ func ParseInputFlags(flags []string) (map[string]string, error) {
 		eq := strings.IndexByte(f, '=')
 		if eq < 0 {
 			return nil, fmt.Errorf("--input %q must be key=value", f)
+		}
+		out[f[:eq]] = f[eq+1:]
+	}
+	return out, nil
+}
+
+// ParseSetImageFlags parses --set-image name=ref repeated occurrences
+// into a map. Empty name or empty ref is rejected — kustomize edit
+// would otherwise silently misbehave.
+func ParseSetImageFlags(flags []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, f := range flags {
+		eq := strings.IndexByte(f, '=')
+		if eq <= 0 || eq == len(f)-1 {
+			return nil, fmt.Errorf("--set-image %q must be name=ref (both non-empty)", f)
 		}
 		out[f[:eq]] = f[eq+1:]
 	}
