@@ -2,13 +2,14 @@
 
 Walks you through authoring a small installer package — a status
 page service called `statusboard` — from an empty directory to a
-signed OCI artifact. Takes ~30 minutes. Mirrors the shape of
-`examples/hello-app` but is built fresh so you see every decision.
+signed OCI artifact. Takes ~20 minutes. Built from the new author
+shortcuts (`installer init` / `new` / `edit` / `vet`) so you author
+~50 lines of YAML by the end instead of ~150.
 
 By the end you'll have:
 
 - A working package with a base, two opt-in components, an input,
-  and a function-chain template.
+  a function-chain template, and the recommended validator chain.
 - An `images:` block so operators can override container tags
   without editing your source.
 - A bundled `.tgz` ready to push to an OCI registry.
@@ -21,147 +22,111 @@ For the doctrine the installer is anchored to, see
 
 - `installer` binary on PATH (or invoke `bin/installer` from a clone).
 - `kustomize` on PATH.
-- A scratch directory: `mkdir -p ~/scratch/statusboard && cd
-  ~/scratch/statusboard`.
+- `cub` on PATH and signed in (`cub auth login`).
+- The `kubernetes-resources` package bootstrapped in your
+  organization (one-time setup, see below).
+- A scratch directory: `mkdir -p ~/scratch/statusboard-pkg && cd
+  ~/scratch/statusboard-pkg`.
 
-## Step 1: the minimum viable package
+### One-time: bootstrap kubernetes-resources
 
-A package must have:
-
-- `installer.yaml` (the manifest).
-- One base directory containing a `kustomization.yaml`.
-
-Create the manifest:
-
-```bash
-cat > installer.yaml <<'YAML'
-apiVersion: installer.confighub.com/v1alpha1
-kind: Package
-metadata:
-  name: statusboard
-  version: 0.1.0
-spec:
-  bases:
-    - name: default
-      path: bases/default
-      default: true
-      description: A minimal status page service.
-YAML
-```
-
-Create the base. We'll start with a single Namespace + Deployment +
-Service:
+`installer new` clones canonical resource templates from the
+`kubernetes-resources` package in ConfigHub. Install it once per
+organization:
 
 ```bash
-mkdir -p bases/default
-cat > bases/default/namespace.yaml <<'YAML'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: confighubplaceholder
-YAML
-
-cat > bases/default/deployment.yaml <<'YAML'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: statusboard
-  namespace: confighubplaceholder
-spec:
-  replicas: 1
-  selector:
-    matchLabels: { app: statusboard }
-  template:
-    metadata:
-      labels: { app: statusboard }
-    spec:
-      containers:
-        - name: app
-          image: nginxdemos/hello:plain-text
-          ports:
-            - containerPort: 80
-YAML
-
-cat > bases/default/service.yaml <<'YAML'
-apiVersion: v1
-kind: Service
-metadata:
-  name: statusboard
-  namespace: confighubplaceholder
-spec:
-  selector: { app: statusboard }
-  ports:
-    - port: 80
-      targetPort: 80
-YAML
-
-cat > bases/default/kustomization.yaml <<'YAML'
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - namespace.yaml
-  - deployment.yaml
-  - service.yaml
-YAML
+cd <path-to-installer-repo>
+installer wizard ./packages/kubernetes-resources \
+    --work-dir /tmp/k8s-res \
+    --non-interactive --namespace kubernetes-resources
+installer render /tmp/k8s-res
+installer upload /tmp/k8s-res --space kubernetes-resources
+# Recorded kubernetes-resources install in ~/.confighub/installer/state.yaml
 ```
 
-Two notes:
+After this, `installer new` knows where to find templates without
+asking. The bootstrap is per-organization; if you switch ConfigHub
+contexts, re-bootstrap there.
 
-- The Namespace name is `confighubplaceholder` — a sentinel. The
-  function-chain template (which we'll add in step 3) rewrites it
-  to whatever the operator passes via `--namespace`.
-- The image is hard-coded to `nginxdemos/hello:plain-text`. We'll
-  enable operator overrides via a kustomize `images:` block in
-  step 4.
-
-Verify the package parses:
+## Step 1: scaffold the package
 
 ```bash
-installer doc .
+installer init .
+# Initialized package "statusboard-pkg" at /Users/.../statusboard-pkg
+#   - installer.yaml
+#   - bases/default/
+#   - components/
+#   - validation/
 ```
 
-You should see `statusboard 0.1.0` with the `default` base and no
-components. Now let's exercise the install path locally without a
-ConfigHub server:
+`installer init` writes the manifest with one default base, a
+`set-namespace` function-chain group, and the recommended validator
+chain (`vet-schemas`, `vet-merge-keys`, `vet-format`). We'll fix the
+package name in a moment. Have a look at what was created:
 
 ```bash
-installer wizard ./. \
-  --work-dir /tmp/statusboard \
-  --non-interactive \
-  --namespace demo
-
-installer render /tmp/statusboard
-ls /tmp/statusboard/out/manifests/
-# deployment-confighubplaceholder-statusboard.yaml
-# namespace-confighubplaceholder.yaml
-# service-confighubplaceholder-statusboard.yaml
+cat installer.yaml
+# apiVersion: installer.confighub.com/v1alpha1
+# kind: Package
+# metadata:
+#   name: statusboard-pkg
+#   version: 0.1.0
+# spec:
+#   bases:
+#     - name: default
+#       path: bases/default
+#       default: true
+#   functionChainTemplate:
+#     - toolchain: Kubernetes/YAML
+#       invocations:
+#         - name: set-namespace
+#           args: ['{{ .Namespace }}']
+#   validators:
+#     - toolchain: Kubernetes/YAML
+#       invocations:
+#         - name: vet-schemas
+#         - name: vet-merge-keys
+#         - name: vet-format
 ```
 
-Notice the manifests still say `confighubplaceholder`. We haven't
-added the namespace-rewriting function yet.
-
-## Step 2: a function chain that rewrites the namespace
-
-The wizard accepts `--namespace`; we want the rendered manifests to
-use that value instead of `confighubplaceholder`.
-
-Add `spec.functionChainTemplate` to `installer.yaml`:
-
-```yaml
-# append to installer.yaml
-  functionChainTemplate:
-    - toolchain: Kubernetes/YAML
-      whereResource: ""
-      description: Set the namespace on every namespaced resource.
-      invocations:
-        - name: set-namespace
-          args: ["{{ .Namespace }}"]
-```
-
-Re-render:
+Rename the package and let `init` re-write the manifest with
+`--force`:
 
 ```bash
-rm -rf /tmp/statusboard
+installer init . --name statusboard --force > /dev/null
+```
+
+Now scaffold the resources. We want a Namespace, a Deployment, and
+a Service. `installer new` clones each from the
+`kubernetes-resources` package with operator customizations
+applied:
+
+```bash
+installer new namespace statusboard
+installer new deployment statusboard --image nginxdemos/hello:plain-text --port 80 --replicas 1
+installer new service statusboard --port 80
+```
+
+Each writes a file under `bases/default/` and updates
+`bases/default/kustomization.yaml`'s resources list. Have a look:
+
+```bash
+ls bases/default/
+# deployment-statusboard.yaml
+# kustomization.yaml
+# namespace-statusboard.yaml
+# service-statusboard.yaml
+
+cat bases/default/kustomization.yaml
+# resources:
+#   - deployment-statusboard.yaml
+#   - namespace-statusboard.yaml
+#   - service-statusboard.yaml
+```
+
+Render and verify:
+
+```bash
 installer wizard ./. --work-dir /tmp/statusboard --non-interactive --namespace demo
 installer render /tmp/statusboard
 ls /tmp/statusboard/out/manifests/
@@ -170,42 +135,40 @@ ls /tmp/statusboard/out/manifests/
 # service-demo-statusboard.yaml
 ```
 
-The filenames now reflect the chosen namespace, and the manifest
-contents do too:
+The default validators ran during render — the output passed
+`vet-schemas`, `vet-merge-keys`, and `vet-format`.
 
-```bash
-grep namespace /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
-#  namespace: demo
-```
+Two things to notice:
 
-The chain template is Go `text/template` — `.Namespace` is the
-value passed to `--namespace`, `.Inputs.<name>` are answers to your
-declared inputs, `.Selection` is the resolved base + components, and
-`.Facts` is the collector's output map (we don't have one yet).
+- Each resource file uses `confighubplaceholder` for `namespace`
+  (a sentinel that `set-namespace` rewrites at install time —
+  hence `namespace-demo.yaml` after render).
+- The Deployment has all the recommended defaults baked in
+  (resource requests, readiness/liveness/startup probes,
+  `securityContext`, `automountServiceAccountToken: false`)
+  because they were applied by the kubernetes-resources package's
+  function chain at template-creation time.
 
-## Step 3: a wizard input
+## Step 2: a wizard input
 
 Add a `replicas` input so operators can size the deployment without
-editing the package:
+editing the package. Use `installer edit add input`:
 
-```yaml
-# append to installer.yaml under spec:
-  inputs:
-    - name: replicas
-      type: int
-      default: 1
-      prompt: "Number of replicas"
-      description: "How many statusboard pods to run."
+```bash
+installer edit add input replicas \
+    --type int --default 1 \
+    --prompt "Number of replicas" \
+    --description "How many statusboard pods to run."
 ```
 
-Wire it into the function chain:
+Wire it into the function chain. The chain already has
+`set-namespace` from `installer init`; we want to add `set-replicas`
+after it. There's no `installer edit` for function-chain entries
+yet, so hand-edit `installer.yaml`:
 
 ```yaml
-# extend the existing functionChainTemplate group
   functionChainTemplate:
     - toolchain: Kubernetes/YAML
-      whereResource: ""
-      description: Set the namespace + replicas.
       invocations:
         - name: set-namespace
           args: ["{{ .Namespace }}"]
@@ -238,7 +201,7 @@ grep replicas /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 > [Principle 4](./principles.md#4-optimize-for-the-zero-override-case)
 > — _optimize for the zero-override case._
 
-## Step 4: declare an `images:` block for operator overrides
+## Step 3: declare an `images:` block for operator overrides
 
 Operators frequently want to pin a specific image tag, mirror to an
 internal registry, or bump a patch version — without hand-editing
@@ -246,21 +209,20 @@ your source. Declare a kustomize `images:` block in your base, and
 they get `installer wizard --set-image` and `installer upgrade
 --set-image` for free.
 
-Edit `bases/default/kustomization.yaml`:
+Edit `bases/default/kustomization.yaml` to add an `images:` block.
+`installer init` already left a comment showing the shape; add:
 
 ```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - namespace.yaml
-  - deployment.yaml
-  - service.yaml
-# images: declares the names overridable by --set-image. The default
-# values match what's hard-coded in deployment.yaml.
 images:
   - name: nginxdemos/hello
     newName: nginxdemos/hello
     newTag: plain-text
+```
+
+Or use `kustomize edit set image` from the base directory:
+
+```bash
+( cd bases/default && kustomize edit set image nginxdemos/hello=nginxdemos/hello:plain-text )
 ```
 
 Test with an override:
@@ -290,7 +252,7 @@ If you don't declare an `images:` block and an operator passes
 edit set image` against an undeclared image would silently inject a
 new block, which contradicts your contract as the package author.
 
-## Step 5: an opt-in component
+## Step 4: an opt-in component
 
 Components are kustomize Components (`kind: Component`) layered on
 top of the base. We'll add a `monitoring` component that adds a
@@ -319,30 +281,24 @@ resources:
 YAML
 ```
 
-Add it to `installer.yaml`:
+Register it via `installer edit add component`:
 
-```yaml
-# add under spec:
-  components:
-    - name: monitoring
-      path: components/monitoring
-      description: Adds a ServiceMonitor for Prometheus scraping.
-      default: true
-      externalRequires:
-        - kind: CRD
-          name: servicemonitors.monitoring.coreos.com
-          suggestedSource: oci://ghcr.io/.../kube-prometheus-stack
+```bash
+installer edit add component monitoring \
+    --path components/monitoring --default \
+    --description "Adds a ServiceMonitor for Prometheus scraping."
 ```
 
 Two things to notice:
 
-- `default: true` makes monitoring part of the wizard's `default`
+- `--default` makes monitoring part of the wizard's `default`
   preset. Operators who say "I trust your defaults" get monitoring
   automatically.
-- `externalRequires` declares that the cluster needs the
-  ServiceMonitor CRD before this component can apply. The wizard
-  surfaces this; `installer preflight` (when shipped) will probe
-  the cluster.
+- For the `externalRequires` declaration ("cluster needs the
+  ServiceMonitor CRD before this component can apply") hand-edit
+  `installer.yaml` and append it to the `monitoring` component
+  entry — `installer edit` doesn't model nested
+  externalRequires today.
 
 Test:
 
@@ -366,7 +322,7 @@ ls /tmp/statusboard/out/manifests/
 # also adds servicemonitor-demo-statusboard.yaml
 ```
 
-## Step 6: a second component with a `requires:`
+## Step 5: a second component with `requires:`
 
 We'll add an `ingress` component, then an `ingress-tls` component
 that depends on it.
@@ -422,27 +378,23 @@ patches:
 YAML
 ```
 
-Update `installer.yaml`:
+Register both via `installer edit add component`:
 
-```yaml
-  components:
-    - name: monitoring
-      path: components/monitoring
-      ...
-    - name: ingress
-      path: components/ingress
-      description: Expose the service via an Ingress.
-    - name: ingress-tls
-      path: components/ingress-tls
-      description: Annotate the Ingress to request a cert from cert-manager.
-      requires: [ingress]
-      externalRequires:
-        - kind: WebhookCertProvider
-          name: cert-manager
-          issuerKind: ClusterIssuer
+```bash
+installer edit add component ingress \
+    --path components/ingress \
+    --description "Expose the service via an Ingress."
+
+installer edit add component ingress-tls \
+    --path components/ingress-tls \
+    --description "Annotate the Ingress to request a cert from cert-manager." \
+    --requires ingress
 ```
 
-`requires: [ingress]` means selecting `ingress-tls` automatically
+(For the `externalRequires` on `ingress-tls`, hand-edit
+`installer.yaml`.)
+
+`--requires ingress` means selecting `ingress-tls` automatically
 pulls in `ingress`. The wizard's solver does this closure and
 errors on conflicts. Test:
 
@@ -453,6 +405,32 @@ installer wizard ./. --work-dir /tmp/statusboard --non-interactive \
 cat /tmp/statusboard/out/spec/selection.yaml
 #   components: [ingress, ingress-tls]   # both selected
 installer render /tmp/statusboard
+```
+
+## Step 6: vet the package
+
+The default validator chain (`vet-schemas`, `vet-merge-keys`,
+`vet-format`) ran during render in steps 1–5. To re-run validators
+against the existing render — without re-running kustomize and the
+function chain — use `installer vet`:
+
+```bash
+installer vet /tmp/statusboard
+# Vetting N resource(s) under /tmp/statusboard/out/manifests against 1 validator group(s)...
+# All validators passed.
+```
+
+This is the right command after you edit the validator list (e.g.,
+add `vet-images` to enforce an image registry) and want to check
+the existing render before re-rendering.
+
+You can also tighten the validator list now. For example, add
+`vet-placeholders` to fail render if any `confighubplaceholder`
+sentinel survives. Hand-edit `spec.validators` in `installer.yaml`
+or use the cub function list to discover the full menu:
+
+```bash
+cub function list --where "Validating = TRUE" --toolchain Kubernetes/YAML
 ```
 
 ## Step 7: try the interactive wizard
@@ -542,31 +520,35 @@ for the complete rules.
 ## What you have
 
 ```
-~/scratch/statusboard/
+~/scratch/statusboard-pkg/
 ├── installer.yaml                # the manifest
 ├── bases/
 │   └── default/
-│       ├── deployment.yaml
-│       ├── kustomization.yaml    # with images: block
-│       ├── namespace.yaml
-│       └── service.yaml
-└── components/
-    ├── ingress/
-    │   ├── ingress.yaml
-    │   └── kustomization.yaml
-    ├── ingress-tls/
-    │   ├── kustomization.yaml
-    │   └── patch.yaml
-    └── monitoring/
-        ├── kustomization.yaml
-        └── servicemonitor.yaml
+│       ├── deployment-statusboard.yaml   # cloned from kubernetes-resources
+│       ├── kustomization.yaml            # with images: block
+│       ├── namespace-statusboard.yaml    # cloned from kubernetes-resources
+│       └── service-statusboard.yaml      # cloned from kubernetes-resources
+├── components/
+│   ├── ingress/
+│   │   ├── ingress.yaml
+│   │   └── kustomization.yaml
+│   ├── ingress-tls/
+│   │   ├── kustomization.yaml
+│   │   └── patch.yaml
+│   └── monitoring/
+│       ├── kustomization.yaml
+│       └── servicemonitor.yaml
+└── validation/                  # left empty in this tutorial
 ```
 
-A ~150-line `installer.yaml` + a small kustomize tree. Operators
-can install with one command, override images without editing your
-source, choose components by name or by preset, and upgrade to your
-next release with the schema-diff machinery handling the carry-
-forward.
+A ~50-line `installer.yaml` + a small kustomize tree. The
+Deployment came pre-loaded with resource requests, three probes,
+securityContext, and `automountServiceAccountToken: false` from
+`kubernetes-resources` — you didn't author or copy any of that.
+Operators can install with one command, override images without
+editing your source, choose components by name or by preset, and
+upgrade to your next release with the schema-diff machinery handling
+the carry-forward.
 
 ## Where to go next
 
