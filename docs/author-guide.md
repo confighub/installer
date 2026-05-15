@@ -766,21 +766,23 @@ What's refused:
 
 ## Signing
 
-`installer push` accepts `--sign` to attach a cosign signature
-(keyed or keyless). Operators verify with `installer verify` or by
-configuring `~/.config/installer/policy.yaml` to require signatures
-matching trusted keys / identities — when that policy exists,
-`installer pull` and `installer deps update` enforce verification on
-every fetch.
+After `installer push`, attach a cosign signature with
+`installer sign <ref>`. Keyless mode (Sigstore Fulcio + Rekor) is
+the default; pass `--key <ref>` for keyed mode. Operators verify
+with `installer verify` or by configuring
+`~/.config/installer/policy.yaml` to require signatures matching
+trusted keys / identities — when that policy exists, `installer
+pull` and `installer deps update` enforce verification on every
+fetch. Requires the `cosign` binary on PATH (override via
+`INSTALLER_COSIGN_BIN`).
 
 ```bash
-# Keyed signing.
-installer push my-package-0.1.0.tgz oci://ghcr.io/myorg/my-package:0.1.0 \
-    --sign --key cosign.key
+# Keyless (Sigstore Fulcio + Rekor — interactive OIDC flow).
+# Add --yes to skip the cosign confirmation prompt in CI.
+installer sign oci://ghcr.io/myorg/my-package:0.1.0 --yes
 
-# Keyless (Sigstore Fulcio, OIDC).
-installer push my-package-0.1.0.tgz oci://ghcr.io/myorg/my-package:0.1.0 \
-    --sign --keyless
+# Keyed.
+installer sign oci://ghcr.io/myorg/my-package:0.1.0 --key cosign.key
 ```
 
 If your package will be consumed by people you don't know, sign every
@@ -943,9 +945,11 @@ case.)
 1. Bump `metadata.version` per SemVer.
 2. `installer package ./my-package -o my-package-X.Y.Z.tgz` — record
    the printed sha256.
-3. `installer push my-package-X.Y.Z.tgz oci://.../my-package:X.Y.Z
-   --sign` (or `--key` / `--keyless`).
-4. Optionally `installer tag oci://.../my-package:X.Y.Z latest` if
+3. `installer push my-package-X.Y.Z.tgz oci://.../my-package:X.Y.Z`.
+4. `installer sign oci://.../my-package:X.Y.Z --yes` (keyless) or
+   `installer sign oci://.../my-package:X.Y.Z --key cosign.key`
+   (keyed).
+5. Optionally `installer tag oci://.../my-package:X.Y.Z latest` if
    you publish a moving `latest` tag (most don't — a SemVer tag is
    reproducible).
 

@@ -422,11 +422,13 @@ spec:
         -----BEGIN PUBLIC KEY-----
         MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
         -----END PUBLIC KEY-----
-      repoPrefix: oci://ghcr.io/myorg/    # only enforce on this prefix
+      repos:                              # each entry is a prefix; empty list = all repos
+        - oci://ghcr.io/myorg/
   trustedKeyless:
     - identity: author@myorg.com
       issuer: https://accounts.google.com
-      repoPrefix: oci://ghcr.io/myorg/
+      repos:
+        - oci://ghcr.io/myorg/
 ```
 
 `enforce: true` makes verification mandatory. Setting `enforce:
