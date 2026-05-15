@@ -130,3 +130,11 @@ spec:
             - "apps/v1/Deployment"
             - "spec.template.spec.containers.?name=worker.readinessProbe.periodSeconds"
             - "60"
+
+  validators:
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format
