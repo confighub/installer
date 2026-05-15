@@ -744,11 +744,18 @@ toolchain annotation and:
   (`commonLabels`, `namespace`, `namePrefix`, `replacements`)
   continue to decorate the carrier ConfigMap normally.
 
-At upload time, an annotated ConfigMap becomes the triple
-ConfigHub uses for AppConfig: an AppConfig Unit (toolchain from the
-annotation, data = the extracted raw file), a ConfigMapRenderer
-Target, and a Kubernetes/YAML Unit for the rendered manifest,
-linked via the existing intra-Space link inference.
+At upload time, an annotated ConfigMap becomes a four-piece bundle:
+an AppConfig Unit (toolchain from the annotation, data = the
+extracted raw file), a ConfigMapRenderer Target attached to it, a
+placeholder Kubernetes/YAML ConfigMap Unit whose slug matches the
+kustomize-generated name (so other workloads in the Space link to
+it by name via the existing intra-Space inference), and a live-state
+`MergeUnits` link from the placeholder to the AppConfig Unit so the
+runtime ConfigMap name flows through to the workload reference at
+apply time.
+
+The worker the renderer Target uses is `<space>/server-worker` by
+default; override with `installer upload --appconfig-worker <slug>`.
 
 ### disableNameSuffixHash
 

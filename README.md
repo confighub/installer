@@ -318,7 +318,6 @@ upgrade --set-image preflight rejection`. Spaces created with the
 
 ## Roadmap
 
-- AppConfig support.
 - Better Secrets support (currently we generate secrets during fact collection).
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before

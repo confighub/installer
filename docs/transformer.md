@@ -334,28 +334,48 @@ write-back; failures become `ResourceList.results`.
 #### Upload split
 
 At upload, ConfigMaps with `installer.confighub.com/toolchain` are
-split into the standard ConfigHub triple:
+split into four ConfigHub objects:
 
-- AppConfig Unit. Slug `<gen-name>-appconfig`. Toolchain from the
-  annotation. Data = extracted raw file body.
-- ConfigMapRenderer Target. Slug `<gen-name>-renderer`. Provider
-  `ConfigMapRenderer`. Toolchain from the annotation.
-  Livestate-type `Kubernetes/YAML`. Options:
-  - `AsKeyValue=true` if mode=env AND toolchain=AppConfig/Env. The
+- **AppConfig Unit** (slug `<carrier-name>-appconfig`). Toolchain
+  from the annotation. Data = the extracted raw file body. Day-2
+  source of truth in the native format.
+- **ConfigMapRenderer Target** (slug `<carrier-name>-renderer`).
+  Provider `ConfigMapRenderer`, toolchain from the annotation,
+  livestate-type `Kubernetes/YAML`. Attached to the AppConfig Unit
+  so applying it renders a ConfigMap in the cluster. Worker is
+  `<space>/<--appconfig-worker>` (default `server-worker`). Options:
+  - `AsKeyValue=true` iff mode=env AND toolchain=AppConfig/Env. The
     bridge ignores it for non-Env toolchains; we set it only where
     it's meaningful.
-  - `RevisionHistoryLimit=0` if `disableNameSuffixHash: true`
-    (mutable name, hash annotation on the consuming workload).
-    Otherwise a small positive default (immutable name, versioned
-    history). Default value TBD — see open questions.
-- Kubernetes/YAML Unit. Slug `<gen-name>-configmap`. Data = the
-  rendered ConfigMap YAML. `--target <renderer>`.
-- Link the K8s Unit to the AppConfig Unit via the existing
-  intra-Space link inference in `internal/upload/links.go`.
+  - `RevisionHistoryLimit` is left at the bridge default for the
+    MVP. A future enhancement will set it from a `disableNameSuffixHash`
+    derived annotation; the rendered ConfigMap name alone isn't
+    a reliable signal of the generator's hash setting.
+- **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
+  `<carrier-name>`, matching the kustomize-generated name).
+  Body is empty at upload; populated at apply time via the live-merge
+  link below. Inherits the upload-wide `--target` flag (typically a
+  Kubernetes namespace target) so it applies into the same place as
+  every other rendered manifest. Other workload Units in the Space
+  reference the carrier by name, so existing intra-Space link
+  inference (`internal/upload/links.go`) wires them into this
+  placeholder without any new logic.
+- **Live-merge link** (slug `<carrier-name>-from-<carrier-name>-appconfig`).
+  `--use-live-state --auto-update --update-type MergeUnits`. Pulls
+  the rendered ConfigMap from the AppConfig Unit's live state into
+  the placeholder's Data so the runtime ConfigMap name (with its
+  hash suffix) flows through to the workload's
+  `volumeMounts` / `envFrom` reference.
 
-The `manifest-index.yaml` schema gains fields recording the
-AppConfig source-key and toolchain, so `update` / `upgrade` can
-reason about ConfigMaps that have split provenance.
+The rendered ConfigMap YAML in `out/manifests/` is NOT uploaded as a
+Unit — the renderer Target re-derives the ConfigMap from the
+AppConfig Unit's content at apply time, and the placeholder + link
+pair handles the namespace/reference wiring.
+
+The `manifest-index.yaml` schema can later gain fields recording the
+AppConfig source-key and toolchain so `update` / `upgrade` can
+reason about ConfigMaps that have split provenance; deferred to a
+follow-up.
 
 #### Why not a custom wrapper kind
 
@@ -425,14 +445,22 @@ We test all of these against AppConfig-bearing ConfigMaps:
    `transformers:` and `validators:` to each entry in
    `spec.components`. Resolved alongside the package-wide chain in
    declaration order, emitted as a single `out/compose/transformers.yaml`.
-5. **AppConfig annotation contract + auto-injection.** Pre-pass scans
-   `configMapGenerator:` entries, derives `appconfig-mode` and
-   `appconfig-source-key`, injects annotations.
-6. **AppConfig transformer round-trip.** Extract from `data:`,
-   invoke, write back. Both mutating and validating groups.
-7. **AppConfig upload split.** AppConfig Unit + ConfigMapRenderer
-   Target + Kubernetes/YAML Unit + link. Update
-   `manifest-index.yaml` schema. Refresh consumer-guide.md.
+5. **AppConfig annotation contract. ✅** Documented in
+   author-guide.md; the transformer reads
+   `installer.confighub.com/toolchain` from kustomize-copied
+   generator annotations.
+6. **AppConfig transformer round-trip + annotation injection. ✅**
+   `installer transformer` runs a pre-pass that derives and injects
+   `appconfig-mode` (file/env, from data: shape) and
+   `appconfig-source-key`. Function groups with toolchain
+   `AppConfig/*` extract from `data:`, invoke, write back. Both
+   mutating and validating paths supported.
+7. **AppConfig upload split. ✅** Detected ConfigMaps become a
+   four-piece bundle: renderer Target, AppConfig Unit, placeholder
+   Kubernetes/YAML ConfigMap Unit (slug matches the carrier name so
+   intra-Space link inference works), and a live-state MergeUnits
+   link from placeholder → AppConfig Unit. Behind
+   `--appconfig-worker` (default `server-worker`).
 8. **Cleanup.** Remove the AppConfig roadmap bullet from
    README.md once 5–7 land.
 
