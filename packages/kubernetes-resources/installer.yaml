@@ -18,7 +18,7 @@ spec:
         templates so operators don't author Kubernetes YAML from
         scratch.
 
-  functionChainTemplate:
+  transformers:
     # 1. Set the namespace on every namespaced resource. The
     #    Namespace resource itself gets renamed by `set-namespace`.
     - toolchain: Kubernetes/YAML

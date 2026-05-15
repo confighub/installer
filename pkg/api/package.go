@@ -44,13 +44,13 @@ type PackageSpec struct {
 	ExternalManifests []ExternalManifest `yaml:"externalManifests,omitempty" json:"externalManifests,omitempty"`
 
 	// Inputs declares the wizard prompts. Inputs are referenced by Go template
-	// expressions in FunctionChainTemplate (e.g., "{{ .Inputs.namespace }}").
+	// expressions in Transformers (e.g., "{{ .Inputs.namespace }}").
 	Inputs []Input `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 
 	// Collector is an executable bundled in the package that the wizard runs
 	// to discover install-time facts (server URL, image tag, worker IDs, etc.)
 	// and to produce sensitive material as .env.secret files consumed by
-	// kustomize secretGenerator. See FunctionChainTemplate for how facts are
+	// kustomize secretGenerator. See Transformers for how facts are
 	// referenced.
 	Collector *Collector `yaml:"collector,omitempty" json:"collector,omitempty"`
 
@@ -66,15 +66,19 @@ type PackageSpec struct {
 	// empty WhereResource matches everything else.
 	Phases []Phase `yaml:"phases,omitempty" json:"phases,omitempty"`
 
-	// FunctionChainTemplate is a list of function invocation groups. At render
-	// time it is resolved with the wizard answers (Go templates), then each
-	// group is executed by funcimpl.NewStandardExecutor with its own toolchain
-	// and whereResource filter, output of each group feeding the next.
-	FunctionChainTemplate []FunctionGroup `yaml:"functionChainTemplate,omitempty" json:"functionChainTemplate,omitempty"`
+	// Transformers is a list of function-invocation groups that mutate the
+	// rendered output. At render time it is resolved with the wizard answers
+	// (Go templates), serialized to out/compose/transformers.yaml as a
+	// ConfigHubTransformers KRM function config, and run by `installer
+	// transformer` (which kustomize invokes as an exec plugin via the
+	// out/compose/installer-transformer.sh wrapper). Each group runs through
+	// funcimpl.NewStandardExecutor with its own toolchain and whereResource
+	// filter, output of each group feeding the next.
+	Transformers []FunctionGroup `yaml:"transformers,omitempty" json:"transformers,omitempty"`
 
 	// Validators is a list of validating-function invocation groups, run
 	// at the end of render against the mutated output. Same shape as
-	// FunctionChainTemplate, but every named function must be a
+	// Transformers, but every named function must be a
 	// Validating function (Mutating=false). Validators do not modify
 	// the rendered manifests; they fail render if any validator
 	// returns Passed=false.

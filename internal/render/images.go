@@ -87,7 +87,7 @@ func requireImagesBlock(path string) error {
 		return fmt.Errorf(
 			"%s has no `images:` block; declare one to use --set-image, "+
 				"or have the package author declare image inputs and a "+
-				"set-container-image group in functionChainTemplate (see "+
+				"set-container-image group in transformers (see "+
 				"docs/principles.md Principle 5)", path)
 	}
 	return nil

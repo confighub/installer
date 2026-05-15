@@ -59,6 +59,8 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		// Trust
 		newSignCmd(),
 		newVerifyCmd(),
+		// Kustomize integration
+		newTransformerCmd(),
 	)
 	return root
 }

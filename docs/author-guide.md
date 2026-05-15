@@ -266,7 +266,7 @@ prompts.
 A list of validating-function invocation groups, run automatically
 at the end of every `installer render` against the post-mutation
 output. Each group has the same shape as
-[`functionChainTemplate`](#specfunctionchaintemplate) — a toolchain,
+[`transformers`](#specfunctionchaintemplate) — a toolchain,
 optional `whereResource` filter, ordered `invocations` — but every
 named function must be a Validating function (`Mutating: false`,
 `Validating: true`). Validators do not modify the rendered
@@ -316,10 +316,10 @@ existing render to check the new validators without re-rendering.
 
 `whereResource` filters in `validators[].whereResource` use the same
 qualified path syntax as
-[`functionChainTemplate`](#specfunctionchaintemplate) —
+[`transformers`](#specfunctionchaintemplate) —
 `ConfigHub.ResourceType = 'apps/v1/Deployment'`, etc.
 
-### `spec.functionChainTemplate`
+### `spec.transformers`
 
 A list of function-invocation groups. At render time the template is
 resolved against the operator's answers (via Go `text/template`,
@@ -330,7 +330,7 @@ invocation; the output of each group feeds the next group.
 
 ```yaml
 spec:
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML        # required per group
       whereResource: ""                 # optional; empty = all resources
       description: Set the namespace on every namespaced resource.
@@ -689,7 +689,7 @@ images:
 If image changes are expected to be frequent (per-component image
 registries, multi-arch by tag, image-by-URI rewrites), declare image
 inputs and a `set-container-image` group in
-`functionChainTemplate` instead. Reach for that only if the
+`transformers` instead. Reach for that only if the
 `images:` block is genuinely insufficient.
 
 ### Components, not flags
@@ -833,7 +833,7 @@ removed component.
 
 ### Changing the function chain
 
-Any change in `functionChainTemplate` re-runs against the new render
+Any change in `transformers` re-runs against the new render
 on upgrade. Render is deterministic; the next plan shows the
 resulting diff, and operators can review before applying.
 
@@ -909,7 +909,7 @@ installer edit add input replicas \
     --prompt "Number of replicas"
 ```
 
-Then reference it from `functionChainTemplate` invocations as
+Then reference it from `transformers` invocations as
 `{{ .Inputs.replicas }}`. Use `installer edit set input <name>` to
 modify, `installer edit remove input <name>` to drop.
 

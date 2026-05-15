@@ -18,7 +18,7 @@ spec:
       package: oci://localhost:5555/installer-e2e/example-base
       version: "^0.1.0"
 
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:

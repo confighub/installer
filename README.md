@@ -184,7 +184,7 @@ spec:
   clusterSingleton: [] # leader-election leases this package claims
   externalManifests: [] # remote release-tarball manifests to fetch + merge
   inputs: [] # wizard prompts
-  functionChainTemplate: # one or more groups of function invocations
+  transformers: # one or more groups of function invocations
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
@@ -291,6 +291,11 @@ authoring packages, the user docs above are what you want.
     build plan for the interactive wizard, prior-state re-entry, plan
     vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
     schema-diff, and `--set-image` overrides. Phases A–E shipped.
+- [Kustomize transformer plugin and AppConfig support](docs/transformer.md)
+  — design for the `installer transformer` exec plugin (folds the
+  function chain into kustomize), durable `out/compose/`,
+  component-scoped function-chain mixins, and AppConfig support via
+  `configMapGenerator` round-trip. Not yet implemented.
 
 ## Multi-package example
 

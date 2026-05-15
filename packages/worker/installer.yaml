@@ -69,7 +69,7 @@ spec:
       mount paths, probes) — together they document everything an AI agent or
       human operator needs to author a working Deployment.
 
-  functionChainTemplate:
+  transformers:
     # 1. Name the Namespace and the ClusterRoleBinding (cluster-scoped, so
     #    they don't get a metadata.namespace from set-namespace below).
     - toolchain: Kubernetes/YAML

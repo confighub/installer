@@ -76,7 +76,7 @@ cat installer.yaml
 #     - name: default
 #       path: bases/default
 #       default: true
-#   functionChainTemplate:
+#   transformers:
 #     - toolchain: Kubernetes/YAML
 #       invocations:
 #         - name: set-namespace
@@ -167,7 +167,7 @@ after it. There's no `installer edit` for function-chain entries
 yet, so hand-edit `installer.yaml`:
 
 ```yaml
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       invocations:
         - name: set-namespace

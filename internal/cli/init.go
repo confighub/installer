@@ -88,7 +88,7 @@ Refuses to overwrite an existing installer.yaml unless --force.`,
 						Default:     true,
 						Description: "Default base — replace with your package's resources.",
 					}},
-					FunctionChainTemplate: []api.FunctionGroup{{
+					Transformers: []api.FunctionGroup{{
 						Toolchain:   "Kubernetes/YAML",
 						Description: "Set the namespace on every namespaced resource.",
 						Invocations: []api.FunctionInvocation{

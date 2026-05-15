@@ -10,7 +10,7 @@ spec:
       default: true
       description: Shared Namespace + ConfigMap for downstream packages.
 
-  functionChainTemplate:
+  transformers:
     # Rename the Namespace resource to the install-time --namespace.
     - toolchain: Kubernetes/YAML
       whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
