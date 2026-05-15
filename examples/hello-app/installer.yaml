@@ -30,7 +30,7 @@ spec:
           name: cert-manager
           issuerKind: ClusterIssuer
 
-  functionChainTemplate:
+  transformers:
     # Rename the Namespace resource and set metadata.namespace on every
     # namespace-scoped resource. The namespace comes from the wizard's
     # --namespace flag.

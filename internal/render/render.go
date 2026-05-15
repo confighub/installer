@@ -10,7 +10,8 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
-// Options controls Render. All fields are required except Facts.
+// Options controls Render. All fields are required except Facts and
+// TransformerBinary.
 type Options struct {
 	Loaded    *ipkg.Loaded
 	Selection *api.Selection
@@ -18,28 +19,39 @@ type Options struct {
 	// Facts is the parsed facts.yaml. Nil when the package has no collector
 	// or the wizard has not been re-run after one was added.
 	Facts *api.Facts
+	// TransformerBinary is the absolute path baked into the
+	// out/compose/installer-transformer wrapper script. Defaults to
+	// os.Executable() — the binary currently running Render. Tests inject a
+	// freshly-built installer binary so the go test binary (which doesn't
+	// implement the `transformer` subcommand) isn't invoked by kustomize.
+	TransformerBinary string
 }
 
 // Result is what Render produces.
 type Result struct {
 	// OutDir is the directory written to (out/manifests + out/secrets + out/spec
-	// underneath).
+	// + out/compose underneath).
 	OutDir string
 	// Manifests is the per-resource non-sensitive output, ordered by Slug.
 	Manifests []File
 	// Secrets is the per-resource sensitive output (Kubernetes Secrets),
 	// written to out/secrets/ and never uploaded as Units.
 	Secrets []File
-	// Chain is the resolved FunctionChain that was executed (also persisted to spec/).
+	// Chain is the resolved FunctionChain that was executed (also persisted
+	// to spec/ and to compose/chain.yaml).
 	Chain *api.FunctionChain
 }
 
-// Render reads the package + selection + inputs, drives kustomize, runs the
-// function chain, and writes per-resource files plus the spec docs to outDir.
+// Render reads the package + selection + inputs, drives kustomize (which
+// invokes `installer transformer` as an exec plugin to apply the function
+// chain and validators), and writes per-resource files plus the spec docs
+// to outDir.
 //
 // outDir is created if missing. Existing files in outDir/manifests are
 // overwritten; files not produced by this render are NOT removed (callers
-// who want a clean slate should remove manifests/ first).
+// who want a clean slate should remove manifests/ first). out/compose/ is
+// always cleared and rewritten so the on-disk kustomization tree reflects
+// the current render exactly.
 func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	if opts.Loaded == nil {
 		return nil, fmt.Errorf("Render: Loaded is required")
@@ -51,6 +63,15 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, fmt.Errorf("Render: Inputs is required")
 	}
 
+	transformerBin := opts.TransformerBinary
+	if transformerBin == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("locate installer binary: %w", err)
+		}
+		transformerBin = exe
+	}
+
 	// 0. Apply per-image overrides (if any) by running `kustomize edit
 	//    set image` against the chosen base's kustomization.yaml. The
 	//    chosen base must declare an `images:` block; render fails fast
@@ -59,59 +80,44 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	// 1. Compose the top-level kustomization in a temp dir, run kustomize build.
-	composeDir, err := composeKustomization(opts.Loaded, opts.Selection)
+	// 1. Resolve chain + validators against inputs + facts. These become
+	//    chain.yaml / validators.yaml in out/compose/, invoked by kustomize
+	//    via the exec plugin.
+	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(composeDir)
+	validators, err := resolveValidatorTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Compose out/compose/ and run kustomize against it. Kustomize
+	//    invokes the wrapper, which execs `installer transformer`,
+	//    which runs each function group through chainexec in-process.
+	composeDir := filepath.Join(outDir, "compose")
+	if err := composeKustomization(composeInputs{
+		Loaded:            opts.Loaded,
+		Selection:         opts.Selection,
+		Chain:             chain,
+		Validators:        validators,
+		TransformerBinary: transformerBin,
+	}, composeDir); err != nil {
+		return nil, err
+	}
 
 	rendered, err := runKustomize(composeDir)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Resolve the function chain template against the inputs and facts.
-	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
+	// 3. Split into per-resource files with deterministic naming.
+	files, err := splitForUnits(rendered)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Run the chain. Output of each group feeds the next.
-	mutated := rendered
-	if len(chain.Spec.Groups) > 0 {
-		mutated, err = runChain(ctx, chain, rendered)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// 3a. Run validators against the mutated output. Validators are
-	// templated against the same context as the function chain, so an
-	// author can pass {{ .Inputs.foo }} into a vet-cel expression. Any
-	// failing validator surfaces as a render error — render produces
-	// no manifests when validation fails.
-	if len(opts.Loaded.Package.Spec.Validators) > 0 {
-		validators, err := resolveValidatorTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
-		if err != nil {
-			return nil, err
-		}
-		failures, err := runValidators(ctx, validators, mutated)
-		if err != nil {
-			return nil, err
-		}
-		if len(failures) > 0 {
-			return nil, fmt.Errorf("validation failed:\n%s", FormatValidatorFailures(failures))
-		}
-	}
-
-	// 4. Split into per-resource files with deterministic naming.
-	files, err := splitForUnits(mutated)
-	if err != nil {
-		return nil, err
-	}
-
-	// 5. Split sensitive resources off into out/secrets/, write the rest to
+	// 4. Split sensitive resources off into out/secrets/, write the rest to
 	// out/manifests/.
 	var manifests, secrets []File
 	for _, f := range files {
@@ -167,8 +173,6 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	if err := writeYAML(filepath.Join(specDir, "function-chain.yaml"), chain); err != nil {
 		return nil, err
 	}
-	// The manifest index records only non-sensitive files; secrets are tracked
-	// separately and never uploaded.
 	if err := writeManifestIndex(filepath.Join(specDir, "manifest-index.yaml"), opts.Loaded.Package, manifests); err != nil {
 		return nil, err
 	}
@@ -198,10 +202,10 @@ func writeYAML(path string, v any) error {
 // upload is implemented, the index records kind/name/namespace and leaves
 // phase empty.
 type manifestIndex struct {
-	APIVersion string              `yaml:"apiVersion"`
-	Kind       string              `yaml:"kind"`
-	Metadata   api.Metadata        `yaml:"metadata"`
-	Spec       manifestIndexSpec   `yaml:"spec"`
+	APIVersion string            `yaml:"apiVersion"`
+	Kind       string            `yaml:"kind"`
+	Metadata   api.Metadata      `yaml:"metadata"`
+	Spec       manifestIndexSpec `yaml:"spec"`
 }
 
 type manifestIndexSpec struct {

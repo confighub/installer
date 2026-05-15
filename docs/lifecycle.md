@@ -336,7 +336,7 @@ the recommended path depends on how often the override is expected:
   re-render — see Principle 1: package files are read-only; we never
   rely on prior `kustomize edit` output surviving an `installer pull`).
 - **Frequent / structured override** — package author declares an image
-  input and a `set-container-image` group in `functionChainTemplate`.
+  input and a `set-container-image` group in `transformers`.
   Operator answers the input through the wizard. No `--set-image`
   involved; `installer upgrade` carries the value through the spec
   like any other input.
@@ -351,7 +351,7 @@ operator can see the eventual image set without applying anything.
 `installer plan` against an `--set-image` value targeting a package
 whose base has no `images:` transformer fails fast with a useful
 message: "package's base kustomization.yaml has no `images:` block;
-declare one to use --set-image, or use a function-chain input." This
+declare one to use --set-image, or use a `spec.transformers` input." This
 keeps the package author's contract explicit.
 
 ## Common scenarios

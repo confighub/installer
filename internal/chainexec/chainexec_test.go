@@ -1,4 +1,4 @@
-package render
+package chainexec
 
 import (
 	"context"
@@ -51,7 +51,7 @@ spec:
 `
 
 func TestRunValidators_NoValidatorsIsNoOp(t *testing.T) {
-	failures, err := runValidators(context.Background(), nil, []byte(passingResource))
+	failures, err := RunValidators(context.Background(), nil, []byte(passingResource))
 	if err != nil {
 		t.Fatalf("nil groups should be a no-op, got %v", err)
 	}
@@ -69,9 +69,9 @@ func TestRunValidators_PassingResource(t *testing.T) {
 			{Name: "vet-format"},
 		},
 	}}
-	failures, err := runValidators(context.Background(), groups, []byte(passingResource))
+	failures, err := RunValidators(context.Background(), groups, []byte(passingResource))
 	if err != nil {
-		t.Fatalf("runValidators: %v", err)
+		t.Fatalf("RunValidators: %v", err)
 	}
 	if len(failures) != 0 {
 		t.Errorf("expected no failures, got: %s", FormatValidatorFailures(failures))
@@ -86,9 +86,9 @@ func TestRunValidators_FailingResource(t *testing.T) {
 			{Name: "vet-merge-keys"},
 		},
 	}}
-	failures, err := runValidators(context.Background(), groups, []byte(failingResource))
+	failures, err := RunValidators(context.Background(), groups, []byte(failingResource))
 	if err != nil {
-		t.Fatalf("runValidators: %v", err)
+		t.Fatalf("RunValidators: %v", err)
 	}
 	if len(failures) == 0 {
 		t.Fatal("expected failures, got none")
@@ -104,14 +104,14 @@ func TestRunValidators_FailingResource(t *testing.T) {
 func TestRunValidators_RejectsMutatingFunctions(t *testing.T) {
 	// set-namespace is a mutating function; declaring it under
 	// validators is a programming error in the package author's
-	// installer.yaml. runValidators must reject before invoking.
+	// installer.yaml. RunValidators must reject before invoking.
 	groups := []api.FunctionGroup{{
 		Toolchain: "Kubernetes/YAML",
 		Invocations: []api.FunctionInvocation{
 			{Name: "set-namespace", Args: []string{"foo"}},
 		},
 	}}
-	_, err := runValidators(context.Background(), groups, []byte(passingResource))
+	_, err := RunValidators(context.Background(), groups, []byte(passingResource))
 	if err == nil {
 		t.Fatal("expected error for mutating function in validators list")
 	}
@@ -127,7 +127,7 @@ func TestRunValidators_UnknownFunction(t *testing.T) {
 			{Name: "vet-bogus-does-not-exist"},
 		},
 	}}
-	_, err := runValidators(context.Background(), groups, []byte(passingResource))
+	_, err := RunValidators(context.Background(), groups, []byte(passingResource))
 	if err == nil {
 		t.Fatal("expected error for unknown function")
 	}

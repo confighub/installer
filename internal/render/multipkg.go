@@ -49,6 +49,10 @@ type DepsOptions struct {
 	// Fetcher resolves a locked dep's ref+digest to a local package root.
 	// If nil, DefaultFetcher is used.
 	Fetcher Fetcher
+
+	// TransformerBinary is propagated to each per-dep Render call. Defaults
+	// to os.Executable() inside Render when empty.
+	TransformerBinary string
 }
 
 // DepResult records the outcome of one dependency render.
@@ -107,7 +111,12 @@ func RenderDependencies(ctx context.Context, opts DepsOptions) ([]DepResult, err
 		if err := os.MkdirAll(depOut, 0o755); err != nil {
 			return nil, err
 		}
-		res, err := Render(ctx, Options{Loaded: loaded, Selection: sel, Inputs: inputs}, depOut)
+		res, err := Render(ctx, Options{
+			Loaded:            loaded,
+			Selection:         sel,
+			Inputs:            inputs,
+			TransformerBinary: opts.TransformerBinary,
+		}, depOut)
 		if err != nil {
 			return nil, fmt.Errorf("render dep %s: %w", d.Name, err)
 		}

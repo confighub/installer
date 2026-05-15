@@ -9,7 +9,7 @@ shortcuts (`installer init` / `new` / `edit` / `vet`) so you author
 By the end you'll have:
 
 - A working package with a base, two opt-in components, an input,
-  a function-chain template, and the recommended validator chain.
+  a `transformers:` chain, and the recommended validator chain.
 - An `images:` block so operators can override container tags
   without editing your source.
 - A bundled `.tgz` ready to push to an OCI registry.
@@ -60,9 +60,10 @@ installer init .
 ```
 
 `installer init` writes the manifest with one default base, a
-`set-namespace` function-chain group, and the recommended validator
-chain (`vet-schemas`, `vet-merge-keys`, `vet-format`). We'll fix the
-package name in a moment. Have a look at what was created:
+`set-namespace` group under `spec.transformers`, and the recommended
+validator chain (`vet-schemas`, `vet-merge-keys`, `vet-format`).
+We'll fix the package name in a moment. Have a look at what was
+created:
 
 ```bash
 cat installer.yaml
@@ -76,7 +77,7 @@ cat installer.yaml
 #     - name: default
 #       path: bases/default
 #       default: true
-#   functionChainTemplate:
+#   transformers:
 #     - toolchain: Kubernetes/YAML
 #       invocations:
 #         - name: set-namespace
@@ -147,7 +148,7 @@ Two things to notice:
   (resource requests, readiness/liveness/startup probes,
   `securityContext`, `automountServiceAccountToken: false`)
   because they were applied by the kubernetes-resources package's
-  function chain at template-creation time.
+  `transformers` chain at template-creation time.
 
 ## Step 2: a wizard input
 
@@ -161,13 +162,13 @@ installer edit add input replicas \
     --description "How many statusboard pods to run."
 ```
 
-Wire it into the function chain. The chain already has
+Wire it into `spec.transformers`. The chain already has
 `set-namespace` from `installer init`; we want to add `set-replicas`
-after it. There's no `installer edit` for function-chain entries
-yet, so hand-edit `installer.yaml`:
+after it. There's no `installer edit` for transformer entries yet,
+so hand-edit `installer.yaml`:
 
 ```yaml
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       invocations:
         - name: set-namespace
@@ -411,8 +412,8 @@ installer render /tmp/statusboard
 
 The default validator chain (`vet-schemas`, `vet-merge-keys`,
 `vet-format`) ran during render in steps 1–5. To re-run validators
-against the existing render — without re-running kustomize and the
-function chain — use `installer vet`:
+against the existing render — without re-running kustomize — use
+`installer vet`:
 
 ```bash
 installer vet /tmp/statusboard

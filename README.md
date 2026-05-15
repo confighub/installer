@@ -104,8 +104,9 @@ bin/installer wizard ./examples/hello-app \
   --select monitoring --select ingress \
   --namespace demo
 
-# 3. Render: composes the kustomization, runs kustomize, runs the function
-#    chain, writes one file per resource to /tmp/hello/out/manifests/.
+# 3. Render: composes a kustomization in out/compose/ with the ConfigHub
+#    function chain wired in as a kustomize transformer plugin, runs
+#    `kustomize build`, writes one file per resource to out/manifests/.
 bin/installer render /tmp/hello
 
 # 4. Upload to ConfigHub. Records the destination Space(s) in
@@ -143,12 +144,21 @@ After `wizard` and `render`, the working dir looks like:
     │   ├── deployment-<ns>-<name>.yaml
     │   ├── service-<ns>-<name>.yaml
     │   └── ...
+    ├── compose/              # the synthesized kustomization driving render
+    │   ├── kustomization.yaml    # references the chosen base + components
+    │   ├── transformers.yaml     # resolved ConfigHubTransformers (chain)
+    │   ├── validators.yaml       # resolved ConfigHubValidators (if any)
+    │   └── installer-transformer.sh   # exec wrapper kustomize invokes
     └── spec/                 # the "installer record" (also uploadable as Units)
         ├── selection.yaml    # base + closure-resolved components
         ├── inputs.yaml       # validated wizard answers
-        ├── function-chain.yaml   # the resolved chain that ran
+        ├── function-chain.yaml   # the resolved chain that ran (audit copy)
         └── manifest-index.yaml   # filename → kind/name/namespace
 ```
+
+`out/compose/` is durable, not a temp dir. You can `cd out/compose &&
+kustomize build --enable-exec --enable-alpha-plugins .` to reproduce
+the render byte-for-byte outside the installer.
 
 The two spec docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
 to re-render: edit them, re-run `installer render`, get a deterministic new set
@@ -184,7 +194,7 @@ spec:
   clusterSingleton: [] # leader-election leases this package claims
   externalManifests: [] # remote release-tarball manifests to fetch + merge
   inputs: [] # wizard prompts
-  functionChainTemplate: # one or more groups of function invocations
+  transformers: # one or more groups of function invocations
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
@@ -194,11 +204,17 @@ spec:
 
 See `examples/hello-app/` for a complete working package.
 
-The function chain template uses Go `text/template` syntax with `.Inputs`,
-`.Selection`, and `.Package` in scope. Each group's `toolchain` and
-`whereResource` are applied per-group (different groups can target different
-toolchains — e.g., `Kubernetes/YAML` for manifests, `AppConfig/Properties` for
-shipped config files).
+The `transformers:` list is resolved with Go `text/template` syntax —
+`{{ .Namespace }}`, `{{ .Inputs.* }}`, `{{ .Selection.* }}`,
+`{{ .Facts.* }}`, `{{ .Package.* }}` — then emitted as a
+`ConfigHubTransformers` KRM function config that kustomize invokes
+through the `installer transformer` exec plugin. Each group's
+`toolchain` and `whereResource` are applied per-group, so a single
+chain can mutate raw Kubernetes manifests with `Kubernetes/YAML` and
+AppConfig-carried files (`AppConfig/Properties`, `AppConfig/Env`, …)
+in the same render. Components can carry their own `transformers:`
+and `validators:` lists; they append to the package-wide chain only
+when the component is selected.
 
 ## Plugin install
 
@@ -291,6 +307,11 @@ authoring packages, the user docs above are what you want.
     build plan for the interactive wizard, prior-state re-entry, plan
     vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
     schema-diff, and `--set-image` overrides. Phases A–E shipped.
+- [Kustomize transformer plugin and AppConfig support](docs/transformer.md)
+  — design for the `installer transformer` exec plugin (folds the
+  function chain into kustomize), durable `out/compose/`,
+  component-scoped function-chain mixins, and AppConfig support via
+  `configMapGenerator` round-trip. Not yet implemented.
 
 ## Multi-package example
 
@@ -313,7 +334,6 @@ upgrade --set-image preflight rejection`. Spaces created with the
 
 ## Roadmap
 
-- AppConfig support.
 - Better Secrets support (currently we generate secrets during fact collection).
 - `installer preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before

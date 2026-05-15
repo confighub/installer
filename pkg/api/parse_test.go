@@ -28,7 +28,7 @@ spec:
     - name: namespace
       type: string
       default: test
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
@@ -53,9 +53,9 @@ func TestParsePackage(t *testing.T) {
 	if !p.Spec.Components[0].Default || p.Spec.Components[1].Default {
 		t.Errorf("default flag mismatch: %+v", p.Spec.Components)
 	}
-	if len(p.Spec.FunctionChainTemplate) != 1 ||
-		p.Spec.FunctionChainTemplate[0].Toolchain != "Kubernetes/YAML" {
-		t.Errorf("function chain mismatch: %+v", p.Spec.FunctionChainTemplate)
+	if len(p.Spec.Transformers) != 1 ||
+		p.Spec.Transformers[0].Toolchain != "Kubernetes/YAML" {
+		t.Errorf("function chain mismatch: %+v", p.Spec.Transformers)
 	}
 }
 
@@ -143,7 +143,7 @@ spec:
   replaces:
     - {package: oci://ghcr.io/foo/old-name, version: "< 2.0.0"}
   bundleExamples: false
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:

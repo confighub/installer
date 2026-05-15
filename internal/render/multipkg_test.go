@@ -20,7 +20,7 @@ metadata: {name: dep, version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
@@ -45,7 +45,7 @@ spec:
     - {name: default, path: bases/default, default: true}
   dependencies:
     - {name: dep-one, package: oci://test/dep, version: "^0.1.0"}
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML
       whereResource: ""
       invocations:
@@ -129,7 +129,7 @@ func TestRenderDependencies(t *testing.T) {
 		return writeDepPackage(t, destDir), nil
 	}
 
-	results, err := render.RenderDependencies(ctx, render.DepsOptions{
+	results, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
 		Lock:         lock,
 		ParentInputs: parentInputs,
 		WorkDir:      work,
@@ -198,7 +198,7 @@ func TestRenderDependenciesNamespaceFallbackToParent(t *testing.T) {
 		},
 	}
 
-	results, err := render.RenderDependencies(ctx, render.DepsOptions{
+	results, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
 		Lock:         lock,
 		ParentInputs: parentInputs,
 		WorkDir:      work,
@@ -245,7 +245,7 @@ func TestRenderDependenciesDeterministic(t *testing.T) {
 	}
 	run := func() map[string]string {
 		work := t.TempDir()
-		_, err := render.RenderDependencies(ctx, render.DepsOptions{
+		_, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
 			Lock:         lock,
 			ParentInputs: parentInputs,
 			WorkDir:      work,

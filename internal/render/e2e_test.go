@@ -51,7 +51,7 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 		t.Errorf("solver and wizard disagree on base")
 	}
 
-	result, err := render.Render(context.Background(), render.Options{
+	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,
@@ -140,7 +140,7 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 	}
 	sel, inputs := wres.Selection, wres.Inputs
 
-	result, err := render.Render(context.Background(), render.Options{
+	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,
@@ -239,7 +239,7 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	}
 	sel, inputs := wres.Selection, wres.Inputs
 
-	result, err := render.Render(context.Background(), render.Options{
+	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,

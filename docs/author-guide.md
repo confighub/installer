@@ -203,11 +203,35 @@ spec:
   Empty means valid for all bases.
 - `externalRequires:` declares this component's preconditions, in
   addition to package-level + base-level requires.
+- `transformers:` and `validators:` are component-scoped mixins. Same
+  shape as `spec.transformers` / `spec.validators` (see below), but
+  the groups only run when this component is selected. They're
+  appended to the package-wide chain in the order components appear
+  in `spec.components`, so re-render is deterministic regardless of
+  which order the operator passes `--select`. All groups still run
+  in a single in-process executor pass — adding a component-scoped
+  transformer costs nothing extra at render time.
+
+  Example: a `monitoring` component that adds a ServiceMonitor and
+  wants to pin its scrape interval per-namespace can keep that
+  mutation co-located with the component declaration:
+
+  ```yaml
+  components:
+    - name: monitoring
+      path: components/monitoring
+      transformers:
+        - toolchain: Kubernetes/YAML
+          whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
+          invocations:
+            - name: yq-i
+              args: ['.spec.endpoints[].interval = "{{ .Inputs.scrape_interval }}"']
+  ```
 
 ### `spec.inputs`
 
-Wizard prompts. Referenced in the function-chain template as
-`{{ .Inputs.<name> }}`.
+Wizard prompts. Referenced in `spec.transformers` (and
+`spec.validators`) as `{{ .Inputs.<name> }}`.
 
 ```yaml
 spec:
@@ -266,7 +290,7 @@ prompts.
 A list of validating-function invocation groups, run automatically
 at the end of every `installer render` against the post-mutation
 output. Each group has the same shape as
-[`functionChainTemplate`](#specfunctionchaintemplate) — a toolchain,
+[`transformers`](#specfunctionchaintemplate) — a toolchain,
 optional `whereResource` filter, ordered `invocations` — but every
 named function must be a Validating function (`Mutating: false`,
 `Validating: true`). Validators do not modify the rendered
@@ -316,10 +340,10 @@ existing render to check the new validators without re-rendering.
 
 `whereResource` filters in `validators[].whereResource` use the same
 qualified path syntax as
-[`functionChainTemplate`](#specfunctionchaintemplate) —
+[`transformers`](#specfunctionchaintemplate) —
 `ConfigHub.ResourceType = 'apps/v1/Deployment'`, etc.
 
-### `spec.functionChainTemplate`
+### `spec.transformers`
 
 A list of function-invocation groups. At render time the template is
 resolved against the operator's answers (via Go `text/template`,
@@ -330,7 +354,7 @@ invocation; the output of each group feeds the next group.
 
 ```yaml
 spec:
-  functionChainTemplate:
+  transformers:
     - toolchain: Kubernetes/YAML        # required per group
       whereResource: ""                 # optional; empty = all resources
       description: Set the namespace on every namespaced resource.
@@ -581,12 +605,16 @@ what isn't.
    dependencies) — resolves the DAG and writes `out/spec/lock.yaml`.
 
 4. **`installer render <work-dir>`** — composes a synthetic top-level
-   kustomization that references your chosen base + components, runs
-   `kustomize build`, then runs your function-chain template
-   (resolved with `.Inputs` / `.Selection` / `.Package` / `.Namespace`
-   / `.Facts`). For multi-package installs, each dep is rendered into
-   its own subtree under `out/<dep-name>/`. Output lands as one
-   resource per file in `out/manifests/`.
+   kustomization under `out/compose/` that references your chosen
+   base + components, resolves your `spec.transformers` /
+   `spec.validators` against `.Inputs` / `.Selection` / `.Package` /
+   `.Namespace` / `.Facts`, writes them as KRM function configs, and
+   runs `kustomize build --enable-exec --enable-alpha-plugins`.
+   Kustomize invokes the `installer transformer` subcommand as an
+   exec plugin to run each function group in process; the result
+   lands as one resource per file in `out/manifests/`. For
+   multi-package installs, each dep is rendered into its own subtree
+   under `out/<dep-name>/`.
 
 5. **`installer upload <work-dir>`** — creates one Space per package
    (parent + each locked dep) and one Unit per rendered file, plus
@@ -651,6 +679,111 @@ Supported kinds: `cronjob`, `daemonset`, `deployment`, `hpa`
 new file to your package's `bases/default/kustomization.yaml`'s
 resources list.
 
+## Application configuration files (AppConfig)
+
+When your workload reads a properties file, an env file, a TOML
+config, or any of the other supported application-configuration
+formats, you have two choices: hardcode it into a `ConfigMap`
+manifest as a literal `data:` map, or keep it in its native format
+and let kustomize's `configMapGenerator` bake it into a ConfigMap.
+
+The installer prefers the second path: the config stays in its
+native format (a real `.properties`, `.toml`, `.env`, etc. file in
+your package tree) so per-format ConfigHub functions can mutate it
+correctly, ConfigHub can validate against a schema, and the upload
+step can split the rendered output into an AppConfig Unit + a
+ConfigMapRenderer Target so day-2 edits stay in the source format
+too.
+
+### Author contract
+
+Annotate the `configMapGenerator` entry with
+`installer.confighub.com/toolchain` pointing at the matching
+AppConfig toolchain. The installer reads the annotation off the
+rendered ConfigMap (kustomize copies generator annotations onto the
+output), so the contract is "tag once, here":
+
+```yaml
+# bases/default/kustomization.yaml
+configMapGenerator:
+  - name: app-config
+    files:
+      - application.properties
+    options:
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Properties
+
+  - name: app-env
+    envs:
+      - .env
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Env
+```
+
+Supported toolchain values:
+
+- `AppConfig/Properties` — Java-style `.properties`
+- `AppConfig/Env` — `.env` / `KEY=value`
+- `AppConfig/TOML`, `AppConfig/INI`, `AppConfig/YAML`,
+  `AppConfig/JSON`, `AppConfig/Text` — match the file extension
+
+### What the installer does with it
+
+At render time, the `installer transformer` plugin (which kustomize
+invokes as an exec transformer) recognizes ConfigMaps carrying the
+toolchain annotation and:
+
+- Derives the carrier shape (`installer.confighub.com/appconfig-mode`:
+  `file` if the generator used `files:`, `env` if it used `envs:`) by
+  inspecting `data:`. For file mode it also records
+  `installer.confighub.com/appconfig-source-key` — the `data:` key
+  whose value is the raw config file body. And it records
+  `installer.confighub.com/appconfig-mutable` (`true` or `false`)
+  by matching the rendered ConfigMap name against kustomize's
+  `-<10-char hash>` suffix — present iff `disableNameSuffixHash`
+  was its default of `false`. Authors can pre-set any of the three
+  annotations to override the inference.
+- Routes any `AppConfig/*` function group in `spec.transformers` to
+  the matching ConfigMap: extract the raw config from `data:`, run
+  the function in the AppConfig toolchain, write the mutated content
+  back into `data:`. Other kustomize transformers
+  (`commonLabels`, `namespace`, `namePrefix`, `replacements`)
+  continue to decorate the carrier ConfigMap normally.
+
+At upload time, an annotated ConfigMap becomes a four-piece bundle:
+an AppConfig Unit (toolchain from the annotation, data = the
+extracted raw file), a ConfigMapRenderer Target attached to it, a
+placeholder Kubernetes/YAML ConfigMap Unit whose slug matches the
+kustomize-generated name (so other workloads in the Space link to
+it by name via the existing intra-Space inference), and a live-state
+`MergeUnits` link from the placeholder to the AppConfig Unit so the
+runtime ConfigMap name flows through to the workload reference at
+apply time.
+
+The worker the renderer Target uses is `<space>/server-worker` by
+default; override with `installer upload --appconfig-worker <slug>`.
+
+### disableNameSuffixHash
+
+Kustomize hashes `configMapGenerator` names by default
+(`my-app-config-h7df9k2`), which means each config change rolls a
+new ConfigMap and rolls any consuming workload that references it.
+Setting `disableNameSuffixHash: true` keeps a stable name; the
+installer maps that into a mutable ConfigMap mode (`RevisionHistoryLimit=0`)
+on the renderer Target at upload time so day-2 edits update in
+place. Use the default (hashed names) when you want
+versioned, immutable ConfigMaps; use `disableNameSuffixHash: true`
+when you want hash-annotation-driven rolling restarts.
+
+### secretGenerator
+
+`secretGenerator` is not tagged with installer annotations. Secrets
+flow through the existing sensitive-resource pathway: rendered to
+`out/secrets/`, never uploaded as Units. The roadmap for a better
+secrets story is tracked separately.
+
 ## Authoring best practices
 
 These are the prescriptive ones. The full doctrine is
@@ -689,7 +822,7 @@ images:
 If image changes are expected to be frequent (per-component image
 registries, multi-arch by tag, image-by-URI rewrites), declare image
 inputs and a `set-container-image` group in
-`functionChainTemplate` instead. Reach for that only if the
+`transformers` instead. Reach for that only if the
 `images:` block is genuinely insufficient.
 
 ### Components, not flags
@@ -705,8 +838,8 @@ Your package's rendered output ends up as literal Kubernetes YAML in
 ConfigHub Units. Don't ship Go-template syntax, Helm placeholders, or
 `{{ }}`-style variables in resources after kustomize build — they
 won't be re-templated. If a value needs to vary at install time,
-either declare an input + function-chain mutation, or expose it as a
-kustomize image / replicas / patch transformer.
+either declare an input + a `spec.transformers` mutation, or expose
+it as a kustomize image / replicas / patch transformer.
 
 ### Design for re-render
 
@@ -722,7 +855,7 @@ captured once and replayed thereafter.
 Container images, replica counts, env vars — anything ConfigHub has a
 function for (`set-container-image`, `set-replicas`, `set-env`) — is
 post-install ConfigHub mutation territory. Don't add an input and
-function-chain step for these unless the value is install-time-only
+`spec.transformers` step for these unless the value is install-time-only
 (captured at install and never tuned afterward). The wizard should
 ask the small number of things that genuinely need to be answered
 once, up front.
@@ -833,7 +966,7 @@ removed component.
 
 ### Changing the function chain
 
-Any change in `functionChainTemplate` re-runs against the new render
+Any change in `transformers` re-runs against the new render
 on upgrade. Render is deterministic; the next plan shows the
 resulting diff, and operators can review before applying.
 
@@ -909,7 +1042,7 @@ installer edit add input replicas \
     --prompt "Number of replicas"
 ```
 
-Then reference it from `functionChainTemplate` invocations as
+Then reference it from `transformers` invocations as
 `{{ .Inputs.replicas }}`. Use `installer edit set input <name>` to
 modify, `installer edit remove input <name>` to drop.
 
@@ -934,7 +1067,7 @@ installer vet <work-dir>
 ```
 
 Runs `spec.validators` against the existing `out/manifests/`
-without re-running kustomize + the function chain. Useful when you
+without re-running kustomize. Useful when you
 added a new validator (e.g., `vet-images`) and want to check the
 existing render before re-rendering. (Render auto-runs validators
 too; `vet` is for the validator-list-changed-but-render-unchanged

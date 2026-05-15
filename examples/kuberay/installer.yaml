@@ -31,7 +31,7 @@ spec:
     - kind: leader-election-lease
       name: kuberay-operator
 
-  functionChainTemplate:
+  transformers:
     # Rename the operator's Namespace resource, set metadata.namespace on
     # every namespace-scoped resource, and upsert subjects[].namespace on
     # every ServiceAccount subject in the operator's RoleBinding and

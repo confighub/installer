@@ -24,5 +24,5 @@ docker run --rm "$IMAGE" docgen runtime > runtime.yaml
 ```
 
 The same three commands work against any tag — pin to the tag this package's
-`functionChainTemplate` is wired against (defaulted by `cub worker get-image`
+`transformers` is wired against (defaulted by `cub worker get-image`
 to match the server version).

@@ -27,7 +27,7 @@ of the two supported channels keeps changes discoverable and survivable.
 How to apply: if you find yourself reaching for `kustomize edit` against
 a package directory or hand-editing a `bases/*/kustomization.yaml`,
 stop. Either declare an input for it (and let the package's
-`functionChainTemplate` consume it), or do it post-install in ConfigHub.
+`transformers` consume it), or do it post-install in ConfigHub.
 The one allowed package-file mutation is `kustomize edit set image`
 applied by the installer itself behind `--set-image` (see Principle 4).
 
@@ -113,7 +113,7 @@ recommended pattern, in order of decreasing user friction:
 do set-container-image` on the uploaded Unit. This is the default
    recommendation.
 2. **Package author declares image inputs and a `set-container-image`
-   group in `functionChainTemplate`** when image changes are expected
+   group in `transformers`** when image changes are expected
    to be common (per-component image registries, multi-arch by tag,
    image-by-URI rewrites). Inputs surface in the wizard; the function
    chain consumes them at render time.

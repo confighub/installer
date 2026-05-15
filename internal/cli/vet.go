@@ -29,7 +29,7 @@ Validators are also auto-invoked at the end of every 'installer
 render' — vet only matters when the validator list itself changes.
 
 Validators are templated against the same context as
-functionChainTemplate ({{ .Inputs.* }}, {{ .Selection.* }}, etc.),
+transformers ({{ .Inputs.* }}, {{ .Selection.* }}, etc.),
 so a validator may reference an input. The wizard's persisted
 out/spec/{inputs,selection,facts}.yaml is the source of those
 values. If those files are missing, vet fails fast (run 'installer
