@@ -230,8 +230,8 @@ spec:
 
 ### `spec.inputs`
 
-Wizard prompts. Referenced in the function-chain template as
-`{{ .Inputs.<name> }}`.
+Wizard prompts. Referenced in `spec.transformers` (and
+`spec.validators`) as `{{ .Inputs.<name> }}`.
 
 ```yaml
 spec:
@@ -605,12 +605,16 @@ what isn't.
    dependencies) — resolves the DAG and writes `out/spec/lock.yaml`.
 
 4. **`installer render <work-dir>`** — composes a synthetic top-level
-   kustomization that references your chosen base + components, runs
-   `kustomize build`, then runs your function-chain template
-   (resolved with `.Inputs` / `.Selection` / `.Package` / `.Namespace`
-   / `.Facts`). For multi-package installs, each dep is rendered into
-   its own subtree under `out/<dep-name>/`. Output lands as one
-   resource per file in `out/manifests/`.
+   kustomization under `out/compose/` that references your chosen
+   base + components, resolves your `spec.transformers` /
+   `spec.validators` against `.Inputs` / `.Selection` / `.Package` /
+   `.Namespace` / `.Facts`, writes them as KRM function configs, and
+   runs `kustomize build --enable-exec --enable-alpha-plugins`.
+   Kustomize invokes the `installer transformer` subcommand as an
+   exec plugin to run each function group in process; the result
+   lands as one resource per file in `out/manifests/`. For
+   multi-package installs, each dep is rendered into its own subtree
+   under `out/<dep-name>/`.
 
 5. **`installer upload <work-dir>`** — creates one Space per package
    (parent + each locked dep) and one Unit per rendered file, plus
@@ -834,8 +838,8 @@ Your package's rendered output ends up as literal Kubernetes YAML in
 ConfigHub Units. Don't ship Go-template syntax, Helm placeholders, or
 `{{ }}`-style variables in resources after kustomize build — they
 won't be re-templated. If a value needs to vary at install time,
-either declare an input + function-chain mutation, or expose it as a
-kustomize image / replicas / patch transformer.
+either declare an input + a `spec.transformers` mutation, or expose
+it as a kustomize image / replicas / patch transformer.
 
 ### Design for re-render
 
@@ -851,7 +855,7 @@ captured once and replayed thereafter.
 Container images, replica counts, env vars — anything ConfigHub has a
 function for (`set-container-image`, `set-replicas`, `set-env`) — is
 post-install ConfigHub mutation territory. Don't add an input and
-function-chain step for these unless the value is install-time-only
+`spec.transformers` step for these unless the value is install-time-only
 (captured at install and never tuned afterward). The wizard should
 ask the small number of things that genuinely need to be answered
 once, up front.
@@ -1063,7 +1067,7 @@ installer vet <work-dir>
 ```
 
 Runs `spec.validators` against the existing `out/manifests/`
-without re-running kustomize + the function chain. Useful when you
+without re-running kustomize. Useful when you
 added a new validator (e.g., `vet-images`) and want to check the
 existing render before re-rendering. (Render auto-runs validators
 too; `vet` is for the validator-list-changed-but-render-unchanged

@@ -351,7 +351,7 @@ operator can see the eventual image set without applying anything.
 `installer plan` against an `--set-image` value targeting a package
 whose base has no `images:` transformer fails fast with a useful
 message: "package's base kustomization.yaml has no `images:` block;
-declare one to use --set-image, or use a function-chain input." This
+declare one to use --set-image, or use a `spec.transformers` input." This
 keeps the package author's contract explicit.
 
 ## Common scenarios

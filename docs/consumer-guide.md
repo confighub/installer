@@ -112,7 +112,8 @@ installer wizard oci://ghcr.io/myorg/statusboard:0.1.0 \
 Then render:
 
 ```bash
-# 2. Render: kustomize build + function chain → out/manifests/
+# 2. Render: kustomize build with the ConfigHub function chain wired in
+#    as a kustomize transformer plugin → out/manifests/.
 installer render $WD
 ```
 
@@ -149,6 +150,15 @@ use `--space-pattern` instead of `--space`:
 installer upload $WD --space-pattern '{{.PackageName}}-prod'
 # Each package — parent + each locked dep — gets its own Space.
 ```
+
+If the package ships application-config files (a `configMapGenerator`
+tagged with `installer.confighub.com/toolchain`, e.g.
+`AppConfig/Properties` or `AppConfig/Env`), `installer upload` also
+creates a `ConfigMapRenderer` Target plus a separate AppConfig Unit
+holding the raw config body. The renderer Target needs a worker;
+the installer defaults to `<space>/server-worker`. Override with
+`installer upload $WD --space ... --appconfig-worker <slug>` if your
+Space's renderer worker lives under a different slug.
 
 ## Where to make changes
 
