@@ -196,50 +196,51 @@ mixin path.
 existing author muscle memory. Resolved by today's
 `resolveChainTemplate`, emitted as `out/compose/transformers.yaml`.
 
-**Component-scoped mixins.** Components can drop KRM function
-configs in their own directory and list them in the component's
-own `kustomization.yaml` (`kind: Component`) `transformers:` /
-`validators:` lists:
+**Component-scoped mixins.** Each component declaration in
+`installer.yaml.spec.components` can carry optional `transformers:` and
+`validators:` fields. They take the same FunctionGroup shape as the
+package-wide list and only run when the component is selected.
+Components contribute their groups in the order they appear in
+`spec.components` so re-render is deterministic regardless of which
+order the operator passed `--select`. All groups — package-wide and
+component-scoped — are resolved together and emitted as a single
+`out/compose/transformers.yaml`, so the in-process executor still
+runs them in one kustomize subprocess.
 
 ```yaml
-# packages/<pkg>/components/observability/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1alpha1
-kind: Component
-resources:
-  - servicemonitor.yaml
-transformers:
-  - transformers.yaml
-```
-
-```yaml
-# packages/<pkg>/components/observability/transformers.yaml
-apiVersion: installer.confighub.com/v1alpha1
-kind: ConfigHubTransformers
-metadata:
-  name: observability-chain
-  annotations:
-    config.kubernetes.io/function: { exec: { path: installer-transformer.sh } }
+# packages/<pkg>/installer.yaml
 spec:
-  groups:
+  components:
+    - name: observability
+      path: components/observability
+      transformers:
+        - toolchain: Kubernetes/YAML
+          whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
+          invocations:
+            - name: yq-i
+              args: ['.spec.namespaceSelector.matchNames = ["{{ .Namespace }}"]']
+  transformers:
     - toolchain: Kubernetes/YAML
-      whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
       invocations:
-        - name: yq-i
-          args: ['--expr=.spec.namespaceSelector.matchNames = ["{{ .Namespace }}"]']
+        - {name: set-namespace, args: ["{{ .Namespace }}"]}
 ```
 
-**Detection rule for the pre-pass.** Any file in the package tree
-whose top-level `apiVersion` starts with `installer.confighub.com/`
-is templated by the installer before kustomize runs. Resolved
-copies land under `out/compose/components/<name>/`; the package
-tree stays read-only (principle: package files are read-only).
+Authors who'd rather use the kustomize-native pattern — declaring a
+KRM function config inside the component directory and referencing
+it from the component's own `kustomization.yaml` `transformers:`
+list — can do that too against raw kustomize, pointing
+`exec.path` at `installer-transformer.sh`. The installer doesn't
+manage those files; they're the user's surface area and bypass the
+installer's template-resolution pre-pass.
 
-**Built-in `namespace:` transformer.** Authors who prefer
-kustomize's built-in `namespace:` field over the `set-namespace`
-function can write `namespace: "{{ .Namespace }}"`. The same
-pre-pass applies to `kustomization.yaml` files in the package
-tree, with the same variable allowlist and `missingkey=error`
-semantics.
+**Built-in `namespace:` transformer.** Not yet implemented — would
+let authors who prefer kustomize's built-in `namespace:` field over
+the `set-namespace` function write `namespace: "{{ .Namespace }}"`
+directly in `kustomization.yaml`. That requires a templating
+pre-pass over package `kustomization.yaml` files, with resolved
+copies written to `out/compose/` (the package tree stays
+read-only). Deferred; for now, package authors use
+`spec.transformers` with `set-namespace`.
 
 ### AppConfig
 
@@ -271,19 +272,35 @@ The annotation key is generalized to
 the same mechanism can roundtrip future non-Kubernetes toolchains
 that have a natural ConfigMap (or equivalent) carrier.
 
-The installer's compose pre-pass scans every `configMapGenerator:`
-entry it pulls in. For each entry carrying
-`installer.confighub.com/toolchain`, it auto-injects:
+Kustomize copies `options.annotations` from a `configMapGenerator`
+entry onto the rendered ConfigMap, so the `toolchain` annotation
+is what reaches the installer transformer (running as an exec
+plugin) and the upload step (reading `out/manifests/`).
 
-- `installer.confighub.com/appconfig-mode: file` if the entry uses
-  `files:`,
-- `installer.confighub.com/appconfig-mode: env` if the entry uses
-  `envs:`,
-- `installer.confighub.com/appconfig-source-key: <name>` for
-  file-mode entries when the source-key isn't the only `data:` key.
+The installer transformer infers two more annotations from the
+rendered carrier and injects them back onto the ConfigMap so
+downstream consumers (upload, drift) see one canonical contract:
 
-Authors don't write the mode annotation themselves — it's derived
-from the generator spec. They can override it if they need to.
+- `installer.confighub.com/appconfig-mode: file | env` — derived
+  from the `data:` shape. `AppConfig/Env` always implies env mode
+  unless the data looks file-shaped; everything else implies file
+  mode.
+- `installer.confighub.com/appconfig-source-key: <name>` —
+  file-mode only. The `data:` key whose value is the raw config
+  body. Skipped when there's a single `data:` key (the unambiguous
+  case).
+
+Authors don't write the mode or source-key annotations; the
+transformer infers and injects them. Authors who need to override
+the inference (rare: file-shaped `.env` content, or an ambiguous
+`data:` shape) can set the annotation explicitly on the generator
+entry and the transformer respects it.
+
+We deliberately don't modify the package's `kustomization.yaml`
+files — that would conflict with the read-only-package principle.
+Injection at the transformer stage means the resolved annotations
+ride into `out/manifests/` cleanly and the package tree stays
+untouched.
 
 #### Transformer round-trip
 
@@ -390,24 +407,24 @@ We test all of these against AppConfig-bearing ConfigMaps:
 
 ## Phasing
 
-1. **Lift chain execution.** Move `runChain`, `runValidators`,
+1. **Lift chain execution. ✅** Moved `runChain`, `runValidators`,
    `parseFunctionArguments`, `ValidatorFailure`,
    `FormatValidatorFailures`, `decodeValidatorFailures` from
    `internal/render/chain.go` into a new `internal/chainexec/`
-   package. Render and `installer vet` import it. No behavior
-   change. Existing unit + e2e tests must pass unchanged.
-2. **Add `installer transformer` subcommand.** Standalone-usable.
-   Documented in author-guide.md and consumer-guide.md.
-3. **Kustomize-driven render with durable `out/compose/`.** Switch
-   `Render` to generate `out/compose/` artifacts and invoke
-   `kustomize build --enable-exec --enable-alpha-plugins`. Hide
-   behind `--render-mode=kustomize` (default: legacy in this phase).
-4. **Component-scoped function configs.** Pre-pass for any file in
-   the package tree whose `apiVersion` starts with
-   `installer.confighub.com/`. Same templating surface as
-   `installer.yaml.spec.transformers`. Also extend the
-   pre-pass to `kustomization.yaml` files (so `namespace: "{{
-   .Namespace }}"` works).
+   package. Render and `installer vet` import it.
+2. **`installer transformer` subcommand. ✅** Standalone-usable
+   KRM Functions exec plugin. Two functionConfig kinds:
+   `ConfigHubTransformers` and `ConfigHubValidators`.
+3. **Kustomize-driven render with durable `out/compose/`. ✅**
+   Single path: `Render` generates `out/compose/{kustomization,
+   transformers, validators}.yaml` and a one-line
+   `installer-transformer.sh` wrapper, then invokes `kustomize
+   build --enable-exec --enable-alpha-plugins`. No legacy
+   fallback; the in-process chain code path is gone.
+4. **Component-scoped transformer mixins. ✅** Added optional
+   `transformers:` and `validators:` to each entry in
+   `spec.components`. Resolved alongside the package-wide chain in
+   declaration order, emitted as a single `out/compose/transformers.yaml`.
 5. **AppConfig annotation contract + auto-injection.** Pre-pass scans
    `configMapGenerator:` entries, derives `appconfig-mode` and
    `appconfig-source-key`, injects annotations.
@@ -416,10 +433,8 @@ We test all of these against AppConfig-bearing ConfigMaps:
 7. **AppConfig upload split.** AppConfig Unit + ConfigMapRenderer
    Target + Kubernetes/YAML Unit + link. Update
    `manifest-index.yaml` schema. Refresh consumer-guide.md.
-8. **Equivalence + flip.** Diff existing examples and packages
-   under legacy vs. kustomize mode. Flip default to kustomize. Mark
-   legacy deprecated. Remove the AppConfig roadmap bullet from
-   README.md. Drop legacy after one release.
+8. **Cleanup.** Remove the AppConfig roadmap bullet from
+   README.md once 5–7 land.
 
 ## Open questions
 

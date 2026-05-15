@@ -203,6 +203,30 @@ spec:
   Empty means valid for all bases.
 - `externalRequires:` declares this component's preconditions, in
   addition to package-level + base-level requires.
+- `transformers:` and `validators:` are component-scoped mixins. Same
+  shape as `spec.transformers` / `spec.validators` (see below), but
+  the groups only run when this component is selected. They're
+  appended to the package-wide chain in the order components appear
+  in `spec.components`, so re-render is deterministic regardless of
+  which order the operator passes `--select`. All groups still run
+  in a single in-process executor pass — adding a component-scoped
+  transformer costs nothing extra at render time.
+
+  Example: a `monitoring` component that adds a ServiceMonitor and
+  wants to pin its scrape interval per-namespace can keep that
+  mutation co-located with the component declaration:
+
+  ```yaml
+  components:
+    - name: monitoring
+      path: components/monitoring
+      transformers:
+        - toolchain: Kubernetes/YAML
+          whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
+          invocations:
+            - name: yq-i
+              args: ['.spec.endpoints[].interval = "{{ .Inputs.scrape_interval }}"']
+  ```
 
 ### `spec.inputs`
 
@@ -650,6 +674,100 @@ Supported kinds: `cronjob`, `daemonset`, `deployment`, `hpa`
 `installer new --update-kustomization` (default true) appends the
 new file to your package's `bases/default/kustomization.yaml`'s
 resources list.
+
+## Application configuration files (AppConfig)
+
+When your workload reads a properties file, an env file, a TOML
+config, or any of the other supported application-configuration
+formats, you have two choices: hardcode it into a `ConfigMap`
+manifest as a literal `data:` map, or keep it in its native format
+and let kustomize's `configMapGenerator` bake it into a ConfigMap.
+
+The installer prefers the second path: the config stays in its
+native format (a real `.properties`, `.toml`, `.env`, etc. file in
+your package tree) so per-format ConfigHub functions can mutate it
+correctly, ConfigHub can validate against a schema, and the upload
+step can split the rendered output into an AppConfig Unit + a
+ConfigMapRenderer Target so day-2 edits stay in the source format
+too.
+
+### Author contract
+
+Annotate the `configMapGenerator` entry with
+`installer.confighub.com/toolchain` pointing at the matching
+AppConfig toolchain. The installer reads the annotation off the
+rendered ConfigMap (kustomize copies generator annotations onto the
+output), so the contract is "tag once, here":
+
+```yaml
+# bases/default/kustomization.yaml
+configMapGenerator:
+  - name: app-config
+    files:
+      - application.properties
+    options:
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Properties
+
+  - name: app-env
+    envs:
+      - .env
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Env
+```
+
+Supported toolchain values:
+
+- `AppConfig/Properties` — Java-style `.properties`
+- `AppConfig/Env` — `.env` / `KEY=value`
+- `AppConfig/TOML`, `AppConfig/INI`, `AppConfig/YAML`,
+  `AppConfig/JSON`, `AppConfig/Text` — match the file extension
+
+### What the installer does with it
+
+At render time, the `installer transformer` plugin (which kustomize
+invokes as an exec transformer) recognizes ConfigMaps carrying the
+toolchain annotation and:
+
+- Derives the carrier shape (`installer.confighub.com/appconfig-mode`:
+  `file` if the generator used `files:`, `env` if it used `envs:`) by
+  inspecting `data:`. For file mode it also records
+  `installer.confighub.com/appconfig-source-key` — the `data:` key
+  whose value is the raw config file body. Authors can pre-set both
+  annotations to override the inference.
+- Routes any `AppConfig/*` function group in `spec.transformers` to
+  the matching ConfigMap: extract the raw config from `data:`, run
+  the function in the AppConfig toolchain, write the mutated content
+  back into `data:`. Other kustomize transformers
+  (`commonLabels`, `namespace`, `namePrefix`, `replacements`)
+  continue to decorate the carrier ConfigMap normally.
+
+At upload time, an annotated ConfigMap becomes the triple
+ConfigHub uses for AppConfig: an AppConfig Unit (toolchain from the
+annotation, data = the extracted raw file), a ConfigMapRenderer
+Target, and a Kubernetes/YAML Unit for the rendered manifest,
+linked via the existing intra-Space link inference.
+
+### disableNameSuffixHash
+
+Kustomize hashes `configMapGenerator` names by default
+(`my-app-config-h7df9k2`), which means each config change rolls a
+new ConfigMap and rolls any consuming workload that references it.
+Setting `disableNameSuffixHash: true` keeps a stable name; the
+installer maps that into a mutable ConfigMap mode (`RevisionHistoryLimit=0`)
+on the renderer Target at upload time so day-2 edits update in
+place. Use the default (hashed names) when you want
+versioned, immutable ConfigMaps; use `disableNameSuffixHash: true`
+when you want hash-annotation-driven rolling restarts.
+
+### secretGenerator
+
+`secretGenerator` is not tagged with installer annotations. Secrets
+flow through the existing sensitive-resource pathway: rendered to
+`out/secrets/`, never uploaded as Units. The roadmap for a better
+secrets story is tracked separately.
 
 ## Authoring best practices
 

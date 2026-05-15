@@ -25,11 +25,29 @@ import (
 //	{{ .Selection.* }}    — chosen base + components
 //	{{ .Package.* }}      — package metadata (name, version, labels, ...)
 func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selection, facts *api.Facts) (*api.FunctionChain, error) {
+	// Aggregate package-wide transformers + each selected component's
+	// transformers in declaration order. Components add transformers in
+	// the order they appear in installer.yaml.spec.components (not the
+	// order the wizard selected them), so re-rendering is deterministic.
+	groups := gatherGroups(pkg, sel, func(p *api.Package) []api.FunctionGroup { return p.Spec.Transformers },
+		func(c *api.Component) []api.FunctionGroup { return c.Transformers })
+	if len(groups) == 0 {
+		return &api.FunctionChain{
+			APIVersion: api.APIVersion,
+			Kind:       api.KindFunctionChain,
+			Metadata:   api.Metadata{Name: pkg.Metadata.Name + "-function-chain"},
+			Spec: api.FunctionChainSpec{
+				Package:        pkg.Metadata.Name,
+				PackageVersion: pkg.Metadata.Version,
+			},
+		}, nil
+	}
+
 	// Marshal the template to YAML, run text/template over the bytes, then
 	// re-parse. This lets the template author use {{ .Inputs.foo }} anywhere
 	// a string appears in the chain (function args, whereResource, even
 	// toolchain), without us having to recurse through every field.
-	srcBytes, err := yaml.Marshal(pkg.Spec.Transformers)
+	srcBytes, err := yaml.Marshal(groups)
 	if err != nil {
 		return nil, fmt.Errorf("marshal template: %w", err)
 	}
@@ -54,8 +72,8 @@ func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selecti
 		return nil, fmt.Errorf("execute template: %w", err)
 	}
 
-	var groups []api.FunctionGroup
-	if err := yaml.Unmarshal(buf.Bytes(), &groups); err != nil {
+	var resolved []api.FunctionGroup
+	if err := yaml.Unmarshal(buf.Bytes(), &resolved); err != nil {
 		return nil, fmt.Errorf("re-parse resolved chain: %w\n----\n%s\n----", err, buf.String())
 	}
 
@@ -68,19 +86,46 @@ func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selecti
 		Spec: api.FunctionChainSpec{
 			Package:        pkg.Metadata.Name,
 			PackageVersion: pkg.Metadata.Version,
-			Groups:         groups,
+			Groups:         resolved,
 		},
 	}, nil
+}
+
+// gatherGroups concatenates package-wide groups with each selected
+// component's groups in installer.yaml declaration order. The picker
+// functions let one helper handle both Transformers and Validators without
+// reflection.
+func gatherGroups(
+	pkg *api.Package,
+	sel *api.Selection,
+	fromPackage func(*api.Package) []api.FunctionGroup,
+	fromComponent func(*api.Component) []api.FunctionGroup,
+) []api.FunctionGroup {
+	selected := map[string]bool{}
+	for _, name := range sel.Spec.Components {
+		selected[name] = true
+	}
+	out := append([]api.FunctionGroup(nil), fromPackage(pkg)...)
+	for i := range pkg.Spec.Components {
+		c := &pkg.Spec.Components[i]
+		if !selected[c.Name] {
+			continue
+		}
+		out = append(out, fromComponent(c)...)
+	}
+	return out
 }
 
 // resolveValidatorTemplate is the parallel of resolveChainTemplate for the
 // package's spec.validators field. Returns the resolved FunctionGroup list
 // ready to feed chainexec.RunValidators.
 func resolveValidatorTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selection, facts *api.Facts) ([]api.FunctionGroup, error) {
-	if len(pkg.Spec.Validators) == 0 {
+	groups := gatherGroups(pkg, sel, func(p *api.Package) []api.FunctionGroup { return p.Spec.Validators },
+		func(c *api.Component) []api.FunctionGroup { return c.Validators })
+	if len(groups) == 0 {
 		return nil, nil
 	}
-	srcBytes, err := yaml.Marshal(pkg.Spec.Validators)
+	srcBytes, err := yaml.Marshal(groups)
 	if err != nil {
 		return nil, fmt.Errorf("marshal validators: %w", err)
 	}
@@ -102,11 +147,11 @@ func resolveValidatorTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Sel
 	}); err != nil {
 		return nil, fmt.Errorf("execute validators template: %w", err)
 	}
-	var groups []api.FunctionGroup
-	if err := yaml.Unmarshal(buf.Bytes(), &groups); err != nil {
+	var resolved []api.FunctionGroup
+	if err := yaml.Unmarshal(buf.Bytes(), &resolved); err != nil {
 		return nil, fmt.Errorf("re-parse resolved validators: %w\n----\n%s\n----", err, buf.String())
 	}
-	return groups, nil
+	return resolved, nil
 }
 
 // RunValidators is the public entry point used by `installer vet`. Resolves

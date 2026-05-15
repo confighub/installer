@@ -147,6 +147,19 @@ type Component struct {
 	ValidForBases []string `yaml:"validForBases,omitempty" json:"validForBases,omitempty"`
 	// ExternalRequires scoped to this Component.
 	ExternalRequires []ExternalRequire `yaml:"externalRequires,omitempty" json:"externalRequires,omitempty"`
+	// Transformers is an optional component-scoped mixin: function groups
+	// that only run when this component is selected. Appended to the
+	// package-wide PackageSpec.Transformers in declaration order so the
+	// resolved chain still runs in a single in-process executor pass.
+	// Authored exactly like the package-wide list — same toolchain /
+	// whereResource / invocations shape, same restricted Go template
+	// surface ({{ .Namespace }}, {{ .Inputs.* }}, {{ .Selection.* }},
+	// {{ .Facts.* }}, {{ .Package.* }}).
+	Transformers []FunctionGroup `yaml:"transformers,omitempty" json:"transformers,omitempty"`
+	// Validators is the analogous component-scoped validator list. Appended
+	// to PackageSpec.Validators when this component is selected; same
+	// "Mutating=false only" contract.
+	Validators []FunctionGroup `yaml:"validators,omitempty" json:"validators,omitempty"`
 }
 
 // ExternalRequireKind enumerates the typed precondition categories observed

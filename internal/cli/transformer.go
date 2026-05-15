@@ -137,6 +137,13 @@ func runTransformer(ctx context.Context, in []byte) ([]byte, error) {
 		return nil, fmt.Errorf("decode functionConfig: %w", err)
 	}
 
+	// AppConfig annotation pre-pass runs regardless of which kind we're
+	// dispatching, so the canonical contract (toolchain + mode + source-key)
+	// is set on every annotated ConfigMap before any function group fires.
+	if err := injectAppConfigAnnotations(&list); err != nil {
+		return nil, err
+	}
+
 	switch header.Kind {
 	case kindConfigHubTransformers:
 		if err := runChainTransform(ctx, &list, header); err != nil {
@@ -173,27 +180,37 @@ func runChainTransform(ctx context.Context, list *resourceList, header functionC
 	if len(list.Items) == 0 || len(header.Spec.Groups) == 0 {
 		return nil
 	}
-	chain := &api.FunctionChain{
-		APIVersion: api.APIVersion,
-		Kind:       api.KindFunctionChain,
-		Metadata:   api.Metadata{Name: chainNameOr(header, "chain")},
-		Spec: api.FunctionChainSpec{
-			Groups: header.Spec.Groups,
-		},
+	// Groups are dispatched one at a time so AppConfig/* groups can take the
+	// per-carrier round-trip path while Kubernetes/YAML groups (and anything
+	// else top-level) run via chainexec.RunChain on the joined item stream.
+	// Each group's output mutates list.Items in place, so the data-feeds-
+	// forward semantic still holds across mixed-toolchain chains.
+	for _, group := range header.Spec.Groups {
+		if isAppConfigToolchain(group.Toolchain) {
+			if err := runAppConfigGroup(ctx, list, group, true, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		stream, err := encodeItemsAsStream(list.Items)
+		if err != nil {
+			return err
+		}
+		mutated, err := chainexec.RunChain(ctx, &api.FunctionChain{
+			APIVersion: api.APIVersion,
+			Kind:       api.KindFunctionChain,
+			Metadata:   api.Metadata{Name: chainNameOr(header, "chain")},
+			Spec:       api.FunctionChainSpec{Groups: []api.FunctionGroup{group}},
+		}, stream)
+		if err != nil {
+			return err
+		}
+		items, err := decodeStreamAsItems(mutated)
+		if err != nil {
+			return err
+		}
+		list.Items = items
 	}
-	stream, err := encodeItemsAsStream(list.Items)
-	if err != nil {
-		return err
-	}
-	mutated, err := chainexec.RunChain(ctx, chain, stream)
-	if err != nil {
-		return err
-	}
-	items, err := decodeStreamAsItems(mutated)
-	if err != nil {
-		return err
-	}
-	list.Items = items
 	return nil
 }
 
@@ -201,31 +218,39 @@ func runValidatorTransform(ctx context.Context, list *resourceList, header funct
 	if len(list.Items) == 0 || len(header.Spec.Groups) == 0 {
 		return nil
 	}
-	stream, err := encodeItemsAsStream(list.Items)
-	if err != nil {
-		return err
-	}
-	failures, err := chainexec.RunValidators(ctx, header.Spec.Groups, stream)
-	if err != nil {
-		return err
-	}
-	for _, f := range failures {
-		prefix := f.FunctionName
-		if f.UnitSlug != "" {
-			prefix = f.UnitSlug + "/" + prefix
-		}
-		if len(f.Details) == 0 {
-			list.Results = append(list.Results, krmResult{
-				Message:  fmt.Sprintf("%s: failed", prefix),
-				Severity: "error",
-			})
+	for _, group := range header.Spec.Groups {
+		if isAppConfigToolchain(group.Toolchain) {
+			if err := runAppConfigGroup(ctx, list, group, false, &list.Results); err != nil {
+				return err
+			}
 			continue
 		}
-		for _, d := range f.Details {
-			list.Results = append(list.Results, krmResult{
-				Message:  fmt.Sprintf("%s: %s", prefix, d),
-				Severity: "error",
-			})
+		stream, err := encodeItemsAsStream(list.Items)
+		if err != nil {
+			return err
+		}
+		failures, err := chainexec.RunValidators(ctx, []api.FunctionGroup{group}, stream)
+		if err != nil {
+			return err
+		}
+		for _, f := range failures {
+			prefix := f.FunctionName
+			if f.UnitSlug != "" {
+				prefix = f.UnitSlug + "/" + prefix
+			}
+			if len(f.Details) == 0 {
+				list.Results = append(list.Results, krmResult{
+					Message:  fmt.Sprintf("%s: failed", prefix),
+					Severity: "error",
+				})
+				continue
+			}
+			for _, d := range f.Details {
+				list.Results = append(list.Results, krmResult{
+					Message:  fmt.Sprintf("%s: %s", prefix, d),
+					Severity: "error",
+				})
+			}
 		}
 	}
 	return nil
