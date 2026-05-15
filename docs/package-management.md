@@ -319,7 +319,7 @@ surfaced in `installer inspect` and `installer doc`.
 
 ## Signing
 
-`installer push --sign` and `installer verify` use cosign (keyed or keyless).
+`installer sign` and `installer verify` use cosign (keyed or keyless).
 When a local policy file is present (`~/.config/installer/policy.yaml`),
 `pull` and `deps update` enforce verification before trusting an artifact's
 digest.

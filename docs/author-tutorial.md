@@ -475,23 +475,26 @@ installer inspect oci://ghcr.io/myorg/statusboard:0.1.0
 installer pull oci://ghcr.io/myorg/statusboard:0.1.0 ./statusboard-pulled
 ```
 
-For production releases, sign with cosign — keyed:
+For production releases, sign with `installer sign` after push.
+Keyless (Sigstore Fulcio + Rekor) is the default — an interactive
+OIDC flow opens a browser; `--yes` skips cosign's TTY confirmation
+prompt for CI:
+
+```bash
+installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --yes
+```
+
+Or keyed:
 
 ```bash
 cosign generate-key-pair
-installer push statusboard-0.1.0.tgz oci://ghcr.io/myorg/statusboard:0.1.0 \
-    --sign --key cosign.key
+installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.key
 ```
 
-Or keyless (Sigstore Fulcio + OIDC):
-
-```bash
-installer push statusboard-0.1.0.tgz oci://ghcr.io/myorg/statusboard:0.1.0 \
-    --sign --keyless
-```
-
-Operators can configure `~/.config/installer/policy.yaml` to require
-signatures on every pull.
+Requires the `cosign` binary on PATH (override via
+`INSTALLER_COSIGN_BIN`). Operators can configure
+`~/.config/installer/policy.yaml` to require signatures on every
+pull.
 
 ## Step 9: release a 0.2.0
 
