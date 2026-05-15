@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -14,6 +15,17 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
+// kustomizeHashSuffix matches kustomize's configMapGenerator hash suffix:
+// `-` followed by exactly 10 lowercase-alphanumeric chars at end-of-name.
+// Anchored to the end so author-chosen names like `my-app-v1` aren't
+// misdetected. When matched on the rendered ConfigMap, the carrier was
+// generated with disableNameSuffixHash=false (kustomize default) →
+// immutable mode → ConfigMap rolls on every content change. When not
+// matched, the name is stable → mutable mode → ConfigMap is updated in
+// place. Authors can override the inference by pre-setting
+// installer.confighub.com/appconfig-mutable explicitly.
+var kustomizeHashSuffix = regexp.MustCompile(`-[a-z0-9]{10}$`)
+
 // AppConfig annotation keys. `toolchain` is the only one authors write by
 // hand; mode and source-key are derived by the transformer from the carrier
 // ConfigMap's data: shape (authors can pre-set them to override the
@@ -22,6 +34,7 @@ const (
 	annoToolchain = "installer.confighub.com/toolchain"
 	annoMode      = "installer.confighub.com/appconfig-mode"
 	annoSourceKey = "installer.confighub.com/appconfig-source-key"
+	annoMutable   = "installer.confighub.com/appconfig-mutable"
 
 	appConfigModeFile = "file"
 	appConfigModeEnv  = "env"
@@ -165,6 +178,18 @@ func validateAndFillAnnotations(shape *configMapShape) error {
 		// env mode shouldn't carry a source-key annotation. Tolerate but
 		// strip it so downstream code doesn't see contradictory state.
 		delete(shape.Metadata.Annotations, annoSourceKey)
+	}
+
+	// Mutability is inferred from kustomize's hash-suffix convention on
+	// the rendered name unless the author pre-set the annotation. The
+	// inference works because kustomize appends `-<10-char hash>` exactly
+	// when disableNameSuffixHash is false (the generator default).
+	if _, set := shape.Metadata.Annotations[annoMutable]; !set {
+		if kustomizeHashSuffix.MatchString(shape.Metadata.Name) {
+			shape.Metadata.Annotations[annoMutable] = "false"
+		} else {
+			shape.Metadata.Annotations[annoMutable] = "true"
+		}
 	}
 	return nil
 }

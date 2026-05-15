@@ -277,7 +277,7 @@ entry onto the rendered ConfigMap, so the `toolchain` annotation
 is what reaches the installer transformer (running as an exec
 plugin) and the upload step (reading `out/manifests/`).
 
-The installer transformer infers two more annotations from the
+The installer transformer infers three more annotations from the
 rendered carrier and injects them back onto the ConfigMap so
 downstream consumers (upload, drift) see one canonical contract:
 
@@ -289,12 +289,23 @@ downstream consumers (upload, drift) see one canonical contract:
   file-mode only. The `data:` key whose value is the raw config
   body. Skipped when there's a single `data:` key (the unambiguous
   case).
+- `installer.confighub.com/appconfig-mutable: true | false` —
+  derived from the rendered ConfigMap's name pattern. Kustomize
+  appends a `-<10-char hash>` suffix iff `disableNameSuffixHash`
+  is false (the generator default), so the regex
+  `-[a-z0-9]{10}$` is a reliable signal. Matched → immutable
+  (versioned ConfigMaps, each content change rolls a new one);
+  unmatched → mutable (stable name, hash annotation on the
+  consuming workload triggers restarts). The upload step reads
+  this to set `RevisionHistoryLimit=0` on the renderer Target in
+  the mutable case.
 
-Authors don't write the mode or source-key annotations; the
-transformer infers and injects them. Authors who need to override
-the inference (rare: file-shaped `.env` content, or an ambiguous
-`data:` shape) can set the annotation explicitly on the generator
-entry and the transformer respects it.
+Authors don't write the mode, source-key, or mutable annotations
+themselves; the transformer infers and injects them. Authors who
+need to override the inference (rare: file-shaped `.env` content,
+an ambiguous `data:` shape, or a basename that happens to end in 10
+lowercase-alphanumeric chars) can set the annotation explicitly on
+the generator entry and the transformer respects it.
 
 We deliberately don't modify the package's `kustomization.yaml`
 files — that would conflict with the read-only-package principle.
@@ -347,10 +358,12 @@ split into four ConfigHub objects:
   - `AsKeyValue=true` iff mode=env AND toolchain=AppConfig/Env. The
     bridge ignores it for non-Env toolchains; we set it only where
     it's meaningful.
-  - `RevisionHistoryLimit` is left at the bridge default for the
-    MVP. A future enhancement will set it from a `disableNameSuffixHash`
-    derived annotation; the rendered ConfigMap name alone isn't
-    a reliable signal of the generator's hash setting.
+  - `RevisionHistoryLimit=0` iff `appconfig-mutable=true` (the
+    transformer pre-pass infers this from kustomize's hash-suffix
+    convention; see "Author contract" above). Mutable ConfigMaps
+    update in place; immutable ones (the kustomize default) leave
+    `RevisionHistoryLimit` at the bridge default so cub retains
+    a few revisions for rollback.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>`, matching the kustomize-generated name).
   Body is empty at upload; populated at apply time via the live-merge

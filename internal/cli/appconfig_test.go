@@ -48,6 +48,81 @@ functionConfig:
 	}
 }
 
+// TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName
+// verifies the mutability inference: a stable name (no kustomize hash
+// suffix) yields mutable=true, a hashed name yields mutable=false.
+func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		cmName      string
+		wantMutable string
+	}{
+		{name: "stable name → mutable", cmName: "app-config", wantMutable: "true"},
+		{name: "kustomize-hashed name → immutable", cmName: "app-config-798k5k7g9f", wantMutable: "false"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ` + tc.cmName + `
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Properties
+    data:
+      application.properties: a=1
+functionConfig:
+  apiVersion: installer.confighub.com/v1alpha1
+  kind: ConfigHubTransformers
+  metadata: {name: noop}
+  spec: {groups: []}
+`
+			out, err := runTransformer(context.Background(), []byte(input))
+			if err != nil {
+				t.Fatalf("runTransformer: %v", err)
+			}
+			cm := firstConfigMap(t, out)
+			if cm.Metadata.Annotations[annoMutable] != tc.wantMutable {
+				t.Errorf("appconfig-mutable: want %q, got %q",
+					tc.wantMutable, cm.Metadata.Annotations[annoMutable])
+			}
+		})
+	}
+}
+
+// TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride
+// verifies the inference doesn't clobber an author-set value. A hashed
+// name with appconfig-mutable=true should stay mutable=true.
+func TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride(t *testing.T) {
+	input := `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: app-config-798k5k7g9f
+      annotations:
+        installer.confighub.com/toolchain: AppConfig/Properties
+        installer.confighub.com/appconfig-mutable: "true"
+    data:
+      application.properties: a=1
+functionConfig:
+  apiVersion: installer.confighub.com/v1alpha1
+  kind: ConfigHubTransformers
+  metadata: {name: noop}
+  spec: {groups: []}
+`
+	out, err := runTransformer(context.Background(), []byte(input))
+	if err != nil {
+		t.Fatalf("runTransformer: %v", err)
+	}
+	cm := firstConfigMap(t, out)
+	if cm.Metadata.Annotations[annoMutable] != "true" {
+		t.Errorf("expected author override to win, got %q", cm.Metadata.Annotations[annoMutable])
+	}
+}
+
 // TestTransformer_AppConfigAnnotationInjection_EnvMode verifies the
 // pre-pass picks env mode for an AppConfig/Env ConfigMap whose data: holds
 // env-shaped key/value pairs.

@@ -17,6 +17,7 @@ const (
 	annoToolchain = "installer.confighub.com/toolchain"
 	annoMode      = "installer.confighub.com/appconfig-mode"
 	annoSourceKey = "installer.confighub.com/appconfig-source-key"
+	annoMutable   = "installer.confighub.com/appconfig-mutable"
 
 	appConfigModeFile = "file"
 	appConfigModeEnv  = "env"
@@ -45,6 +46,12 @@ type AppConfigManifest struct {
 	// SourceKey is the data: key whose value is the raw file body
 	// (file mode only). Empty in env mode.
 	SourceKey string
+	// Mutable reflects appconfig-mutable: when true, the renderer Target
+	// gets RevisionHistoryLimit=0 so the rendered ConfigMap updates in
+	// place (stable name, hash-annotation-driven workload rolling). When
+	// false, RevisionHistoryLimit is left at the bridge default so each
+	// content change produces a new, immutable ConfigMap revision.
+	Mutable bool
 	// Content is the raw AppConfig file body. file mode reads
 	// data[SourceKey] verbatim; env mode emits a `.env`-shaped doc
 	// from data: in sorted key order.
@@ -92,6 +99,10 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 			path, annoMode)
 	}
 	sourceKey := shape.Metadata.Annotations[annoSourceKey]
+	mutable, err := parseMutable(shape.Metadata.Annotations[annoMutable])
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 
 	m := &AppConfigManifest{
 		ManifestPath:     path,
@@ -100,6 +111,7 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 		Toolchain:        toolchain,
 		Mode:             mode,
 		SourceKey:        sourceKey,
+		Mutable:          mutable,
 	}
 	switch mode {
 	case appConfigModeFile:
@@ -147,16 +159,39 @@ func (m *AppConfigManifest) TargetSlug() string {
 //
 // AsKeyValue=true is set only when the carrier was generated from `envs:`
 // AND the toolchain is AppConfig/Env (the bridge silently ignores it for
-// other toolchains; we set it only where it's meaningful). The mutability
-// rule (RevisionHistoryLimit) is left at the bridge default for now —
-// authors can edit the Target post-upload if they need mutable mode. See
-// docs/transformer.md for the full mapping plan; a richer rule needs a
-// dedicated annotation since the rendered ConfigMap name alone doesn't
-// reliably tell us whether kustomize hashed it.
+// other toolchains; we set it only where it's meaningful).
+//
+// RevisionHistoryLimit=0 is set when the carrier is mutable (kustomize
+// did NOT append a hash suffix, indicating disableNameSuffixHash: true).
+// Mutable ConfigMaps update in place and rely on a hash annotation on
+// the workload to trigger rolling restarts; immutable ConfigMaps (the
+// kustomize default) roll on every content change, so we leave
+// RevisionHistoryLimit at the bridge default to retain a few revisions
+// in cub for rollback.
 func (m *AppConfigManifest) RendererOptions() []string {
 	var out []string
 	if m.Mode == appConfigModeEnv && m.Toolchain == "AppConfig/Env" {
 		out = append(out, "AsKeyValue=true")
 	}
+	if m.Mutable {
+		out = append(out, "RevisionHistoryLimit=0")
+	}
 	return out
+}
+
+// parseMutable parses the appconfig-mutable annotation value. Missing →
+// false (immutable, the kustomize default for configMapGenerator).
+// "true"/"false" → straightforward. Anything else is rejected so a
+// typo doesn't silently degrade to immutable.
+func parseMutable(v string) (bool, error) {
+	switch v {
+	case "":
+		return false, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s=%q must be \"true\" or \"false\"", annoMutable, v)
+	}
 }

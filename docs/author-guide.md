@@ -735,7 +735,11 @@ toolchain annotation and:
   `file` if the generator used `files:`, `env` if it used `envs:`) by
   inspecting `data:`. For file mode it also records
   `installer.confighub.com/appconfig-source-key` — the `data:` key
-  whose value is the raw config file body. Authors can pre-set both
+  whose value is the raw config file body. And it records
+  `installer.confighub.com/appconfig-mutable` (`true` or `false`)
+  by matching the rendered ConfigMap name against kustomize's
+  `-<10-char hash>` suffix — present iff `disableNameSuffixHash`
+  was its default of `false`. Authors can pre-set any of the three
   annotations to override the inference.
 - Routes any `AppConfig/*` function group in `spec.transformers` to
   the matching ConfigMap: extract the raw config from `data:`, run

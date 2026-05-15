@@ -57,6 +57,75 @@ data:
 	}
 }
 
+// TestDetectAppConfigManifest_MutableTriggersRevisionHistoryLimit
+// verifies that appconfig-mutable=true on the rendered ConfigMap maps
+// to RevisionHistoryLimit=0 on the renderer Target.
+func TestDetectAppConfigManifest_MutableTriggersRevisionHistoryLimit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cm.yaml")
+	writeFile(t, path, `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  annotations:
+    installer.confighub.com/toolchain: AppConfig/Properties
+    installer.confighub.com/appconfig-mode: file
+    installer.confighub.com/appconfig-source-key: application.properties
+    installer.confighub.com/appconfig-mutable: "true"
+data:
+  application.properties: x=1
+`)
+	got, err := DetectAppConfigManifest(path)
+	if err != nil {
+		t.Fatalf("DetectAppConfigManifest: %v", err)
+	}
+	if !got.Mutable {
+		t.Errorf("Mutable: want true, got false")
+	}
+	opts := got.RendererOptions()
+	hasRev := false
+	for _, o := range opts {
+		if o == "RevisionHistoryLimit=0" {
+			hasRev = true
+		}
+	}
+	if !hasRev {
+		t.Errorf("mutable=true should include RevisionHistoryLimit=0; got %v", opts)
+	}
+}
+
+// TestDetectAppConfigManifest_ImmutableSkipsRevisionHistoryLimit
+// verifies that the immutable case (the kustomize default) leaves
+// RevisionHistoryLimit unset so the bridge default applies.
+func TestDetectAppConfigManifest_ImmutableSkipsRevisionHistoryLimit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cm.yaml")
+	writeFile(t, path, `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-798k5k7g9f
+  annotations:
+    installer.confighub.com/toolchain: AppConfig/Properties
+    installer.confighub.com/appconfig-mode: file
+    installer.confighub.com/appconfig-source-key: application.properties
+    installer.confighub.com/appconfig-mutable: "false"
+data:
+  application.properties: x=1
+`)
+	got, err := DetectAppConfigManifest(path)
+	if err != nil {
+		t.Fatalf("DetectAppConfigManifest: %v", err)
+	}
+	if got.Mutable {
+		t.Errorf("Mutable: want false, got true")
+	}
+	for _, o := range got.RendererOptions() {
+		if strings.HasPrefix(o, "RevisionHistoryLimit") {
+			t.Errorf("immutable case must not set RevisionHistoryLimit; got %v", got.RendererOptions())
+		}
+	}
+}
+
 // TestDetectAppConfigManifest_EnvKeyValueOption verifies env-mode +
 // AppConfig/Env triggers the AsKeyValue=true Target option, and the
 // content is reconstructed as a deterministic .env-shaped doc.
