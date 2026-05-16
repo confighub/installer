@@ -127,7 +127,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				}
 			}
 
-			fmt.Printf("Next: installer upload %s --space <slug>\n", workDir)
+			fmt.Printf("Next: %s upload %s --space <slug>\n", InvocationName(), workDir)
 			return nil
 		},
 	}

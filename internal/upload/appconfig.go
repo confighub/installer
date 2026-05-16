@@ -140,12 +140,23 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 	return m, nil
 }
 
-// UnitSlug returns the slug for the AppConfig Unit derived from the
-// carrier ConfigMap's name. We append a stable suffix so the slug never
-// collides with the (separate) Kubernetes Units rendered in the same
-// Space.
+// UnitSlug returns the slug for the AppConfig Unit. It matches the
+// carrier ConfigMap's name with no suffix because the ConfigMapRenderer
+// bridge uses the Unit slug as the rendered ConfigMap's metadata.name —
+// so the Unit slug must equal the name workloads use (envFrom,
+// configMapRef, etc.) for refs to resolve at apply time.
 func (m *AppConfigManifest) UnitSlug() string {
-	return m.CarrierName + "-appconfig"
+	return m.CarrierName
+}
+
+// PlaceholderSlug returns the slug for the placeholder Kubernetes/YAML
+// ConfigMap Unit that the live-merge link populates from the AppConfig
+// Unit's live state. It carries a "-rendered" suffix so it doesn't
+// collide with UnitSlug in the same Space; the slug is not user-facing
+// (workloads still resolve by the ConfigMap's metadata.name, which
+// equals UnitSlug after the merge).
+func (m *AppConfigManifest) PlaceholderSlug() string {
+	return m.CarrierName + "-rendered"
 }
 
 // TargetSlug returns the slug for the ConfigMapRenderer Target. One Target

@@ -16,6 +16,23 @@ func invokedAsPlugin() bool {
 	return os.Getenv("CUB_PLUGIN") == "1"
 }
 
+// InvocationName is the command name to print in user-facing follow-up
+// instructions ("Next: ... upload <dir>"). It returns "cub install" when
+// the binary was launched via the cub plugin protocol so the operator
+// can copy-paste the suggestion back into their shell; otherwise it
+// returns os.Args[0] verbatim (e.g. "bin/install", "install",
+// "/usr/local/bin/install") so the suggestion matches what they
+// actually typed. Falls back to "installer" if os.Args is empty.
+func InvocationName() string {
+	if invokedAsPlugin() {
+		return "cub install"
+	}
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		return os.Args[0]
+	}
+	return "installer"
+}
+
 // NewRoot builds the root cobra command with all subcommands attached.
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{

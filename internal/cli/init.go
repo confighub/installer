@@ -135,8 +135,8 @@ resources: []
 			fmt.Printf("  - %s/\n", filepath.Join(dir, "validation"))
 			fmt.Println()
 			fmt.Println("Next: drop your kustomize resources under bases/default/, then run")
-			fmt.Printf("  installer wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", dir)
-			fmt.Printf("  installer render /tmp/dev\n")
+			fmt.Printf("  %s wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", InvocationName(), dir)
+			fmt.Printf("  %s render /tmp/dev\n", InvocationName())
 			return nil
 		},
 	}

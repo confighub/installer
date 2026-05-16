@@ -46,8 +46,11 @@ data:
 	if string(got.Content) != wantContent {
 		t.Errorf("Content: want %q, got %q", wantContent, string(got.Content))
 	}
-	if got.UnitSlug() != "app-config-appconfig" {
-		t.Errorf("UnitSlug: want app-config-appconfig, got %q", got.UnitSlug())
+	if got.UnitSlug() != "app-config" {
+		t.Errorf("UnitSlug: want app-config, got %q", got.UnitSlug())
+	}
+	if got.PlaceholderSlug() != "app-config-rendered" {
+		t.Errorf("PlaceholderSlug: want app-config-rendered, got %q", got.PlaceholderSlug())
 	}
 	if got.TargetSlug() != "app-config-renderer" {
 		t.Errorf("TargetSlug: want app-config-renderer, got %q", got.TargetSlug())

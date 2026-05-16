@@ -129,7 +129,7 @@ Pass --non-interactive to script the wizard with --base, --components,
 			}
 			fmt.Printf("Base: %s; components: %v\n", res.Selection.Spec.Base, res.Selection.Spec.Components)
 			fmt.Printf("Namespace: %s\n", raw.Namespace)
-			fmt.Printf("Next: installer render %s\n", absWork)
+			fmt.Printf("Next: %s render %s\n", InvocationName(), absWork)
 			return nil
 		},
 	}

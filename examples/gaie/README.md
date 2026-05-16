@@ -37,13 +37,13 @@ package that templates the chart at install time.
 ## Quick start
 
 ```bash
-bin/installer wizard ./examples/gaie \
+bin/install wizard ./examples/gaie \
   --work-dir /tmp/gaie \
   --non-interactive \
   --select sample-pool \
   --input namespace=inference
 
-bin/installer render /tmp/gaie
+bin/install render /tmp/gaie
 ls /tmp/gaie/out/manifests/
 ```
 

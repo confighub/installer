@@ -24,9 +24,17 @@ import (
 	"text/template"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/confighub/installer/internal/cubctx"
 	"github.com/confighub/installer/pkg/api"
 )
+
+// localConfigAnnotation is the kubernetes.io annotation that marks a KRM
+// resource as installer-/tool-only so kustomize, kpt, and the ConfigHub
+// bridges skip applying it to the cluster. See
+// https://kubernetes.io/docs/reference/labels-annotations-taints/#config-kubernetes-io-local-config
+const localConfigAnnotation = "config.kubernetes.io/local-config"
 
 // Package is one unit-of-upload — the parent or a locked dep.
 type Package struct {
@@ -223,13 +231,106 @@ func BuildInstallerRecord(pkg Package) ([]byte, error) {
 		trimmed := bytes.TrimSpace(data)
 		trimmed = bytes.TrimPrefix(trimmed, []byte("---\n"))
 		trimmed = bytes.TrimSpace(trimmed)
+		// Mark every doc as local-config so a stray `cub unit apply`
+		// (or kubectl/kustomize) treats the installer-record Unit as
+		// tooling state, not a workload to push to the cluster.
+		marked, err := addLocalConfigAnnotation(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("annotate %s: %w", p, err)
+		}
 		if i > 0 {
 			buf.WriteString("---\n")
 		}
-		buf.Write(trimmed)
+		buf.Write(marked)
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes(), nil
+}
+
+// addLocalConfigAnnotation sets metadata.annotations[localConfigAnnotation]
+// = "true" on a single YAML doc and returns the re-emitted bytes. The
+// re-emit goes through yaml.v3 so it preserves comments and node order
+// where possible. Returns the input unchanged if the doc isn't a mapping
+// (an empty stream or a non-KRM-shaped doc has nowhere to attach the
+// annotation, and there's nothing to apply in that case either).
+func addLocalConfigAnnotation(doc []byte) ([]byte, error) {
+	var node yaml.Node
+	if err := yaml.Unmarshal(doc, &node); err != nil {
+		return nil, fmt.Errorf("parse: %w", err)
+	}
+	root := documentRoot(&node)
+	if root == nil || root.Kind != yaml.MappingNode {
+		return doc, nil
+	}
+	metadata := mappingValue(root, "metadata")
+	if metadata == nil {
+		metadata = &yaml.Node{Kind: yaml.MappingNode}
+		setMappingValue(root, "metadata", metadata)
+	}
+	annotations := mappingValue(metadata, "annotations")
+	if annotations == nil {
+		annotations = &yaml.Node{Kind: yaml.MappingNode}
+		setMappingValue(metadata, "annotations", annotations)
+	}
+	setMappingScalar(annotations, localConfigAnnotation, "true")
+	out, err := yaml.Marshal(&node)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+	return bytes.TrimRight(out, "\n"), nil
+}
+
+// documentRoot returns the inner mapping node of a top-level yaml.Node
+// returned by yaml.Unmarshal (which always wraps the document in a
+// DocumentNode). Returns nil if the stream is empty.
+func documentRoot(n *yaml.Node) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == yaml.DocumentNode {
+		if len(n.Content) == 0 {
+			return nil
+		}
+		return n.Content[0]
+	}
+	return n
+}
+
+// mappingValue returns the value node for key inside a MappingNode, or nil
+// if absent. Mapping nodes store key/value pairs as alternating entries in
+// Content.
+func mappingValue(m *yaml.Node, key string) *yaml.Node {
+	if m == nil || m.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// setMappingValue replaces or appends a key/value pair on m.
+func setMappingValue(m *yaml.Node, key string, value *yaml.Node) {
+	if m == nil || m.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			m.Content[i+1] = value
+			return
+		}
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+		value,
+	)
+}
+
+// setMappingScalar sets a scalar string value under key on m.
+func setMappingScalar(m *yaml.Node, key, value string) {
+	setMappingValue(m, key, &yaml.Node{Kind: yaml.ScalarNode, Value: value})
 }
 
 // RefreshInstallerRecord rebuilds the installer-record Unit body from

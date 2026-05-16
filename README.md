@@ -81,10 +81,13 @@ Stubbed: `installer preflight` — cluster-side constraint checks.
 ## Build
 
 ```bash
-go build -o bin/installer ./cmd/installer
+make build       # writes bin/install
 ```
 
-`installer` shells out to `kustomize` for `kustomize build`. Install it from
+The binary is named `install` so the cub plugin protocol exposes it as
+`cub install ...` (cub names plugins after the entrypoint basename in
+`cub-plugin.yaml`). `install` shells out to `kustomize` for
+`kustomize build`. Install it from
 [kubernetes-sigs/kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/)
 or `brew install kustomize`.
 
@@ -94,11 +97,11 @@ End to end against the included example, no ConfigHub server required:
 
 ```bash
 # 1. Inspect what's in the package.
-bin/installer doc ./examples/hello-app
+bin/install doc ./examples/hello-app
 
 # 2. Wizard: pick base + components, supply inputs. Writes
 #    /tmp/hello/out/spec/{selection,inputs}.yaml.
-bin/installer wizard ./examples/hello-app \
+bin/install wizard ./examples/hello-app \
   --work-dir /tmp/hello \
   --non-interactive \
   --select monitoring --select ingress \
@@ -107,22 +110,22 @@ bin/installer wizard ./examples/hello-app \
 # 3. Render: composes a kustomization in out/compose/ with the ConfigHub
 #    function chain wired in as a kustomize transformer plugin, runs
 #    `kustomize build`, writes one file per resource to out/manifests/.
-bin/installer render /tmp/hello
+bin/install render /tmp/hello
 
 # 4. Upload to ConfigHub. Records the destination Space(s) in
 #    out/spec/upload.yaml so subsequent plan / update / upgrade
 #    re-enter the same Space without operator re-typing.
-bin/installer upload /tmp/hello --space my-greeter
+bin/install upload /tmp/hello --space my-greeter
 
 # 5. Day-2: edit a rendered file, see what update would do, apply.
 $EDITOR /tmp/hello/out/manifests/deployment-demo-hello-app.yaml
-bin/installer plan /tmp/hello              # read-only diff vs ConfigHub
-bin/installer update /tmp/hello --yes      # apply inside a ChangeSet
+bin/install plan /tmp/hello              # read-only diff vs ConfigHub
+bin/install update /tmp/hello --yes      # apply inside a ChangeSet
 
 # 6. Upgrade: re-pull, re-render, plan, then apply atomically.
-bin/installer upgrade /tmp/hello ./examples/hello-app \
+bin/install upgrade /tmp/hello ./examples/hello-app \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
-bin/installer upgrade-apply /tmp/hello     # promote .upgrade/ + run update
+bin/install upgrade-apply /tmp/hello     # promote .upgrade/ + run update
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -219,7 +222,7 @@ when the component is selected.
 ## Plugin install
 
 The binary doubles as a `cub` plugin. After publishing a release that includes
-a platform binary at the path `bin/installer`, install with:
+a platform binary at the path `bin/install`, install with:
 
 ```bash
 cub plugin install confighub/installer

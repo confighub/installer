@@ -169,11 +169,11 @@ re-render.`,
 
 			if apply {
 				fmt.Println()
-				fmt.Println("--apply: chaining `installer upgrade-apply`")
+				fmt.Printf("--apply: chaining `%s upgrade-apply`\n", InvocationName())
 				priorPkg := prior.PriorPackage
 				return runUpgradeApply(ctx, workDir, loaded.Package, yes, priorPkg)
 			}
-			fmt.Printf("\nNext: installer upgrade-apply %s   (or rerun with --apply)\n", workDir)
+			fmt.Printf("\nNext: %s upgrade-apply %s   (or rerun with --apply)\n", InvocationName(), workDir)
 			return nil
 		},
 	}
