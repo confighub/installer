@@ -494,11 +494,14 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		return fmt.Errorf("cub unit apply %s in %s: %w", appCfg.UnitSlug(), pkg.SpaceSlug, err)
 	}
 
-	// 5. Create the placeholder ConfigMap Unit whose slug matches the
-	//    carrier name. Empty body — populated by the live-merge link
-	//    below. Other workload Units in the same Space reference the
-	//    carrier by name; intra-Space link inference wires them into this
-	//    placeholder so the runtime ConfigMap name flows through.
+	// 5. Create the placeholder ConfigMap Unit. Its slug carries a
+	//    "-rendered" suffix so it doesn't collide with the AppConfig
+	//    Unit (which owns the carrier's name so the bridge stamps that
+	//    name onto the rendered ConfigMap). Body is empty at creation;
+	//    populated by the live-merge link below. Other workload Units
+	//    reference the ConfigMap by metadata.name (which equals
+	//    UnitSlug() after the merge); intra-Space link inference wires
+	//    them into this placeholder via the merged content.
 	placeholderArgs := []string{"unit", "create"}
 	if allowExists {
 		placeholderArgs = append(placeholderArgs, "--allow-exists")
@@ -517,12 +520,12 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	for _, l := range labels {
 		placeholderArgs = append(placeholderArgs, "--label", l)
 	}
-	placeholderArgs = append(placeholderArgs, appCfg.CarrierName)
+	placeholderArgs = append(placeholderArgs, appCfg.PlaceholderSlug())
 	pcmd := exec.Command("cub", placeholderArgs...)
 	pcmd.Stdout = os.Stdout
 	pcmd.Stderr = os.Stderr
 	if err := pcmd.Run(); err != nil {
-		return fmt.Errorf("cub unit create %s in %s: %w", appCfg.CarrierName, pkg.SpaceSlug, err)
+		return fmt.Errorf("cub unit create %s in %s: %w", appCfg.PlaceholderSlug(), pkg.SpaceSlug, err)
 	}
 
 	// 6. Live-state MergeUnits link from placeholder → AppConfig Unit.
@@ -540,13 +543,13 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		"--space", pkg.SpaceSlug,
 		"--use-live-state", "--auto-update", "--update-type", "MergeUnits",
 		"--label", componentLabel,
-		"-", appCfg.CarrierName, appCfg.UnitSlug(),
+		"-", appCfg.PlaceholderSlug(), appCfg.UnitSlug(),
 	)
 	lcmd := exec.Command("cub", linkArgs...)
 	lcmd.Stdout = os.Stdout
 	lcmd.Stderr = os.Stderr
 	if err := lcmd.Run(); err != nil {
-		return fmt.Errorf("cub link create %s → %s in %s: %w", appCfg.CarrierName, appCfg.UnitSlug(), pkg.SpaceSlug, err)
+		return fmt.Errorf("cub link create %s → %s in %s: %w", appCfg.PlaceholderSlug(), appCfg.UnitSlug(), pkg.SpaceSlug, err)
 	}
 
 	// 7. Stamp the correct namespace onto the placeholder Unit's now-
@@ -563,12 +566,12 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		fcmd := exec.Command("cub", "function", "do", "--quiet",
 			"--space", pkg.SpaceSlug,
 			"--toolchain", "Kubernetes/YAML",
-			"--unit", appCfg.CarrierName,
+			"--unit", appCfg.PlaceholderSlug(),
 			"set-namespace", namespace)
 		fcmd.Stdout = os.Stdout
 		fcmd.Stderr = os.Stderr
 		if err := fcmd.Run(); err != nil {
-			return fmt.Errorf("cub function do set-namespace on %s in %s: %w", appCfg.CarrierName, pkg.SpaceSlug, err)
+			return fmt.Errorf("cub function do set-namespace on %s in %s: %w", appCfg.PlaceholderSlug(), pkg.SpaceSlug, err)
 		}
 	}
 	return nil

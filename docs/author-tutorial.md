@@ -20,7 +20,7 @@ For the doctrine the installer is anchored to, see
 
 ## Prerequisites
 
-- `installer` binary on PATH (or invoke `bin/installer` from a clone).
+- `install` binary on PATH (or invoke `bin/install` from a clone).
 - `kustomize` on PATH.
 - `cub` on PATH and signed in (`cub auth login`).
 - The `kubernetes-resources` package bootstrapped in your

@@ -210,8 +210,8 @@ func newNewCmd() *cobra.Command {
 			}
 			fmt.Println()
 			fmt.Println("Next: re-render to verify the new resource:")
-			fmt.Printf("  installer wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", abs)
-			fmt.Printf("  installer render /tmp/dev\n")
+			fmt.Printf("  %s wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", InvocationName(), abs)
+			fmt.Printf("  %s render /tmp/dev\n", InvocationName())
 			return nil
 		},
 	}

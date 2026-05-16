@@ -57,8 +57,8 @@ trap cleanup EXIT
 
 # 1. Build.
 log "build installer"
-( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
-BIN="$REPO_ROOT/bin/installer"
+( cd "$REPO_ROOT" && go build -o bin/install ./cmd/installer )
+BIN="$REPO_ROOT/bin/install"
 
 # 2. Registry.
 log "start registry:2 on :$REGISTRY_PORT"

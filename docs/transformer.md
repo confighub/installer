@@ -347,9 +347,14 @@ write-back; failures become `ResourceList.results`.
 At upload, ConfigMaps with `installer.confighub.com/toolchain` are
 split into four ConfigHub objects:
 
-- **AppConfig Unit** (slug `<carrier-name>-appconfig`). Toolchain
-  from the annotation. Data = the extracted raw file body. Day-2
-  source of truth in the native format.
+- **AppConfig Unit** (slug = `<carrier-name>`, matching the
+  kustomize-generated ConfigMap name). Toolchain from the annotation.
+  Data = the extracted raw file body. Day-2 source of truth in the
+  native format. The ConfigMapRenderer bridge uses the Unit slug as
+  the rendered ConfigMap's `metadata.name`, so the slug deliberately
+  has no suffix — workloads can reference the carrier by its
+  kustomize-generated name (e.g. `envFrom.configMapRef.name`) and the
+  rendered ConfigMap will match.
 - **ConfigMapRenderer Target** (slug `<carrier-name>-renderer`).
   Provider `ConfigMapRenderer`, toolchain from the annotation,
   livestate-type `Kubernetes/YAML`. Attached to the AppConfig Unit
@@ -372,14 +377,17 @@ split into four ConfigHub objects:
   link inference at the end of `uploadOnePackage` then reads to wire
   workload references (envFrom, volumes, etc.) into the placeholder.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
-  `<carrier-name>`, matching the kustomize-generated name).
-  Body is empty at creation; populated by the live-merge link below
-  using the live state from the just-applied AppConfig Unit. Inherits
-  the upload-wide `--target` flag (typically a Kubernetes namespace
-  target) so it applies into the same place as every other rendered
-  manifest. Other workload Units in the Space reference the carrier
-  by name, so existing intra-Space link inference
-  (`internal/upload/links.go`) wires them into this placeholder.
+  `<carrier-name>-rendered`). Body is empty at creation; populated by
+  the live-merge link below using the live state from the
+  just-applied AppConfig Unit. Inherits the upload-wide `--target`
+  flag (typically a Kubernetes namespace target) so it applies into
+  the same place as every other rendered manifest. The `-rendered`
+  suffix avoids colliding with the AppConfig Unit (which owns the
+  bare carrier name). Workloads still resolve to the rendered
+  ConfigMap by `metadata.name` (= `<carrier-name>`, set by the bridge
+  from the AppConfig Unit's slug), so intra-Space link inference
+  (`internal/upload/links.go`) wires them into this placeholder via
+  the merged content.
 - **Live-merge link** (server-assigned slug via `-`).
   `--use-live-state --auto-update --update-type MergeUnits`. Pulls
   the rendered ConfigMap from the AppConfig Unit's live state into

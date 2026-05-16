@@ -173,6 +173,44 @@ func TestBuildInstallerRecord(t *testing.T) {
 	}
 }
 
+// TestBuildInstallerRecord_LocalConfigAnnotation verifies every doc in
+// the multi-doc body carries config.kubernetes.io/local-config: "true"
+// so a stray `cub unit apply` (or kubectl/kustomize) skips applying
+// the installer-record Unit's contents to the cluster.
+func TestBuildInstallerRecord_LocalConfigAnnotation(t *testing.T) {
+	work := t.TempDir()
+	pkgDir := filepath.Join(work, "package")
+	specDir := filepath.Join(work, "out", "spec")
+	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), minimalParentYAML)
+	// Spec doc with no annotations: section should be added.
+	writeFile(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata: {name: x}
+`)
+	// Spec doc with a pre-existing unrelated annotation: should keep it
+	// AND gain local-config.
+	writeFile(t, filepath.Join(specDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: y
+  annotations:
+    example.com/keep-me: "1"
+`)
+
+	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, SpecDir: specDir})
+	if err != nil {
+		t.Fatalf("BuildInstallerRecord: %v", err)
+	}
+	got := string(body)
+	count := strings.Count(got, "config.kubernetes.io/local-config")
+	if count != 3 {
+		t.Errorf("expected local-config annotation on all 3 docs, got %d occurrences:\n%s", count, got)
+	}
+	if !strings.Contains(got, "example.com/keep-me") {
+		t.Errorf("pre-existing unrelated annotation was dropped:\n%s", got)
+	}
+}
+
 func TestSplitInstallerRecord(t *testing.T) {
 	work := t.TempDir()
 	pkgDir := filepath.Join(work, "package")
