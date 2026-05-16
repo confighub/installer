@@ -23,10 +23,19 @@ import (
 // Each new link is labeled Component=<component> so it can be
 // filtered alongside the package's units.
 //
+// skipUnmatched suppresses entries from the unmatched-references
+// reminder for resources the caller already accounts for elsewhere
+// (e.g., rendered Secrets the operator will apply out-of-band). Keys
+// are produced by UnmatchedKey(targetType, targetName). Pass nil to
+// report every unmatched reference. Built-in Kubernetes ClusterRoles
+// are always filtered out — they pre-exist in every cluster and
+// would otherwise dominate the reminder for any package that ships a
+// RoleBinding.
+//
 // Used by `installer upload` (after the per-package Unit creation
 // loop) and by `installer update` (after Apply mutates the Unit set).
 // The two paths share an implementation so behavior cannot drift.
-func ReconcileLinks(ctx context.Context, space, component string) error {
+func ReconcileLinks(ctx context.Context, space, component string, skipUnmatched map[string]struct{}) error {
 	resources, err := loadResources(ctx, space)
 	if err != nil {
 		return err
@@ -43,7 +52,7 @@ func ReconcileLinks(ctx context.Context, space, component string) error {
 	if err != nil {
 		return err
 	}
-	edges := planLinks(resources, refs, labels, crds)
+	edges, unmatched := planLinks(resources, refs, labels, crds)
 
 	existing, err := loadExistingIntraSpaceLinks(ctx, space)
 	if err != nil {
@@ -65,7 +74,58 @@ func ReconcileLinks(ctx context.Context, space, component string) error {
 	if created == 0 && len(edges) == 0 {
 		fmt.Println("No links to create.")
 	}
+	reportUnmatchedReferences(unmatched, skipUnmatched)
 	return nil
+}
+
+// UnmatchedKey produces the canonical key for the skipUnmatched set
+// passed to ReconcileLinks. The shape matches what reportUnmatchedReferences
+// computes per row internally.
+func UnmatchedKey(targetType, targetName string) string {
+	return targetType + "\x00" + targetName
+}
+
+// reportUnmatchedReferences prints a non-fatal reminder for references in
+// uploaded workload Units that didn't match any Unit in the Space. Most
+// common reason: the referenced resource lives in the cluster but isn't
+// managed by ConfigHub (e.g., a Secret created out-of-band, a Namespace
+// owned by the platform team, a ServiceAccount provided by a base
+// install). The installer can't verify those from here — we don't assume
+// the operator running `installer upload` has cluster access — so we
+// surface the list for the operator to confirm rather than failing.
+//
+// Two classes of references are always suppressed:
+//   - Built-in Kubernetes ClusterRoles (cluster-admin/admin/edit/view
+//     and anything under the system: prefix) — they pre-exist in every
+//     cluster and would otherwise dominate the reminder for packages
+//     that ship a RoleBinding.
+//   - Anything whose UnmatchedKey is in skipUnmatched, which the caller
+//     uses to suppress targets it already mentions in a separate
+//     reminder (e.g., rendered-but-not-uploaded Secrets that the
+//     operator will apply out-of-band).
+func reportUnmatchedReferences(unmatched []UnmatchedReference, skipUnmatched map[string]struct{}) {
+	var visible []UnmatchedReference
+	for _, u := range unmatched {
+		if u.TargetType == "rbac.authorization.k8s.io/v1/ClusterRole" && IsBuiltInClusterRole(u.TargetName) {
+			continue
+		}
+		if _, ok := skipUnmatched[UnmatchedKey(u.TargetType, u.TargetName)]; ok {
+			continue
+		}
+		visible = append(visible, u)
+	}
+	if len(visible) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("Note: the following references didn't resolve to any Unit in this Space.")
+	fmt.Println("That's expected when the referenced resource lives in the cluster but")
+	fmt.Println("isn't managed by ConfigHub (e.g., a Secret created out-of-band, a")
+	fmt.Println("Namespace owned by the platform team). Verify each against your cluster")
+	fmt.Println("before applying.")
+	for _, u := range visible {
+		fmt.Printf("  - %s -> %s %q\n", u.FromUnit, u.TargetType, u.TargetName)
+	}
 }
 
 // LinkEdge is one inferred edge between two Units in the same Space.
@@ -76,6 +136,17 @@ type LinkEdge struct {
 	ToUnit   string
 	// Reason is human-readable; surfaced in upload/update logs.
 	Reason string
+}
+
+// UnmatchedReference is a `get-references` result that didn't match any
+// Unit in the Space — workload Unit FromUnit references a resource of
+// type TargetType named TargetName, but no Unit holds that target.
+// Typically a sign that the target lives in the cluster (out-of-band
+// Secret, platform-team Namespace, etc.) rather than a bug.
+type UnmatchedReference struct {
+	FromUnit   string
+	TargetType string
+	TargetName string
 }
 
 func createLink(ctx context.Context, space, component string, e LinkEdge) error {
@@ -296,7 +367,7 @@ func planLinks(
 	refs map[string][]referenceEntry,
 	labels map[string]*workloadLabels,
 	crds map[string]string,
-) []LinkEdge {
+) ([]LinkEdge, []UnmatchedReference) {
 	seen := map[string]LinkEdge{}
 	add := func(from, to, reason string) {
 		if from == to || from == "" || to == "" {
@@ -308,10 +379,28 @@ func planLinks(
 		}
 		seen[key] = LinkEdge{FromUnit: from, ToUnit: to, Reason: reason}
 	}
+	// Dedup unmatched refs on (fromUnit, targetType, targetName) so a
+	// reference that's repeated across paths (e.g., a Secret named in
+	// envFrom AND volumes) doesn't get reported twice.
+	unmatchedSeen := map[string]struct{}{}
+	var unmatched []UnmatchedReference
 	for fromUnit, entries := range refs {
 		for _, r := range entries {
 			k := resourceLookupKey(r.targetType, r.targetName)
-			for _, toUnit := range resources.unitsByTypeName[k] {
+			matches := resources.unitsByTypeName[k]
+			if len(matches) == 0 {
+				key := fromUnit + "\x00" + string(r.targetType) + "\x00" + string(r.targetName)
+				if _, dup := unmatchedSeen[key]; !dup {
+					unmatchedSeen[key] = struct{}{}
+					unmatched = append(unmatched, UnmatchedReference{
+						FromUnit:   fromUnit,
+						TargetType: string(r.targetType),
+						TargetName: string(r.targetName),
+					})
+				}
+				continue
+			}
+			for _, toUnit := range matches {
 				add(fromUnit, toUnit, "reference:"+string(r.targetType))
 			}
 		}
@@ -358,7 +447,16 @@ func planLinks(
 		}
 		return out[i].Reason < out[j].Reason
 	})
-	return out
+	sort.Slice(unmatched, func(i, j int) bool {
+		if unmatched[i].FromUnit != unmatched[j].FromUnit {
+			return unmatched[i].FromUnit < unmatched[j].FromUnit
+		}
+		if unmatched[i].TargetType != unmatched[j].TargetType {
+			return unmatched[i].TargetType < unmatched[j].TargetType
+		}
+		return unmatched[i].TargetName < unmatched[j].TargetName
+	})
+	return out, unmatched
 }
 
 func anySelectorMatches(selectors, templates []map[string]string) bool {

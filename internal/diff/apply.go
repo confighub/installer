@@ -149,7 +149,9 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 			res.Deleted += deleted
 		}
 		// Re-run link inference now that the Unit set has changed.
-		if err := upload.ReconcileLinks(ctx, sp.SpaceSlug, sp.Package); err != nil {
+		// No skip set here — `installer update` doesn't have the
+		// installer's rendered out/secrets/ context in hand.
+		if err := upload.ReconcileLinks(ctx, sp.SpaceSlug, sp.Package, nil); err != nil {
 			return res, err
 		}
 		if opts.PostSpaceHook != nil {
