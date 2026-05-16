@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/deps"
 	ipkg "github.com/confighub/installer/internal/pkg"
@@ -283,7 +284,105 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 	if err := createInstallerRecordUnit(pkg, allowExists); err != nil {
 		return err
 	}
-	return upload.ReconcileLinks(context.Background(), pkg.SpaceSlug, pkg.Name)
+	renderedSecrets := loadRenderedSecretsFromDir(pkg.SecretsDir)
+	skipUnmatched := skipKeysForRenderedSecrets(renderedSecrets)
+	if err := upload.ReconcileLinks(context.Background(), pkg.SpaceSlug, pkg.Name, skipUnmatched); err != nil {
+		return err
+	}
+	reportSecretsNotUploaded(pkg, renderedSecrets)
+	return nil
+}
+
+// renderedSecret describes one rendered Secret manifest in pkg.SecretsDir.
+// We parse the file enough to print kind/name/namespace in the reminder
+// AND to skip the matching entry in ReconcileLinks' unmatched-references
+// list — otherwise the operator sees the same Secret called out twice.
+type renderedSecret struct {
+	Filename  string
+	Type      string // apiVersion/Kind, e.g. v1/Secret
+	Name      string
+	Namespace string
+}
+
+// loadRenderedSecretsFromDir scans pkg.SecretsDir and returns one entry
+// per .yaml/.yml file. Best-effort: a missing dir, an unparseable file,
+// or a doc that doesn't look like a Kubernetes resource is just skipped.
+// The dir may legitimately not exist when no Secrets were rendered.
+func loadRenderedSecretsFromDir(secretsDir string) []renderedSecret {
+	if secretsDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(secretsDir)
+	if err != nil {
+		return nil
+	}
+	var out []renderedSecret
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if !strings.HasSuffix(n, ".yaml") && !strings.HasSuffix(n, ".yml") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(secretsDir, n))
+		if err != nil {
+			continue
+		}
+		var doc struct {
+			APIVersion string `yaml:"apiVersion"`
+			Kind       string `yaml:"kind"`
+			Metadata   struct {
+				Name      string `yaml:"name"`
+				Namespace string `yaml:"namespace"`
+			} `yaml:"metadata"`
+		}
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			continue
+		}
+		if doc.Kind == "" || doc.Metadata.Name == "" {
+			continue
+		}
+		out = append(out, renderedSecret{
+			Filename:  n,
+			Type:      doc.APIVersion + "/" + doc.Kind,
+			Name:      doc.Metadata.Name,
+			Namespace: doc.Metadata.Namespace,
+		})
+	}
+	return out
+}
+
+func skipKeysForRenderedSecrets(secrets []renderedSecret) map[string]struct{} {
+	if len(secrets) == 0 {
+		return nil
+	}
+	keys := make(map[string]struct{}, len(secrets))
+	for _, s := range secrets {
+		keys[upload.UnmatchedKey(s.Type, s.Name)] = struct{}{}
+	}
+	return keys
+}
+
+// reportSecretsNotUploaded surfaces any rendered Secrets that landed in
+// pkg.SecretsDir. The installer renders them (so the operator can inspect
+// and apply them out-of-band) but never uploads them as Units — they
+// don't belong in ConfigHub today.
+func reportSecretsNotUploaded(pkg upload.Package, secrets []renderedSecret) {
+	if len(secrets) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("Note: %d rendered Secret(s) in %s were NOT uploaded to ConfigHub.\n", len(secrets), pkg.SecretsDir)
+	fmt.Println("Apply them out-of-band (e.g., `kubectl apply -f`) or stage them however your")
+	fmt.Println("environment manages secrets:")
+	for _, s := range secrets {
+		fullName := s.Name
+		if s.Namespace != "" {
+			fullName = s.Namespace + "/" + s.Name
+		}
+		fmt.Printf("  - %s %q (%s)\n", s.Type, fullName, s.Filename)
+	}
 }
 
 // uploadAppConfigManifest materializes the AppConfig bundle in pkg's
