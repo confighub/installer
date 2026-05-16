@@ -83,14 +83,8 @@ data:
 		t.Errorf("Mutable: want true, got false")
 	}
 	opts := got.RendererOptions()
-	hasRev := false
-	for _, o := range opts {
-		if o == "RevisionHistoryLimit=0" {
-			hasRev = true
-		}
-	}
-	if !hasRev {
-		t.Errorf("mutable=true should include RevisionHistoryLimit=0; got %v", opts)
+	if !strings.Contains(opts, "RevisionHistoryLimit=0") {
+		t.Errorf("mutable=true should include RevisionHistoryLimit=0; got %q", opts)
 	}
 }
 
@@ -119,10 +113,8 @@ data:
 	if got.Mutable {
 		t.Errorf("Mutable: want false, got true")
 	}
-	for _, o := range got.RendererOptions() {
-		if strings.HasPrefix(o, "RevisionHistoryLimit") {
-			t.Errorf("immutable case must not set RevisionHistoryLimit; got %v", got.RendererOptions())
-		}
+	if strings.Contains(got.RendererOptions(), "RevisionHistoryLimit") {
+		t.Errorf("immutable case must not set RevisionHistoryLimit; got %q", got.RendererOptions())
 	}
 }
 
@@ -153,9 +145,8 @@ data:
 	if got.Mode != "env" {
 		t.Errorf("Mode: want env, got %q", got.Mode)
 	}
-	opts := got.RendererOptions()
-	if len(opts) != 1 || opts[0] != "AsKeyValue=true" {
-		t.Errorf("RendererOptions: want [AsKeyValue=true], got %v", opts)
+	if opts := got.RendererOptions(); opts != "AsKeyValue=true" {
+		t.Errorf("RendererOptions: want \"AsKeyValue=true\", got %q", opts)
 	}
 	// Env content is rendered with sorted keys for determinism: BAZ before FOO.
 	wantContent := "BAZ=qux\nFOO=bar\n"

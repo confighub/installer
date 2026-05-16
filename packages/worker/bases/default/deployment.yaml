@@ -27,5 +27,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
           envFrom:
+            - configMapRef:
+                name: confighub-worker-env
             - secretRef:
                 name: confighub-worker-secret

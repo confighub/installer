@@ -35,8 +35,7 @@ type composeInputs struct {
 	Loaded            *ipkg.Loaded
 	Selection         *api.Selection
 	Chain             *api.FunctionChain // resolved; may have zero groups
-	Validators        []api.FunctionGroup
-	TransformerBinary string // absolute path to the installer binary
+	TransformerBinary string             // absolute path to the installer binary
 }
 
 // composeKustomization writes a synthesized kustomization tree under
@@ -114,14 +113,22 @@ func composeKustomization(in composeInputs, composeDir string) error {
 		composed.Transformers = append(composed.Transformers, "transformers.yaml")
 		needsWrapper = true
 	}
-	if len(in.Validators) > 0 {
-		if err := writeKRMFunctionConfig(composeDir, "validators.yaml", kindConfigHubValidators,
-			pkg.Metadata.Name+"-validators", in.Validators); err != nil {
-			return err
-		}
-		composed.Validators = append(composed.Validators, "validators.yaml")
-		needsWrapper = true
-	}
+	// Validators do NOT go into the synthesized kustomization. Two
+	// reasons make running them in-process after kustomize build
+	// strictly better than running them as a kustomize validator:
+	//   - Kustomize's validators: slot enforces byte-level item
+	//     pass-through; yaml.v3 round-trip subtly reformats unchanged
+	//     items and trips the check. Avoiding that without pulling in
+	//     kyaml is expensive.
+	//   - Kustomize's transformers: slot ignores severity=error
+	//     results, so moving validators there silently swallows
+	//     failures.
+	// The installer reads pkg.Spec.Validators (plus components')
+	// directly and runs them via chainexec.RunValidators against the
+	// kustomize output. Standalone kustomize users who want ConfigHub
+	// validators can wire ConfigHubValidators into their own
+	// kustomization's validators: list — `installer transformer`
+	// supports it.
 	if needsWrapper {
 		if err := writeTransformerWrapper(composeDir, in.TransformerBinary); err != nil {
 			return err
@@ -160,15 +167,14 @@ type krmFunctionConfigMeta struct {
 	Annotations map[string]string `yaml:"annotations"`
 }
 
-// kindConfigHubTransformers and kindConfigHubValidators are defined in
-// internal/cli/transformer.go; we redeclare here to avoid an import cycle
-// (cli imports render in some commands, so render can't import cli). They
-// parallel the kustomization.yaml sections they're meant to be listed under
-// — transformers: and validators: respectively.
-const (
-	kindConfigHubTransformers = "ConfigHubTransformers"
-	kindConfigHubValidators   = "ConfigHubValidators"
-)
+// kindConfigHubTransformers names the KRM functionConfig kind our exec
+// plugin recognizes for the kustomization's transformers: list. The
+// matching ConfigHubValidators kind exists in internal/cli/transformer.go
+// for standalone-kustomize users wiring it into their own validators:
+// list — `installer render` runs validators in-process after kustomize
+// (see render.go and post_validate.go) and doesn't emit a ConfigHubValidators
+// config into the synthesized kustomization.
+const kindConfigHubTransformers = "ConfigHubTransformers"
 
 func writeKRMFunctionConfig(composeDir, filename, kind, name string, groups []api.FunctionGroup) error {
 	cfg := krmFunctionConfig{

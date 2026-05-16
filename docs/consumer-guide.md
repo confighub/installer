@@ -155,10 +155,11 @@ If the package ships application-config files (a `configMapGenerator`
 tagged with `installer.confighub.com/toolchain`, e.g.
 `AppConfig/Properties` or `AppConfig/Env`), `installer upload` also
 creates a `ConfigMapRenderer` Target plus a separate AppConfig Unit
-holding the raw config body. The renderer Target needs a worker;
-the installer defaults to `<space>/server-worker`. Override with
-`installer upload $WD --space ... --appconfig-worker <slug>` if your
-Space's renderer worker lives under a different slug.
+holding the raw config body. The renderer Target needs a worker; the
+installer auto-creates a server-side worker named `renderer-worker` in
+the destination Space (idempotent — re-uploading is safe). Override
+with `installer upload $WD --space ... --appconfig-worker <slug>` if
+you'd rather point at an existing worker.
 
 ## Where to make changes
 

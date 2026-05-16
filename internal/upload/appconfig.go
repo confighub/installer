@@ -154,8 +154,14 @@ func (m *AppConfigManifest) TargetSlug() string {
 	return m.CarrierName + "-renderer"
 }
 
-// RendererOptions returns the `--option K=V` flags appropriate for this
-// AppConfig manifest's ConfigMapRenderer Target.
+// RendererOptions returns the value for a single `--option K=V` flag
+// appropriate for this AppConfig manifest's ConfigMapRenderer Target.
+// Multiple bridge options for one ConfigType are semicolon-joined in a
+// single flag value — cub's `cub target create --option` is position-
+// aligned (each --option flag corresponds to a ConfigType slot), so
+// repeating --option N times would tell cub we want N ConfigTypes,
+// which fails validation when only one --provider/--toolchain/--livestate-type
+// triple is supplied. Returns "" when no options apply.
 //
 // AsKeyValue=true is set only when the carrier was generated from `envs:`
 // AND the toolchain is AppConfig/Env (the bridge silently ignores it for
@@ -168,15 +174,15 @@ func (m *AppConfigManifest) TargetSlug() string {
 // kustomize default) roll on every content change, so we leave
 // RevisionHistoryLimit at the bridge default to retain a few revisions
 // in cub for rollback.
-func (m *AppConfigManifest) RendererOptions() []string {
-	var out []string
+func (m *AppConfigManifest) RendererOptions() string {
+	var parts []string
 	if m.Mode == appConfigModeEnv && m.Toolchain == "AppConfig/Env" {
-		out = append(out, "AsKeyValue=true")
+		parts = append(parts, "AsKeyValue=true")
 	}
 	if m.Mutable {
-		out = append(out, "RevisionHistoryLimit=0")
+		parts = append(parts, "RevisionHistoryLimit=0")
 	}
-	return out
+	return strings.Join(parts, ";")
 }
 
 // parseMutable parses the appconfig-mutable annotation value. Missing →

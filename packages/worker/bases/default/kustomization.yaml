@@ -5,6 +5,13 @@ resources:
 - serviceaccount.yaml
 - clusterrolebinding.yaml
 - deployment.yaml
+configMapGenerator:
+- envs:
+  - confighub-worker.env
+  name: confighub-worker-env
+  options:
+    annotations:
+      installer.confighub.com/toolchain: AppConfig/Env
 secretGenerator:
 - envs:
   - confighub-worker-secret.env.secret

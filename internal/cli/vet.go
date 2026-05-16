@@ -80,7 +80,7 @@ wizard' first).`,
 			fmt.Printf("Vetting %d resource(s) under %s against %d validator group(s)...\n",
 				countDocs(body), manifestsDir, len(loaded.Package.Spec.Validators))
 
-			failures, err := render.RunValidators(ctx, loaded.Package, sel, inputs, facts, body)
+			failures, err := render.RunValidators(ctx, loaded.Package, sel, inputs, facts, loaded.Root, body)
 			if err != nil {
 				return err
 			}

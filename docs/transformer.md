@@ -364,21 +364,44 @@ split into four ConfigHub objects:
     update in place; immutable ones (the kustomize default) leave
     `RevisionHistoryLimit` at the bridge default so cub retains
     a few revisions for rollback.
+- **Apply the AppConfig Unit** (`cub unit apply --wait`) right after
+  creating it. The renderer Target's worker produces the rendered
+  ConfigMap as the AppConfig Unit's live state. Doing the apply
+  before the link is created (next step) means the link's initial
+  MergeUnits pulls real content into the placeholder's Data — which
+  link inference at the end of `uploadOnePackage` then reads to wire
+  workload references (envFrom, volumes, etc.) into the placeholder.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>`, matching the kustomize-generated name).
-  Body is empty at upload; populated at apply time via the live-merge
-  link below. Inherits the upload-wide `--target` flag (typically a
-  Kubernetes namespace target) so it applies into the same place as
-  every other rendered manifest. Other workload Units in the Space
-  reference the carrier by name, so existing intra-Space link
-  inference (`internal/upload/links.go`) wires them into this
-  placeholder without any new logic.
-- **Live-merge link** (slug `<carrier-name>-from-<carrier-name>-appconfig`).
+  Body is empty at creation; populated by the live-merge link below
+  using the live state from the just-applied AppConfig Unit. Inherits
+  the upload-wide `--target` flag (typically a Kubernetes namespace
+  target) so it applies into the same place as every other rendered
+  manifest. Other workload Units in the Space reference the carrier
+  by name, so existing intra-Space link inference
+  (`internal/upload/links.go`) wires them into this placeholder.
+- **Live-merge link** (server-assigned slug via `-`).
   `--use-live-state --auto-update --update-type MergeUnits`. Pulls
   the rendered ConfigMap from the AppConfig Unit's live state into
   the placeholder's Data so the runtime ConfigMap name (with its
   hash suffix) flows through to the workload's
   `volumeMounts` / `envFrom` reference.
+- **`cub function do set-namespace`** on the placeholder Unit, using
+  the wizard's `Inputs.Spec.Namespace`. The ConfigMapRenderer bridge
+  stamps `metadata.namespace=confighubplaceholder` on its live state
+  (the placeholder is meant to be resolved by a namespace link at
+  apply time), but the intra-Space link inference matches by
+  `metadata.namespace` and a placeholder value never resolves. Stamping
+  the real namespace onto the placeholder Unit here unblocks the
+  inference so Deployments referencing the carrier by name link to it
+  cleanly.
+
+Known follow-up: `get-references` doesn't currently surface
+`spec.template.spec.containers[*].envFrom.configMapRef.name` /
+`envFrom.secretRef.name`, so a workload that consumes the AppConfig
+solely through `envFrom` (no `volumes`/`volumeMounts`) won't get an
+auto-inferred link to the placeholder Unit even with the namespace
+fix above. Tracked separately.
 
 The rendered ConfigMap YAML in `out/manifests/` is NOT uploaded as a
 Unit — the renderer Target re-derives the ConfigMap from the

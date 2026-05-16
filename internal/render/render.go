@@ -80,27 +80,29 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	// 1. Resolve chain + validators against inputs + facts. These become
-	//    chain.yaml / validators.yaml in out/compose/, invoked by kustomize
-	//    via the exec plugin.
-	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
+	// 1. Resolve the transformer chain. Validators run in-process after
+	//    kustomize (see step 4) so the rendered manifests can be fed to
+	//    chainexec.RunValidators without being filtered through the
+	//    kustomize validators: slot — that slot enforces byte-level item
+	//    equality which yaml.v3 round-trip violates, and the transformers:
+	//    slot silently swallows severity=error results.
+	chain, err := resolveChainTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts, opts.Loaded.Root)
 	if err != nil {
 		return nil, err
 	}
-	validators, err := resolveValidatorTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts)
+	validators, err := resolveValidatorTemplate(opts.Loaded.Package, opts.Inputs, opts.Selection, opts.Facts, opts.Loaded.Root)
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Compose out/compose/ and run kustomize against it. Kustomize
 	//    invokes the wrapper, which execs `installer transformer`,
-	//    which runs each function group through chainexec in-process.
+	//    which runs each transformer group through chainexec in-process.
 	composeDir := filepath.Join(outDir, "compose")
 	if err := composeKustomization(composeInputs{
 		Loaded:            opts.Loaded,
 		Selection:         opts.Selection,
 		Chain:             chain,
-		Validators:        validators,
 		TransformerBinary: transformerBin,
 	}, composeDir); err != nil {
 		return nil, err
@@ -111,13 +113,22 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	// 3. Split into per-resource files with deterministic naming.
+	// 3. Run validators in-process against kustomize's output. Each
+	//    AppConfig/* group is dispatched per-carrier; everything else
+	//    runs against the full stream.
+	if len(validators) > 0 {
+		if err := runValidatorsAfterKustomize(ctx, validators, rendered); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Split into per-resource files with deterministic naming.
 	files, err := splitForUnits(rendered)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Split sensitive resources off into out/secrets/, write the rest to
+	// 5. Split sensitive resources off into out/secrets/, write the rest to
 	// out/manifests/.
 	var manifests, secrets []File
 	for _, f := range files {
