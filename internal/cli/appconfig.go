@@ -101,8 +101,19 @@ func injectAppConfigAnnotations(list *resourceList) error {
 		if !ok {
 			continue
 		}
-		if err := validateAndFillAnnotations(shape); err != nil {
+		changed, err := validateAndFillAnnotations(shape)
+		if err != nil {
 			return fmt.Errorf("ConfigMap %s/%s: %w", shape.Metadata.Namespace, shape.Metadata.Name, err)
+		}
+		// Only re-encode when we actually added an annotation. The
+		// yaml.v3 round-trip subtly reformats the node (field order,
+		// scalar styles), which kustomize's validator-mode equality
+		// check flags as a modification. Skipping the round-trip when
+		// the annotations are already populated (the validator pass
+		// after a transformer pass has already injected them) keeps
+		// the item bytes byte-identical for kustomize.
+		if !changed {
+			continue
 		}
 		if err := encodeShapeIntoItem(&list.Items[i], shape); err != nil {
 			return err
@@ -141,43 +152,54 @@ func decodeIfConfigMapWithToolchain(item *yaml.Node) (*configMapShape, bool, err
 	return &shape, true, nil
 }
 
-func validateAndFillAnnotations(shape *configMapShape) error {
+// validateAndFillAnnotations enforces the AppConfig annotation contract on
+// shape and fills in any annotations that can be inferred. Returns true if
+// the shape was modified (a new annotation was added), false if every
+// derived annotation was already present and valid.
+func validateAndFillAnnotations(shape *configMapShape) (bool, error) {
 	if shape.Metadata.Annotations == nil {
-		return fmt.Errorf("annotations dropped during decode") // shouldn't happen — toolchain was present
+		return false, fmt.Errorf("annotations dropped during decode") // shouldn't happen — toolchain was present
 	}
 	toolchain := shape.Metadata.Annotations[annoToolchain]
 	if !isAppConfigToolchain(toolchain) {
-		return fmt.Errorf("annotation %s=%q must be an AppConfig/* toolchain", annoToolchain, toolchain)
+		return false, fmt.Errorf("annotation %s=%q must be an AppConfig/* toolchain", annoToolchain, toolchain)
 	}
+	changed := false
 
 	mode := shape.Metadata.Annotations[annoMode]
 	if mode == "" {
 		mode = inferMode(shape, toolchain)
+		shape.Metadata.Annotations[annoMode] = mode
+		changed = true
 	}
 	if mode != appConfigModeFile && mode != appConfigModeEnv {
-		return fmt.Errorf("annotation %s=%q must be %q or %q", annoMode, mode, appConfigModeFile, appConfigModeEnv)
+		return changed, fmt.Errorf("annotation %s=%q must be %q or %q", annoMode, mode, appConfigModeFile, appConfigModeEnv)
 	}
-	shape.Metadata.Annotations[annoMode] = mode
 
 	if mode == appConfigModeFile {
 		key := shape.Metadata.Annotations[annoSourceKey]
 		if key == "" {
 			keys := sortedDataKeys(shape)
 			if len(keys) != 1 {
-				return fmt.Errorf("file mode requires exactly one data: key or an explicit %s annotation (have %d keys: %v)",
+				return changed, fmt.Errorf("file mode requires exactly one data: key or an explicit %s annotation (have %d keys: %v)",
 					annoSourceKey, len(keys), keys)
 			}
 			key = keys[0]
 			shape.Metadata.Annotations[annoSourceKey] = key
+			changed = true
 		}
 		if _, ok := shape.Data[key]; !ok {
-			return fmt.Errorf("%s=%q references a data key that doesn't exist (keys: %v)",
+			return changed, fmt.Errorf("%s=%q references a data key that doesn't exist (keys: %v)",
 				annoSourceKey, key, sortedDataKeys(shape))
 		}
 	} else {
-		// env mode shouldn't carry a source-key annotation. Tolerate but
-		// strip it so downstream code doesn't see contradictory state.
-		delete(shape.Metadata.Annotations, annoSourceKey)
+		// env mode shouldn't carry a source-key annotation. Strip it
+		// if the author set it by mistake so downstream code doesn't
+		// see contradictory state.
+		if _, present := shape.Metadata.Annotations[annoSourceKey]; present {
+			delete(shape.Metadata.Annotations, annoSourceKey)
+			changed = true
+		}
 	}
 
 	// Mutability is inferred from kustomize's hash-suffix convention on
@@ -190,8 +212,9 @@ func validateAndFillAnnotations(shape *configMapShape) error {
 		} else {
 			shape.Metadata.Annotations[annoMutable] = "true"
 		}
+		changed = true
 	}
-	return nil
+	return changed, nil
 }
 
 // inferMode picks env when the toolchain is AppConfig/Env and the data:
