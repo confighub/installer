@@ -24,7 +24,7 @@ push, which renders before uploading.
 ref must include a tag: oci://host/repo:tag. Digest-only refs are not
 supported because registries cannot accept blob pushes to a digest.
 
-To attach a cosign signature, run "installer sign <ref>" after push.`,
+To attach a cosign signature, run "install sign <ref>" after push.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

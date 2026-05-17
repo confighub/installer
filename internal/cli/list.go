@@ -17,7 +17,7 @@ func newListCmd() *cobra.Command {
 the tags.
 
 Example:
-  installer list oci://ghcr.io/confighubai/gateway-api`,
+  install list oci://ghcr.io/confighubai/gateway-api`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

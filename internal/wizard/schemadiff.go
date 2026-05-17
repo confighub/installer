@@ -217,7 +217,7 @@ func stringSet(ss []string) map[string]struct{} {
 }
 
 // FormatNewRequiredHint renders a multiline message naming each new
-// required input — used by `installer upgrade` in non-interactive
+// required input — used by `install upgrade` in non-interactive
 // mode to fail fast with actionable detail.
 func FormatNewRequiredHint(workDir string, ins []api.Input) string {
 	if len(ins) == 0 {
@@ -235,7 +235,7 @@ func FormatNewRequiredHint(workDir string, ins []api.Input) string {
 			msg += fmt.Sprintf("  - %s (%s): %s\n", in.Name, displayType(in), prompt)
 		}
 	}
-	msg += fmt.Sprintf("re-run interactively or run `installer wizard %s` to answer them, then re-run `installer upgrade`.", workDir)
+	msg += fmt.Sprintf("re-run interactively or run `install wizard %s` to answer them, then re-run `install upgrade`.", workDir)
 	return msg
 }
 

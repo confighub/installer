@@ -137,7 +137,7 @@ func TestFormatNewRequiredHint(t *testing.T) {
 	if hint == "" {
 		t.Fatal("expected non-empty hint")
 	}
-	for _, want := range []string{"license", "port", "Your license key", "/tmp/wd", "installer wizard"} {
+	for _, want := range []string{"license", "port", "Your license key", "/tmp/wd", "install wizard"} {
 		if !contains(hint, want) {
 			t.Errorf("hint missing %q\n%s", want, hint)
 		}

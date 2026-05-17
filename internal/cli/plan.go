@@ -18,20 +18,21 @@ import (
 )
 
 func newPlanCmd() *cobra.Command {
+	var workDir string
 	cmd := &cobra.Command{
-		Use:   "plan <work-dir>",
-		Short: "Show what installer update would change in ConfigHub",
+		Use:   "plan",
+		Short: "Show what install upload would change in ConfigHub",
 		Long: `Plan diffs the work-dir's rendered output against the corresponding
 ConfigHub Spaces and prints a terraform-style summary of adds, updates,
 and deletes per Space, plus the post-render image set per Space.
 
 Plan is read-only — it does not mutate ConfigHub. Use 'installer
-update' to execute the plan.
+upload' to execute the plan.
 
 Plan reads <work-dir>/out/spec/upload.yaml to locate the Spaces; if
-upload.yaml is missing, run 'installer upload' first. The active cub
-organization and server are sanity-checked against the recorded
-values; mismatch fails fast.
+upload.yaml is missing, run 'install upload --space <slug>' first.
+The active cub organization and server are sanity-checked against the
+recorded values; mismatch fails fast.
 
 The diff is computed by:
   - Listing Units in each Space filtered by the Component=<package>
@@ -46,12 +47,12 @@ The diff is computed by:
 The Images: footer per Space is built locally from the rendered
 manifests, so it shows the eventual image set whether or not the
 plan actually changes anything.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := exec.LookPath("cub"); err != nil {
 				return fmt.Errorf("cub CLI not found on PATH: %w", err)
 			}
-			workDir, err := filepath.Abs(args[0])
+			absWork, err := filepath.Abs(workDir)
 			if err != nil {
 				return err
 			}
@@ -60,12 +61,12 @@ plan actually changes anything.`,
 				ctx = context.Background()
 			}
 
-			loaded, err := ipkg.Load(filepath.Join(workDir, "package"))
+			loaded, err := ipkg.Load(filepath.Join(absWork, "package"))
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
 
-			uploadDoc, err := readUploadDoc(workDir)
+			uploadDoc, err := readUploadDoc(absWork)
 			if err != nil {
 				return err
 			}
@@ -73,7 +74,7 @@ plan actually changes anything.`,
 				return err
 			}
 
-			lock, err := loadLockIfNeeded(workDir, loaded.Package)
+			lock, err := loadLockIfNeeded(absWork, loaded.Package)
 			if err != nil {
 				return err
 			}
@@ -83,7 +84,7 @@ plan actually changes anything.`,
 				pattern = "{{.PackageName}}"
 			}
 			packages, err := upload.Discover(upload.DiscoverInput{
-				WorkDir:       workDir,
+				WorkDir:       absWork,
 				SpacePattern:  pattern,
 				ParentPackage: loaded.Package,
 				Lock:          lock,
@@ -100,6 +101,7 @@ plan actually changes anything.`,
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
 	return cmd
 }
 
@@ -112,8 +114,8 @@ func readUploadDoc(workDir string) (*api.Upload, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf(
-				"%s not found — run `installer upload %s` first to record where this work-dir was uploaded",
-				path, workDir,
+				"%s not found — run `%s upload --work-dir %s --space <slug>` first to record where this work-dir was uploaded",
+				path, InvocationName(), workDir,
 			)
 		}
 		return nil, err
@@ -134,12 +136,12 @@ func loadLockIfNeeded(workDir string, pkg *api.Package) (*api.Lock, error) {
 		return nil, err
 	}
 	if lock == nil {
-		return nil, fmt.Errorf("package declares dependencies but %s does not exist; run `installer deps update %s` and `installer render %s` first",
-			deps.LockPath(workDir), workDir, workDir)
+		return nil, fmt.Errorf("package declares dependencies but %s does not exist; run `%s deps update --work-dir %s` and `%s render --work-dir %s` first",
+			deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
 	}
 	if deps.IsStale(lock, pkg) {
-		return nil, fmt.Errorf("lock at %s is stale; run `installer deps update %s` and `installer render %s` again",
-			deps.LockPath(workDir), workDir, workDir)
+		return nil, fmt.Errorf("lock at %s is stale; run `%s deps update --work-dir %s` and `%s render --work-dir %s` again",
+			deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
 	}
 	return lock, nil
 }

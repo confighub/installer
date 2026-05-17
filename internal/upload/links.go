@@ -32,8 +32,8 @@ import (
 // would otherwise dominate the reminder for any package that ships a
 // RoleBinding.
 //
-// Used by `installer upload` (after the per-package Unit creation
-// loop) and by `installer update` (after Apply mutates the Unit set).
+// Used by `install upload` (after the per-package Unit creation
+// loop) and by `install update` (after Apply mutates the Unit set).
 // The two paths share an implementation so behavior cannot drift.
 func ReconcileLinks(ctx context.Context, space, component string, skipUnmatched map[string]struct{}) error {
 	resources, err := loadResources(ctx, space)
@@ -91,7 +91,7 @@ func UnmatchedKey(targetType, targetName string) string {
 // managed by ConfigHub (e.g., a Secret created out-of-band, a Namespace
 // owned by the platform team, a ServiceAccount provided by a base
 // install). The installer can't verify those from here — we don't assume
-// the operator running `installer upload` has cluster access — so we
+// the operator running `install upload` has cluster access — so we
 // surface the list for the operator to confirm rather than failing.
 //
 // Two classes of references are always suppressed:
@@ -129,7 +129,7 @@ func reportUnmatchedReferences(unmatched []UnmatchedReference, skipUnmatched map
 }
 
 // LinkEdge is one inferred edge between two Units in the same Space.
-// Exposed so callers (e.g., a future installer plan extension) can
+// Exposed so callers (e.g., a future install plan extension) can
 // inspect the inference output without re-creating the links.
 type LinkEdge struct {
 	FromUnit string

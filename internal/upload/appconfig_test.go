@@ -226,7 +226,7 @@ data:
 	if !strings.Contains(err.Error(), "appconfig-mode") {
 		t.Errorf("error should name the missing annotation: %v", err)
 	}
-	if !strings.Contains(err.Error(), "installer render") {
+	if !strings.Contains(err.Error(), "install render") {
 		t.Errorf("error should suggest re-rendering: %v", err)
 	}
 }

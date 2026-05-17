@@ -1,6 +1,6 @@
 # Package Author Guide
 
-Reference for authoring an installer package — file layout, the
+Reference for authoring an install package — file layout, the
 `installer.yaml` schema, what each declaration becomes at install time,
 publishing, signing, and version-to-version evolution.
 
@@ -12,17 +12,17 @@ tutorial](./author-tutorial.md).
 
 The CLI provides four authoring shortcuts:
 
-- `installer init <dir>` — scaffold a new package with the
+- `install init <dir>` — scaffold a new package with the
   recommended defaults.
-- `installer new <kind> <name>` — clone a Kubernetes resource
+- `install new <kind> <name>` — clone a Kubernetes resource
   template from the bootstrapped `kubernetes-resources` package.
-- `installer edit add/remove/set input|component|dependency` —
+- `install edit add/remove/set input|component|dependency` —
   mutate `installer.yaml` fields (no hand-editing YAML).
-- `installer vet <work-dir>` — run the package's validators against
+- `install vet <work-dir>` — run the package's validators against
   the existing render without re-rendering.
 
 These all operate on package source on disk; there's no ConfigHub
-interaction except `installer new`, which fetches templates from
+interaction except `install new`, which fetches templates from
 the bootstrapped kubernetes-resources Space.
 
 > **Note.** This guide describes _what_ to put in a package and _why_.
@@ -71,14 +71,14 @@ my-package/
 The fastest way to get this layout is:
 
 ```bash
-installer init ./my-package
+install init ./my-package
 ```
 
-`installer init` scaffolds the manifest (with the recommended
+`install init` scaffolds the manifest (with the recommended
 validator chain — see [Validators](#specvalidators) below), an
 empty `bases/default/`, an empty `components/`, and an empty
 `validation/`. From there, drop your kustomize resources into
-`bases/default/` and either hand-author them or use `installer new
+`bases/default/` and either hand-author them or use `install new
 <kind> <name>` to clone canonical templates from the
 [`kubernetes-resources`](#kubernetes-resources-package) package.
 
@@ -105,7 +105,7 @@ my-package/
 ├── validation/                    # optional: bundled docs about
 │   ├── env.schema.json            # configurable env vars / flags /
 │   ├── command.yaml               # runtime expectations. Surfaced
-│   └── runtime.yaml               # by `installer doc`.
+│   └── runtime.yaml               # by `install doc`.
 └── collector/                     # optional: install-time fact
     └── collect.sh                 # discovery script (see Collector)
 ```
@@ -288,7 +288,7 @@ prompts.
 ### `spec.validators`
 
 A list of validating-function invocation groups, run automatically
-at the end of every `installer render` against the post-mutation
+at the end of every `install render` against the post-mutation
 output. Each group has the same shape as
 [`transformers`](#specfunctionchaintemplate) — a toolchain,
 optional `whereResource` filter, ordered `invocations` — but every
@@ -307,12 +307,12 @@ spec:
         - name: vet-format
 ```
 
-`installer init` seeds `vet-schemas`, `vet-merge-keys`, and
+`install init` seeds `vet-schemas`, `vet-merge-keys`, and
 `vet-format` by default. `vet-placeholders` is intentionally NOT
 seeded — packages that ship cloneable bases (with
 `confighubplaceholder` fields) would fail it.
 
-Edit the list with `installer edit add/remove validator <name>`
+Edit the list with `install edit add/remove validator <name>`
 (coming in a follow-up) or by hand. The full list of available
 validators:
 
@@ -335,7 +335,7 @@ Frequently used:
 | `vet-starlark` | Custom Starlark validation. |
 | `vet-values` | Field values outside an allowed set. |
 
-When the list changes, run `installer vet <work-dir>` against an
+When the list changes, run `install vet <work-dir>` against an
 existing render to check the new validators without re-rendering.
 
 `whereResource` filters in `validators[].whereResource` use the same
@@ -394,7 +394,7 @@ are a special case — see "Image overrides" below.
 ### `spec.externalRequires`
 
 Cluster preconditions your package needs but does not provide. The
-wizard surfaces them; `installer preflight` (when shipped) probes them
+wizard surfaces them; `install preflight` (when shipped) probes them
 against a live cluster.
 
 ```yaml
@@ -503,16 +503,16 @@ kustomize secretGenerator references; the installer never reads or
 uploads those files. Rendered Secret resources are routed to
 `out/secrets/` and never uploaded as Units.
 
-**Re-run on upgrade**. `installer upgrade` re-runs the collector
-against the new package; facts are not assumed to survive a version
-bump.
+**Re-run on every setup**. `install setup` re-runs the collector
+on each invocation (whether or not `--pull` was passed). Facts are
+not assumed to survive a version bump or a cluster-state change.
 
 ### `spec.validation`
 
 Points at machine-readable component documentation bundled in the
 package (typically generated by `docker run <image> docgen
 {command,env,runtime}` and committed under `./validation/`). Surfaced
-by `installer doc` so an AI agent or human can read what env vars
+by `install doc` so an AI agent or human can read what env vars
 your workload accepts and what runtime expectations it has without
 re-pulling the image.
 
@@ -591,44 +591,44 @@ published artifacts.
 Knowing the pipeline helps you reason about what's load-bearing and
 what isn't.
 
-1. **`installer pull <ref> <work-dir>/package`** — fetches the
+1. **`install pull <ref> <work-dir>/package`** — fetches the
    bundled tgz from OCI, verifies signature if a policy is configured,
    extracts into `<work-dir>/package/`. Your `installer.yaml`,
    `bases/`, `components/`, etc. land here verbatim.
 
-2. **`installer wizard <ref>`** — loads `installer.yaml`, runs the
-   selection solver (closure of `requires:`, conflict / `validForBases`
-   checks), runs your collector if present, writes
-   `out/spec/{selection,inputs,facts}.yaml`.
+2. **`install setup`** (or `install wizard <ref>` + `installer
+   render` granularly) — loads `installer.yaml`, runs the selection
+   solver (closure of `requires:`, conflict / `validForBases` checks),
+   runs your collector if present, writes
+   `out/spec/{selection,inputs,facts}.yaml`. For multi-package
+   installs, automatically runs `deps update` to resolve the
+   dependency DAG and write `out/spec/lock.yaml`. Then composes a
+   synthetic top-level kustomization under `out/compose/` that
+   references your chosen base + components, resolves your
+   `spec.transformers` / `spec.validators` against `.Inputs` /
+   `.Selection` / `.Package` / `.Namespace` / `.Facts`, writes them as
+   KRM function configs, and runs
+   `kustomize build --enable-exec --enable-alpha-plugins`. Kustomize
+   invokes the `install transformer` subcommand as an exec plugin
+   to run each function group in process; the result lands as one
+   resource per file in `out/manifests/`. For multi-package installs,
+   each dep is rendered into its own subtree under `out/<dep-name>/`.
 
-3. **`installer deps update <work-dir>`** (only if you declare
-   dependencies) — resolves the DAG and writes `out/spec/lock.yaml`.
-
-4. **`installer render <work-dir>`** — composes a synthetic top-level
-   kustomization under `out/compose/` that references your chosen
-   base + components, resolves your `spec.transformers` /
-   `spec.validators` against `.Inputs` / `.Selection` / `.Package` /
-   `.Namespace` / `.Facts`, writes them as KRM function configs, and
-   runs `kustomize build --enable-exec --enable-alpha-plugins`.
-   Kustomize invokes the `installer transformer` subcommand as an
-   exec plugin to run each function group in process; the result
-   lands as one resource per file in `out/manifests/`. For
-   multi-package installs, each dep is rendered into its own subtree
-   under `out/<dep-name>/`.
-
-5. **`installer upload <work-dir>`** — creates one Space per package
-   (parent + each locked dep) and one Unit per rendered file, plus
-   one untargeted `installer-record` Unit per Space carrying your
+3. **`install upload`** — creates one Space per package (parent +
+   each locked dep) and one Unit per rendered file, plus one
+   untargeted `installer-record` Unit per Space carrying your
    `installer.yaml` + the spec docs (so a freshly cloned work-dir is
    recoverable from cub alone). Cross-Space Links wire the parent's
-   record to each dep's record.
+   record to each dep's record. Subsequent uploads against the same
+   work-dir reconcile inside a ChangeSet (updates / adds / deletes).
 
-6. **`installer plan` / `update` / `upgrade` / `upgrade-apply`** —
-   day-2 operations. The operator's job, but several things you author
-   shape how they behave: your `images:` block enables `--set-image`;
-   your `default: true` components are adopted by `default`-preset
-   re-renders; your input schema diff (across versions) drives what an
-   upgrade prompts for vs carries forward silently.
+4. **`install plan`** — day-2 read-only preview of what the next
+   `install upload` reconcile would change in ConfigHub. The
+   operator's job, but several things you author shape how it
+   behaves: your `images:` block enables `--set-image`; your
+   `default: true` components are adopted by `default`-preset
+   re-renders; your input schema diff (across versions) drives what
+   `setup --pull <new-ref>` prompts for vs carries forward silently.
 
 ## kubernetes-resources package
 
@@ -641,7 +641,7 @@ recommended defaults pre-applied via per-type ConfigHub functions
 automountServiceAccountToken=false, pod-security labels on
 Namespace, etc.).
 
-Once installed in your ConfigHub organization, `installer new
+Once installed in your ConfigHub organization, `install new
 <kind> <name>` clones any of these templates into your package's
 `bases/default/` with operator customizations applied (renamed,
 optional `--image` / `--port` / `--replicas`, namespace replaced
@@ -651,21 +651,21 @@ function rewrites it at install time).
 Bootstrap the package once per organization:
 
 ```bash
-installer wizard ./packages/kubernetes-resources \
+install setup \
+    --pull ./packages/kubernetes-resources \
     --work-dir /tmp/k8s-res \
     --non-interactive --namespace kubernetes-resources
-installer render /tmp/k8s-res
-installer upload /tmp/k8s-res --space kubernetes-resources
+install upload --work-dir /tmp/k8s-res --space kubernetes-resources
 ```
 
-The `installer upload` step records the install in
-`~/.confighub/installer/state.yaml`; subsequent `installer new`
+The `install upload` step records the install in
+`~/.confighub/installer/state.yaml`; subsequent `install new`
 calls find it automatically.
 
 After bootstrap, scaffold a Deployment into your package:
 
 ```bash
-installer new deployment my-app \
+install new deployment my-app \
     --image myorg/my-app:1.0.0 --port 8080 --replicas 3
 ```
 
@@ -675,7 +675,7 @@ Supported kinds: `cronjob`, `daemonset`, `deployment`, `hpa`
 `poddisruptionbudget`), `role`, `rolebinding`, `service`,
 `serviceaccount`, `statefulset`.
 
-`installer new --update-kustomization` (default true) appends the
+`install new --update-kustomization` (default true) appends the
 new file to your package's `bases/default/kustomization.yaml`'s
 resources list.
 
@@ -731,7 +731,7 @@ Supported toolchain values:
 
 ### What the installer does with it
 
-At render time, the `installer transformer` plugin (which kustomize
+At render time, the `install transformer` plugin (which kustomize
 invokes as an exec transformer) recognizes ConfigMaps carrying the
 toolchain annotation and:
 
@@ -763,7 +763,7 @@ runtime ConfigMap name flows through to the workload reference at
 apply time.
 
 The worker the renderer Target uses is `<space>/server-worker` by
-default; override with `installer upload --appconfig-worker <slug>`.
+default; override with `install upload --appconfig-worker <slug>`.
 
 ### disableNameSuffixHash
 
@@ -793,19 +793,18 @@ These are the prescriptive ones. The full doctrine is
 
 Inputs without defaults force prompts. Components without `default:
 true` are invisible to the `default` preset. Operators of a
-well-authored package can install with `installer wizard <ref>
+well-authored package can install with `install setup --pull <ref>
 --namespace foo` and walk away. Aim for that.
 
 ### Declare an `images:` block
 
 Put a kustomize `images:` block in your chosen base's
 `kustomization.yaml`, with `newName` / `newTag` matching what's
-hard-coded in your manifests. This enables `installer
-wizard --set-image name=ref` and `installer upgrade --set-image` for
-operators. Without it, `--set-image` fails fast with a message
-pointing at this guide. Cost: three lines of YAML; benefit: image
-mirroring + patch-version bumps without your operator hand-editing
-your package tree.
+hard-coded in your manifests. This enables `install setup
+--set-image name=ref` for operators. Without it, `--set-image`
+fails fast with a message pointing at this guide. Cost: three lines
+of YAML; benefit: image mirroring + patch-version bumps without
+your operator hand-editing your package tree.
 
 ```yaml
 # bases/default/kustomization.yaml
@@ -862,23 +861,23 @@ once, up front.
 
 ## Publishing
 
-The publish flow is `installer package` → `installer push`:
+The publish flow is `install package` → `install push`:
 
 ```bash
 # Build a deterministic .tgz of the source tree.
-installer package ./my-package -o my-package-0.1.0.tgz
+install package ./my-package -o my-package-0.1.0.tgz
 # Output names the digest:
 #   sha256:bc4e...
 
 # Push to an OCI registry as an installer artifact.
-installer push my-package-0.1.0.tgz oci://ghcr.io/myorg/my-package:0.1.0
+install push my-package-0.1.0.tgz oci://ghcr.io/myorg/my-package:0.1.0
 
 # Inspect what's in a registry without pulling the layer.
-installer inspect oci://ghcr.io/myorg/my-package:0.1.0
-installer list oci://ghcr.io/myorg/my-package
+install inspect oci://ghcr.io/myorg/my-package:0.1.0
+install list oci://ghcr.io/myorg/my-package
 ```
 
-`installer package` is byte-deterministic: sorted entries, zeroed
+`install package` is byte-deterministic: sorted entries, zeroed
 mtimes / uids / gids, canonicalized modes, gzip without filename or
 mtime metadata. The same source tree on two machines produces an
 identical tarball.
@@ -899,23 +898,23 @@ What's refused:
 
 ## Signing
 
-After `installer push`, attach a cosign signature with
-`installer sign <ref>`. Keyless mode (Sigstore Fulcio + Rekor) is
+After `install push`, attach a cosign signature with
+`install sign <ref>`. Keyless mode (Sigstore Fulcio + Rekor) is
 the default; pass `--key <ref>` for keyed mode. Operators verify
-with `installer verify` or by configuring
+with `install verify` or by configuring
 `~/.config/installer/policy.yaml` to require signatures matching
 trusted keys / identities — when that policy exists, `installer
-pull` and `installer deps update` enforce verification on every
+pull` and `install deps update` enforce verification on every
 fetch. Requires the `cosign` binary on PATH (override via
 `INSTALLER_COSIGN_BIN`).
 
 ```bash
 # Keyless (Sigstore Fulcio + Rekor — interactive OIDC flow).
 # Add --yes to skip the cosign confirmation prompt in CI.
-installer sign oci://ghcr.io/myorg/my-package:0.1.0 --yes
+install sign oci://ghcr.io/myorg/my-package:0.1.0 --yes
 
 # Keyed.
-installer sign oci://ghcr.io/myorg/my-package:0.1.0 --key cosign.key
+install sign oci://ghcr.io/myorg/my-package:0.1.0 --key cosign.key
 ```
 
 If your package will be consumed by people you don't know, sign every
@@ -924,10 +923,10 @@ substantial.
 
 ## Versioning + upgrade considerations
 
-Operators upgrade with `installer upgrade <work-dir> <new-ref>`. The
-upgrade machinery does a schema-diff between the prior install's
-package and yours, and behaves accordingly. As an author, this gives
-you a few rules of the road:
+Operators upgrade with `install setup --pull <new-ref>` against an
+existing work-dir. The setup auto-detects prior state and runs the
+schema-diff machinery between the prior install's package and yours.
+As an author, this gives you a few rules of the road:
 
 ### Adding inputs
 
@@ -944,16 +943,17 @@ not need to do anything.
 
 ### Changing input types
 
-Errors out the upgrade. The operator must re-run `installer wizard`
-to re-answer. Avoid type changes; if you need one, ship a new input
-under a different name and remove the old in a later release.
+Errors out setup. The operator must re-run `install setup`
+interactively to re-answer. Avoid type changes; if you need one, ship
+a new input under a different name and remove the old in a later
+release.
 
 ### Adding components
 
 - **New component with `default: true`**: adopted on upgrade _only_
   if the operator's prior selection matched the old package's
   default preset exactly. Otherwise the component is available but
-  not enabled by default — operators discover it via `installer doc`
+  not enabled by default — operators discover it via `install doc`
   or the wizard.
 - **New component without `default: true`**: invisible until the
   operator picks it.
@@ -994,19 +994,19 @@ refuses to render against incompatible cluster + installer versions.
 ### Start a new package
 
 ```bash
-installer init ./my-package
+install init ./my-package
 ```
 
 Scaffolds `installer.yaml` (with the recommended validators),
 `bases/default/kustomization.yaml`, `bases/default/`,
 `components/`, `validation/`. Drop your kustomize resources into
 `bases/default/`, then add inputs / components / dependencies via
-`installer edit add` or hand-edit `installer.yaml`.
+`install edit add` or hand-edit `installer.yaml`.
 
 ### Add a Kubernetes resource
 
 ```bash
-installer new deployment my-app --image myorg/my-app:1.0 --port 8080
+install new deployment my-app --image myorg/my-app:1.0 --port 8080
 ```
 
 Clones the `kubernetes-resources` Deployment template (defaults
@@ -1023,13 +1023,13 @@ YAML and add it to `bases/default/kustomization.yaml`.
 ```bash
 mkdir -p components/monitoring
 # drop kustomization.yaml + resources into components/monitoring/
-installer edit add component monitoring \
+install edit add component monitoring \
     --path components/monitoring \
     --default \
     --description "Adds a ServiceMonitor for Prometheus scraping."
 ```
 
-`installer edit add component` writes the entry under
+`install edit add component` writes the entry under
 `spec.components` and re-validates the manifest. Use `--requires`,
 `--conflicts`, `--valid-for-bases` (each repeatable) for
 constraints.
@@ -1037,33 +1037,33 @@ constraints.
 ### Add an input
 
 ```bash
-installer edit add input replicas \
+install edit add input replicas \
     --type int --default 2 \
     --prompt "Number of replicas"
 ```
 
 Then reference it from `transformers` invocations as
-`{{ .Inputs.replicas }}`. Use `installer edit set input <name>` to
-modify, `installer edit remove input <name>` to drop.
+`{{ .Inputs.replicas }}`. Use `install edit set input <name>` to
+modify, `install edit remove input <name>` to drop.
 
-### Depend on another installer package
+### Depend on another install package
 
 ```bash
-installer edit add dependency gateway-api \
+install edit add dependency gateway-api \
     --package-ref oci://ghcr.io/myorg/gateway-api \
     --version "^1.2.0"
 # Optionally:
-installer edit set dependency gateway-api --when-component ingress
+install edit set dependency gateway-api --when-component ingress
 ```
 
 For more nuanced fields (`selection`, `inputs`, `satisfies`), edit
 `spec.dependencies` directly — they have nested structure that
-`installer edit` doesn't model in v1.
+`install edit` doesn't model in v1.
 
 ### Re-vet after editing the validator list
 
 ```bash
-installer vet <work-dir>
+install vet <work-dir>
 ```
 
 Runs `spec.validators` against the existing `out/manifests/`
@@ -1076,13 +1076,13 @@ case.)
 ### Cut a release
 
 1. Bump `metadata.version` per SemVer.
-2. `installer package ./my-package -o my-package-X.Y.Z.tgz` — record
+2. `install package ./my-package -o my-package-X.Y.Z.tgz` — record
    the printed sha256.
-3. `installer push my-package-X.Y.Z.tgz oci://.../my-package:X.Y.Z`.
-4. `installer sign oci://.../my-package:X.Y.Z --yes` (keyless) or
-   `installer sign oci://.../my-package:X.Y.Z --key cosign.key`
+3. `install push my-package-X.Y.Z.tgz oci://.../my-package:X.Y.Z`.
+4. `install sign oci://.../my-package:X.Y.Z --yes` (keyless) or
+   `install sign oci://.../my-package:X.Y.Z --key cosign.key`
    (keyed).
-5. Optionally `installer tag oci://.../my-package:X.Y.Z latest` if
+5. Optionally `install tag oci://.../my-package:X.Y.Z latest` if
    you publish a moving `latest` tag (most don't — a SemVer tag is
    reproducible).
 
@@ -1090,7 +1090,7 @@ case.)
 
 Ship `validation/` with `command.yaml` / `env.schema.json` /
 `runtime.yaml` — generated from the workload itself, committed in
-the package. `installer doc <ref>` surfaces them. AI agents and
+the package. `install doc <ref>` surfaces them. AI agents and
 humans both benefit.
 
 ## Next steps

@@ -10,19 +10,21 @@ import (
 )
 
 func newPullCmd() *cobra.Command {
-	var outDir string
+	var workDir string
 	cmd := &cobra.Command{
 		Use:   "pull <package-ref>",
-		Short: "Fetch a package to a local directory",
-		Long: `Pull a package reference (local path, .tgz, or oci://...) to a local
-directory. Subsequent commands (wizard, render) read from the directory.
+		Short: "Fetch a package into <work-dir>/package/",
+		Long: `Pull a package reference (local path, .tgz, or oci://...) into
+<work-dir>/package/. Subsequent commands (wizard, render, setup) read
+from the same work-dir.
 
-For local-directory references with no --out, this is a no-op that just
-resolves and prints the absolute path.`,
+The fetch is staged into a sibling temp directory and atomically
+renamed into <work-dir>/package/ on success — a failed pull leaves any
+prior <work-dir>/package/ intact.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			dir, err := ipkg.Pull(ctx, args[0], outDir)
+			dir, err := ipkg.PullToWorkDir(ctx, args[0], workDir)
 			if err != nil {
 				return err
 			}
@@ -37,6 +39,6 @@ resolves and prints the absolute path.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&outDir, "out", "", "destination directory for fetched package")
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory; package is written to <work-dir>/package/")
 	return cmd
 }

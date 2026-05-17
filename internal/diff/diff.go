@@ -1,6 +1,6 @@
 // Package diff computes and renders the diff between a work-dir's
 // rendered manifests and the corresponding ConfigHub Units. Used by
-// `installer plan` (read-only) and `installer update` (executes the
+// `install plan` (read-only) and `install update` (executes the
 // plan).
 //
 // The Component label written by upload (Component=<pkg.Name>) is what
@@ -57,11 +57,18 @@ type SpacePlan struct {
 type SlugDiff struct {
 	Slug string
 	// Path is the rendered manifest file. Set for Adds and Updates;
-	// empty for Deletes.
+	// empty for Deletes. For AppConfig updates this is unused — the
+	// raw env content is staged from AppCfg.Content at apply time.
 	Path string
 	// DiffText is the cub -o mutations human-readable diff for this
 	// slug, ANSI-stripped. Set only for Updates.
 	DiffText string
+	// AppCfg is non-nil for the AppConfig Unit of an AppConfig
+	// manifest (the carrier ConfigMap that upload split into AppConfig
+	// + placeholder + renderer Target). Apply uses it to stage raw env
+	// content for the merge-external-source update. Nil for regular
+	// Kubernetes manifests.
+	AppCfg *upload.AppConfigManifest
 }
 
 // HasChanges reports whether the plan would create, update, or delete
@@ -134,18 +141,30 @@ func computeOne(ctx context.Context, pkg upload.Package) (SpacePlan, error) {
 	}
 
 	for _, slug := range sortedKeys(rendered) {
-		path := rendered[slug]
-		if _, exists := currentSet[slug]; !exists {
-			out.Adds = append(out.Adds, SlugDiff{Slug: slug, Path: path})
+		item := rendered[slug]
+		// Placeholder Units exist in cub but their body is maintained
+		// by the live-merge link from upload's AppConfig pathway.
+		// They have no separate local source — registering them in
+		// the rendered set keeps them out of delete candidates;
+		// add/update is a no-op.
+		if item.IsPlaceholder {
 			continue
 		}
-		base := filepath.Base(path)
-		diff, err := dryRunMutations(ctx, pkg.SpaceSlug, slug, base, path)
+		if _, exists := currentSet[slug]; !exists {
+			out.Adds = append(out.Adds, SlugDiff{Slug: slug, Path: item.Path, AppCfg: item.AppCfg})
+			continue
+		}
+		stagedPath, cleanup, err := item.stagedPath()
+		if err != nil {
+			return out, fmt.Errorf("slug %s: %w", slug, err)
+		}
+		diff, err := dryRunMutations(ctx, pkg.SpaceSlug, slug, item.Base, stagedPath)
+		cleanup()
 		if err != nil {
 			return out, fmt.Errorf("slug %s: %w", slug, err)
 		}
 		if diff != "" {
-			out.Updates = append(out.Updates, SlugDiff{Slug: slug, Path: path, DiffText: diff})
+			out.Updates = append(out.Updates, SlugDiff{Slug: slug, Path: item.Path, DiffText: diff, AppCfg: item.AppCfg})
 		}
 	}
 	for slug := range currentSet {
@@ -163,15 +182,66 @@ func computeOne(ctx context.Context, pkg upload.Package) (SpacePlan, error) {
 	return out, nil
 }
 
-// listRenderedSlugs returns slug → absolute file path for every YAML
-// file in dir (recursing one level into subdirs is unnecessary; render
-// places one file per resource at the top level).
-func listRenderedSlugs(dir string) (map[string]string, error) {
+// renderedItem describes one entry in the local rendered set.
+// For regular Kubernetes manifests the file at Path is what gets
+// merged. For AppConfig manifests, upload split the carrier
+// ConfigMap into:
+//
+//   - AppConfig Unit (toolchain AppConfig/<Format>; body = raw env
+//     content) — this is the "real" Unit; its content gets updated
+//     from AppCfg.Content via merge-external-source, with Base
+//     matching the carrier filename upload used as the source name.
+//   - Placeholder ConfigMap Unit (toolchain Kubernetes/YAML; body
+//     empty at create, populated via live-merge link from the
+//     AppConfig Unit) — IsPlaceholder=true; never directly updated
+//     and never a delete candidate while the AppConfig manifest is
+//     present.
+type renderedItem struct {
+	Slug          string
+	Path          string // path to the local file (carrier manifest for AppConfig)
+	Base          string // basename used as merge-external-source identity
+	AppCfg        *upload.AppConfigManifest
+	IsPlaceholder bool
+}
+
+// stagedPath returns a file path containing the merge-source body.
+// For regular manifests, that's just item.Path. For AppConfig, it
+// stages AppCfg.Content into a temp file (the cub CLI reads the body
+// from disk via the positional arg). The returned cleanup must be
+// called when the path is no longer needed; it is a no-op for non-
+// AppConfig items.
+func (item renderedItem) stagedPath() (string, func(), error) {
+	if item.AppCfg == nil {
+		return item.Path, func() {}, nil
+	}
+	tmp, err := os.CreateTemp("", "appconfig-diff-*-"+item.Slug)
+	if err != nil {
+		return "", func() {}, err
+	}
+	if _, err := tmp.Write(item.AppCfg.Content); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", func() {}, err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return "", func() {}, err
+	}
+	return tmp.Name(), func() { os.Remove(tmp.Name()) }, nil
+}
+
+// listRenderedSlugs scans the rendered manifests directory and
+// returns one renderedItem per slug. AppConfig-tagged ConfigMap
+// manifests expand into TWO entries: the AppConfig Unit slug (with
+// AppCfg set) and the *-rendered placeholder slug (IsPlaceholder
+// true). Regular manifests emit one entry keyed by their
+// filename-derived slug.
+func listRenderedSlugs(dir string) (map[string]renderedItem, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", dir, err)
 	}
-	out := map[string]string{}
+	out := map[string]renderedItem{}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -180,8 +250,27 @@ func listRenderedSlugs(dir string) (map[string]string, error) {
 		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			continue
 		}
+		path := filepath.Join(dir, name)
+		appCfg, err := upload.DetectAppConfigManifest(path)
+		if err != nil {
+			return nil, fmt.Errorf("detect AppConfig in %s: %w", name, err)
+		}
+		if appCfg != nil {
+			out[appCfg.UnitSlug()] = renderedItem{
+				Slug:   appCfg.UnitSlug(),
+				Path:   path,
+				Base:   filepath.Base(appCfg.ManifestPath),
+				AppCfg: appCfg,
+			}
+			out[appCfg.PlaceholderSlug()] = renderedItem{
+				Slug:          appCfg.PlaceholderSlug(),
+				AppCfg:        appCfg,
+				IsPlaceholder: true,
+			}
+			continue
+		}
 		slug := trimExt(name)
-		out[slug] = filepath.Join(dir, name)
+		out[slug] = renderedItem{Slug: slug, Path: path, Base: name}
 	}
 	return out, nil
 }
@@ -216,7 +305,7 @@ func listCurrentSlugs(ctx context.Context, space, pkg string) ([]string, error) 
 // Mutations whose only content is ConfigHub bookkeeping (the
 // confighub.com/ResourceMergeID annotation injected by every
 // merge-external-source apply) are dropped — without this filter
-// `installer update` does not converge on its second run, because the
+// `install update` does not converge on its second run, because the
 // new file body lacks the annotation that cub injected on the prior
 // merge.
 func dryRunMutations(ctx context.Context, space, slug, sourceName, path string) (string, error) {
@@ -257,10 +346,35 @@ func isNoChange(s string) bool {
 }
 
 var (
-	ansiRE        = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	mutationLine  = regexp.MustCompile(`^\s*[+~-]\s*\[(?:Add|Update|Delete)\]\s`)
-	resourceLine  = regexp.MustCompile(`^Resource:\s`)
-	bookkeepingRE = regexp.MustCompile(`^\s*confighub\.com/`)
+	ansiRE       = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	mutationLine = regexp.MustCompile(`^\s*[+~-]\s*\[(?:Add|Update|Delete)\]\s`)
+	resourceLine = regexp.MustCompile(`^Resource:\s`)
+	// bookkeepingRE matches a body line whose payload starts with a
+	// well-known bookkeeping key. Used to drop Add / Update mutations
+	// whose only content is bookkeeping cub injects on every
+	// merge-external-source apply.
+	//
+	// Two flavors are recognized:
+	//   - "confighub.com/..." (Kubernetes/YAML annotation keys)
+	//   - "configHub.resourceMergeID" (AppConfig flat-key bookkeeping;
+	//     "configHub.<other>" can be legitimate schema config a
+	//     package author declared — e.g., configHub.configName /
+	//     configHub.configSchema — so the AppConfig match is keyed
+	//     on the specific bookkeeping name, not the configHub prefix
+	//     in general).
+	bookkeepingRE = regexp.MustCompile(`^\s*(?:confighub\.com/|configHub\.resourceMergeID(?:[\s=:]|$))`)
+	// deleteOnBookkeepingHeader matches a mutation header line for a
+	// [Delete] on the bookkeeping key. The body of a Delete mutation
+	// holds only the deleted value (a UUID), so the body-based
+	// bookkeepingRE check above can't catch it — the signal is in
+	// the path. Two formats:
+	//   - Kubernetes annotation, "." as separator, "~1" as the escape
+	//     for "." inside the key:
+	//       [Delete] metadata.annotations.confighub~1com/ResourceMergeID
+	//     (literal "." form is also accepted, defensively).
+	//   - AppConfig flat-key form:
+	//       [Delete] configHub.resourceMergeID
+	deleteOnBookkeepingHeader = regexp.MustCompile(`\[Delete\]\s+(?:.*\.annotations\.confighub(?:~1com|\.com)/|configHub\.resourceMergeID(?:\s|$))`)
 )
 
 func stripANSI(s string) string {
@@ -316,14 +430,25 @@ func filterBookkeepingMutations(in string) string {
 		if pendingBlock == nil {
 			return
 		}
-		// A mutation is bookkeeping iff it has body lines AND every
-		// body line is a confighub.com/ key. Empty-body mutations
-		// (like "+ [Add] metadata.labels.foo") are real changes —
-		// the path in the header is the diff. Bookkeeping mutations
-		// also need their path to look like an annotations path
-		// (a body-only diff for a non-annotations path is not
-		// bookkeeping even if the body line happens to start with
-		// confighub.com).
+		// Two flavors of "bookkeeping-only" mutations to drop:
+		//
+		// 1. [Add] / [Update] on the annotation: body holds the
+		//    confighub.com/<key>: <value> pair. Caught by the
+		//    body-based check below.
+		// 2. [Delete] on the annotation: body holds only the deleted
+		//    value (a UUID). The signal lives in the header path
+		//    (".annotations.confighub.com/..."), not the body —
+		//    caught by deleteOnBookkeepingHeader.
+		//
+		// Empty-body mutations (like "+ [Add] metadata.labels.foo")
+		// are real changes — the path in the header is the diff —
+		// and must not be dropped.
+		if deleteOnBookkeepingHeader.MatchString(pendingBlock.header) {
+			pendingBlock.dropped = true
+			blocks = append(blocks, *pendingBlock)
+			pendingBlock = nil
+			return
+		}
 		bodyHasContent := false
 		bodyAllBookkeeping := true
 		for _, l := range pendingBlock.body {

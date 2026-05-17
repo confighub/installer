@@ -27,7 +27,7 @@ none of which are implemented yet beyond `pull`.
   room for both but does not define them.
 - **Helm chart interop as a dependency type.** Helm cannot itself drive this
   installer because Helm packages have no way to specify a post-renderer, so
-  there is no symmetric path. We can still _pull_ a chart with `installer pull`
+  there is no symmetric path. We can still _pull_ a chart with `install pull`
   as a convenience (existing behavior), but `dependencies:` entries cannot
   point at Helm charts.
 - **Kustomizer-style render-on-push.** Kustomizer's `push` renders first; ours
@@ -37,7 +37,7 @@ none of which are implemented yet beyond `pull`.
   variant/environment, but the variant problem itself is out of scope here.
   Bases + components + inputs cover today's needs.
 - **Server-side search/catalog.** OCI `_catalog` support is uneven across
-  registries. Discovery is convention + `installer list`. Curated indexes can
+  registries. Discovery is convention + `install list`. Curated indexes can
   be added later if needed.
 
 ## What a package is
@@ -49,7 +49,7 @@ my-pkg/
 ├── installer.yaml        # the Package manifest (pkg/api.Package)
 ├── bases/
 ├── components/
-├── validation/           # optional, surfaced by `installer doc`
+├── validation/           # optional, surfaced by `install doc`
 ├── collector             # optional executable; produces facts + secrets
 └── examples/
 ```
@@ -87,13 +87,13 @@ bundle:
 manifest: <the parsed installer.yaml>
 ```
 
-Having the manifest in the config blob lets `installer inspect <ref>` and the
+Having the manifest in the config blob lets `install inspect <ref>` and the
 resolver read metadata (dependencies, provides, kubeVersion) without pulling
 the layer.
 
 ### Pull-time discrimination
 
-`installer pull` already handles a Helm-OCI shape heuristically (single `.tgz`
+`install pull` already handles a Helm-OCI shape heuristically (single `.tgz`
 layer named like a chart). Native installer artifacts take a deterministic
 path based on `artifactType`; the Helm fallback remains for convenience but
 must not be exercised when the artifact identifies itself as ours.
@@ -111,19 +111,19 @@ Without this, signing and digest-pinning give weak guarantees.
 ## CLI surface
 
 ```
-installer package <dir> [-o file.tgz]
-installer push    <pkg.tgz|dir> oci://registry/repo:tag
-installer pull    <ref>                                # exists; harden + add --digest
-installer inspect <ref>                                # reads config blob only
-installer list    oci://registry/repo                  # tags via /tags/list
-installer tag     <src-ref> <dst-tag>
-installer sign    <ref>                                # cosign keyed or keyless
-installer verify  <ref>
-installer login   <registry>
-installer logout  <registry>
-installer deps update <dir>                            # write installer.lock to out/spec/
-installer deps build  <dir>                            # pre-fetch locked deps for offline render
-installer deps tree   <dir>                            # render the resolved DAG
+install package <dir> [-o file.tgz]
+install push    <pkg.tgz|dir> oci://registry/repo:tag
+install pull    <ref>                                # exists; harden + add --digest
+install inspect <ref>                                # reads config blob only
+install list    oci://registry/repo                  # tags via /tags/list
+install tag     <src-ref> <dst-tag>
+install sign    <ref>                                # cosign keyed or keyless
+install verify  <ref>
+install login   <registry>
+install logout  <registry>
+install deps update <dir>                            # write installer.lock to out/spec/
+install deps build  <dir>                            # pre-fetch locked deps for offline render
+install deps tree   <dir>                            # render the resolved DAG
 ```
 
 `installer search` is omitted in v1.
@@ -243,11 +243,11 @@ spec:
 
 Workflow:
 
-- `installer deps update <dir>` resolves the DAG, writes `out/spec/lock.yaml`.
-- `installer render` requires a lock; if absent or stale (root manifest's
+- `install deps update <dir>` resolves the DAG, writes `out/spec/lock.yaml`.
+- `install render` requires a lock; if absent or stale (root manifest's
   declared deps disagree with the lock), it errors and instructs the user to
-  re-run `installer deps update`.
-- `installer deps build <dir>` pre-fetches each locked dep into a local
+  re-run `install deps update`.
+- `install deps build <dir>` pre-fetches each locked dep into a local
   `out/vendor/<name>@<version>/` so a subsequent render is fully offline.
 
 ### Resolver
@@ -277,19 +277,19 @@ inter-Space Links; cross-Space ApplyGates enforce it at apply time.
 ### Cluster-side `externalRequires` still apply
 
 Anything in `externalRequires` not satisfied by some dep's `provides` remains
-a cluster precondition checked by `installer preflight`. This is what keeps
+a cluster precondition checked by `install preflight`. This is what keeps
 the model honest: declaring a dep is a _promise_ that the dep provides the
 precondition; preflight verifies leftovers.
 
 ## Bundling rules
 
-`installer package` MUST refuse to bundle:
+`install package` MUST refuse to bundle:
 
 - `*.env.secret` files anywhere in the tree (collector output; never published).
 - Anything under `out/` (rendered artifacts; not source).
 - Anything matched by `.installerignore` (optional, mirrors `.helmignore`).
 
-`installer package` MUST include:
+`install package` MUST include:
 
 - `installer.yaml`, all referenced `bases/` and `components/` trees,
   `validation/`, the `collector` executable if declared, and any files
@@ -315,18 +315,18 @@ metadata:
 
 The two `*Version` fields are evaluated at resolve time and at render time;
 mismatch is an error with an upgrade hint. Annotations are advisory and
-surfaced in `installer inspect` and `installer doc`.
+surfaced in `install inspect` and `install doc`.
 
 ## Signing
 
-`installer sign` and `installer verify` use cosign (keyed or keyless).
+`install sign` and `install verify` use cosign (keyed or keyless).
 When a local policy file is present (`~/.config/installer/policy.yaml`),
 `pull` and `deps update` enforce verification before trusting an artifact's
 digest.
 
 ## What this design does _not_ answer (yet)
 
-- **Mirroring / air-gap workflows.** `installer deps build` produces a
+- **Mirroring / air-gap workflows.** `install deps build` produces a
   vendor tree, but a `installer mirror oci://src oci://dst` for moving an
   entire dep closure between registries is left for later.
 - **Multi-arch packages.** Installer packages are platform-independent (they
@@ -339,12 +339,12 @@ digest.
 
 ## Implementation order (suggested)
 
-1. Deterministic bundler + `installer package` (no network).
-2. `installer push` / `inspect` / `list` / `tag` against an OCI registry,
+1. Deterministic bundler + `install package` (no network).
+2. `install push` / `inspect` / `list` / `tag` against an OCI registry,
    reusing oras-go.
 3. `installer.yaml` schema additions (`dependencies`, `conflicts`,
    `replaces`, satisfies-link on existing fields) — parse-only.
-4. Resolver + `installer deps update` writing `out/spec/lock.yaml`.
+4. Resolver + `install deps update` writing `out/spec/lock.yaml`.
 5. Render wired to read the lock, fetch deps (cached via `deps build`), and
    render each into its own output subtree (`out/<dep-name>/manifests/`,
    `out/<dep-name>/spec/`).

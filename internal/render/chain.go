@@ -83,7 +83,7 @@ func templateFuncs(packageRoot string) template.FuncMap {
 //
 // Template context:
 //
-//	{{ .Namespace }}      — value of `installer wizard --namespace`
+//	{{ .Namespace }}      — value of `install wizard --namespace`
 //	{{ .Inputs.<name> }}  — value from inputs.yaml
 //	{{ .Facts.<name> }}   — value from facts.yaml (nil if no collector ran)
 //	{{ .Selection.* }}    — chosen base + components
@@ -218,7 +218,7 @@ func resolveValidatorTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Sel
 	return resolved, nil
 }
 
-// RunValidators is the public entry point used by `installer vet`. Resolves
+// RunValidators is the public entry point used by `install vet`. Resolves
 // the package's spec.validators template against inputs + selection + facts
 // and runs each group against data (the concatenated rendered manifests).
 // packageRoot is the directory loadJSON/other template helpers anchor

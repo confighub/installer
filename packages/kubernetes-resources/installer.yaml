@@ -14,7 +14,7 @@ spec:
         DaemonSet, Job, CronJob, Ingress, NetworkPolicy pair, RBAC
         bundle, HPA, PDB. Each is rendered with the recommended
         defaults applied via per-type ConfigHub function groups.
-        `installer new <kind> <name>` pulls these as starting
+        `install new <kind> <name>` pulls these as starting
         templates so operators don't author Kubernetes YAML from
         scratch.
 

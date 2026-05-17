@@ -16,8 +16,9 @@ import (
 )
 
 func newVetCmd() *cobra.Command {
+	var workDirFlag string
 	cmd := &cobra.Command{
-		Use:   "vet <work-dir>",
+		Use:   "vet",
 		Short: "Run the package's validators against the existing rendered output",
 		Long: `Vet runs the package's spec.validators chain against the manifests
 already in <work-dir>/out/manifests/ (and out/<dep>/manifests/ for
@@ -34,9 +35,9 @@ so a validator may reference an input. The wizard's persisted
 out/spec/{inputs,selection,facts}.yaml is the source of those
 values. If those files are missing, vet fails fast (run 'installer
 wizard' first).`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workDir, err := filepath.Abs(args[0])
+			workDir, err := filepath.Abs(workDirFlag)
 			if err != nil {
 				return err
 			}
@@ -52,11 +53,11 @@ wizard' first).`,
 			specDir := filepath.Join(workDir, "out", "spec")
 			sel, err := readSelection(filepath.Join(specDir, "selection.yaml"))
 			if err != nil {
-				return fmt.Errorf("read selection.yaml: %w (run `installer wizard` first)", err)
+				return fmt.Errorf("read selection.yaml: %w (run `install wizard` first)", err)
 			}
 			inputs, err := readInputs(filepath.Join(specDir, "inputs.yaml"))
 			if err != nil {
-				return fmt.Errorf("read inputs.yaml: %w (run `installer wizard` first)", err)
+				return fmt.Errorf("read inputs.yaml: %w (run `install wizard` first)", err)
 			}
 			facts, err := readFactsOptional(filepath.Join(specDir, "facts.yaml"))
 			if err != nil {
@@ -74,7 +75,7 @@ wizard' first).`,
 				return err
 			}
 			if len(body) == 0 {
-				return fmt.Errorf("no manifests found in %s — run `installer render` first", manifestsDir)
+				return fmt.Errorf("no manifests found in %s — run `install render` first", manifestsDir)
 			}
 
 			fmt.Printf("Vetting %d resource(s) under %s against %d validator group(s)...\n",
@@ -91,6 +92,7 @@ wizard' first).`,
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&workDirFlag, "work-dir", ".", "working directory (reads ./out/manifests + ./out/spec)")
 	return cmd
 }
 

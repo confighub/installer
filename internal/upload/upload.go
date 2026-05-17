@@ -141,7 +141,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 	for _, d := range in.Lock.Spec.Resolved {
 		vendor := filepath.Join(in.WorkDir, "out", "vendor", vendorSlug(d.Name, d.Version), "package")
 		if _, err := os.Stat(filepath.Join(vendor, "installer.yaml")); err != nil {
-			return nil, fmt.Errorf("dep %s vendor missing — run `installer render %s` first: %w", d.Name, in.WorkDir, err)
+			return nil, fmt.Errorf("dep %s vendor missing — run `install render %s` first: %w", d.Name, in.WorkDir, err)
 		}
 		// Read just enough metadata. We pulled this dep ourselves, so the
 		// lock's Name/Version are authoritative; we still re-read
@@ -335,7 +335,7 @@ func setMappingScalar(m *yaml.Node, key, value string) {
 
 // RefreshInstallerRecord rebuilds the installer-record Unit body from
 // pkg's local files and uploads it to ConfigHub. Used after
-// `installer update` / `installer upgrade-apply` mutates the local
+// `install update` / `install upgrade-apply` mutates the local
 // spec so the cub-side record stays in sync — without this refresh,
 // a subsequent upgrade reads stale inputs (notably ImageOverrides)
 // from ConfigHub via wizard.LoadPriorState.
@@ -446,7 +446,7 @@ func SplitInstallerRecord(body []byte) (*RecordContents, error) {
 // discovered package set. Reads the active cub context to record the
 // organization ID and server URL alongside the resolved Space slugs.
 //
-// Called by the CLI at the end of a successful `installer upload`. Safe
+// Called by the CLI at the end of a successful `install upload`. Safe
 // to call when packages contains only the parent (no deps).
 func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages []Package) error {
 	if len(packages) == 0 || !packages[0].IsParent {

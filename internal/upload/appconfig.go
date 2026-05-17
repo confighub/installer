@@ -95,7 +95,7 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 	}
 	mode := shape.Metadata.Annotations[annoMode]
 	if mode == "" {
-		return nil, fmt.Errorf("%s: %s missing — the transformer should have injected it during render; re-run `installer render`",
+		return nil, fmt.Errorf("%s: %s missing — the transformer should have injected it during render; re-run `install render`",
 			path, annoMode)
 	}
 	sourceKey := shape.Metadata.Annotations[annoSourceKey]

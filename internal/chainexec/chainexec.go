@@ -1,6 +1,6 @@
 // Package chainexec executes ConfigHub FunctionChain and validator groups
-// against config data. It's the shared core consumed by `installer render`
-// (after template resolution) and by `installer transformer` (which receives
+// against config data. It's the shared core consumed by `install render`
+// (after template resolution) and by `install transformer` (which receives
 // already-resolved groups from a KRM ResourceList functionConfig). Template
 // resolution itself lives in internal/render — it depends on installer state
 // that's irrelevant to the kustomize-side caller.

@@ -16,7 +16,7 @@ import (
 func newDepsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deps",
-		Short: "Manage installer package dependencies",
+		Short: "Manage install package dependencies",
 		Long: `Deps resolves the dependency DAG declared in installer.yaml against an OCI
 registry, writes <work-dir>/out/spec/lock.yaml, and optionally vendors
 locked dependencies for offline render.`,
@@ -26,8 +26,9 @@ locked dependencies for offline render.`,
 }
 
 func newDepsUpdateCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "update <work-dir>",
+	var workDir string
+	cmd := &cobra.Command{
+		Use:   "update",
 		Short: "Resolve the dependency DAG and write out/spec/lock.yaml",
 		Long: `Update walks the dependency DAG declared in
 <work-dir>/package/installer.yaml, resolves SemVer constraints against the
@@ -38,18 +39,18 @@ manifest digest. Conflicts are honored.
 If <work-dir>/out/spec/selection.yaml exists, the resolver honors optional
 deps gated by whenComponent. If it does not, optional deps are skipped and
 listed in the output.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workDir, err := filepath.Abs(args[0])
+			absWork, err := filepath.Abs(workDir)
 			if err != nil {
 				return err
 			}
-			pkgDir := filepath.Join(workDir, "package")
+			pkgDir := filepath.Join(absWork, "package")
 			loaded, err := ipkg.Load(pkgDir)
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
-			sel, err := loadSelectionOptional(filepath.Join(workDir, "out", "spec", "selection.yaml"))
+			sel, err := loadSelectionOptional(filepath.Join(absWork, "out", "spec", "selection.yaml"))
 			if err != nil {
 				return err
 			}
@@ -59,10 +60,10 @@ listed in the output.`,
 			if err != nil {
 				return err
 			}
-			if err := deps.WriteLock(workDir, loaded.Package, res.Lock); err != nil {
+			if err := deps.WriteLock(absWork, loaded.Package, res.Lock); err != nil {
 				return err
 			}
-			fmt.Printf("Locked %d dependency(ies) to %s\n", len(res.Lock.Spec.Resolved), deps.LockPath(workDir))
+			fmt.Printf("Locked %d dependency(ies) to %s\n", len(res.Lock.Spec.Resolved), deps.LockPath(absWork))
 			for _, d := range res.Lock.Spec.Resolved {
 				fmt.Printf("  %s  %s  (%s)\n", d.Name, d.Ref, d.Digest)
 			}
@@ -72,11 +73,14 @@ listed in the output.`,
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
+	return cmd
 }
 
 func newDepsBuildCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "build <work-dir>",
+	var workDir string
+	cmd := &cobra.Command{
+		Use:   "build",
 		Short: "(not yet implemented) Pre-fetch locked dependencies into out/vendor/",
 		Long: `Build fetches every dependency listed in <work-dir>/out/spec/lock.yaml into
 <work-dir>/out/vendor/<name>@<version>/ so that a subsequent installer
@@ -84,40 +88,44 @@ render runs without network access.
 
 Not yet wired in Phase 4 (resolver + lock only). Tracked under
 docs/package-management-plan.md (Phase 4 cross-cutting cache work).`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = workDir
 			return fmt.Errorf("deps build not yet implemented; see docs/package-management-plan.md (Phase 4)")
 		},
 	}
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
+	return cmd
 }
 
 func newDepsTreeCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "tree <work-dir>",
+	var workDir string
+	cmd := &cobra.Command{
+		Use:   "tree",
 		Short: "Print the resolved dependency DAG",
 		Long: `Tree prints the resolved dependency DAG from
 <work-dir>/out/spec/lock.yaml, with each entry's pinned ref + manifest
 digest and the requester chain. Run deps update first.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workDir, err := filepath.Abs(args[0])
+			absWork, err := filepath.Abs(workDir)
 			if err != nil {
 				return err
 			}
-			pkgDir := filepath.Join(workDir, "package")
+			pkgDir := filepath.Join(absWork, "package")
 			loaded, err := ipkg.Load(pkgDir)
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
-			lock, err := deps.ReadLock(workDir)
+			lock, err := deps.ReadLock(absWork)
 			if err != nil {
 				return err
 			}
 			if lock == nil {
-				return fmt.Errorf("no lock at %s — run `installer deps update %s` first", deps.LockPath(workDir), workDir)
+				return fmt.Errorf("no lock at %s — run `%s deps update --work-dir %s` first", deps.LockPath(absWork), InvocationName(), absWork)
 			}
 			if deps.IsStale(lock, loaded.Package) {
-				fmt.Fprintf(os.Stderr, "WARNING: lock is stale (installer.yaml's dependencies have changed) — re-run `installer deps update`\n\n")
+				fmt.Fprintf(os.Stderr, "WARNING: lock is stale (installer.yaml's dependencies have changed) — re-run `%s deps update`\n\n", InvocationName())
 			}
 			fmt.Printf("%s@%s\n", lock.Spec.Package.Name, lock.Spec.Package.Version)
 			for _, d := range lock.Spec.Resolved {
@@ -136,6 +144,8 @@ digest and the requester chain. Run deps update first.`,
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
+	return cmd
 }
 
 func loadSelectionOptional(path string) (*api.Selection, error) {

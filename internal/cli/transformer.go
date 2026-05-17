@@ -97,7 +97,7 @@ is passed through verbatim to the function executor's WhereResource option.
 Usable standalone with raw kustomize: reference this subcommand from your
 kustomization's transformers: list via a KRM function config whose
 config.kubernetes.io/function annotation points at a wrapper that runs
-'installer transformer'.`,
+'install transformer'.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

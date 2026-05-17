@@ -17,7 +17,7 @@ func newPackageCmd() *cobra.Command {
 		Short: "Bundle a package source tree into a deterministic .tgz",
 		Long: `Package bundles a package source tree (the directory containing installer.yaml,
 bases/, components/, validation/, and an optional collector) into a
-byte-deterministic .tgz suitable for installer push.
+byte-deterministic .tgz suitable for install push.
 
 Refuses to bundle: *.env.secret files, anything under out/, anything matched
 by .installerignore (gitignore syntax). The package is NOT rendered —

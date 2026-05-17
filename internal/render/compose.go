@@ -9,7 +9,7 @@
 //     Inputs (Go templates) and writing them to
 //     out/compose/{transformers,validators}.yaml as KRM function configs.
 //  3. Shelling out to `kustomize build --enable-exec --enable-alpha-plugins`,
-//     which invokes `installer transformer` (via a wrapper script in
+//     which invokes `install transformer` (via a wrapper script in
 //     out/compose/) to run each function group in process.
 //  4. Splitting the resulting multi-doc YAML into per-resource files with
 //     deterministic naming, written to out/manifests/.
@@ -127,7 +127,7 @@ func composeKustomization(in composeInputs, composeDir string) error {
 	// directly and runs them via chainexec.RunValidators against the
 	// kustomize output. Standalone kustomize users who want ConfigHub
 	// validators can wire ConfigHubValidators into their own
-	// kustomization's validators: list — `installer transformer`
+	// kustomization's validators: list — `install transformer`
 	// supports it.
 	if needsWrapper {
 		if err := writeTransformerWrapper(composeDir, in.TransformerBinary); err != nil {
@@ -171,7 +171,7 @@ type krmFunctionConfigMeta struct {
 // plugin recognizes for the kustomization's transformers: list. The
 // matching ConfigHubValidators kind exists in internal/cli/transformer.go
 // for standalone-kustomize users wiring it into their own validators:
-// list — `installer render` runs validators in-process after kustomize
+// list — `install render` runs validators in-process after kustomize
 // (see render.go and post_validate.go) and doesn't emit a ConfigHubValidators
 // config into the synthesized kustomization.
 const kindConfigHubTransformers = "ConfigHubTransformers"

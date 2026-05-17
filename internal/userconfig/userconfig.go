@@ -2,7 +2,7 @@
 // file at ~/.confighub/installer/state.yaml. The file records which
 // "bootstrap" packages (notably kubernetes-resources) the user has
 // already installed into ConfigHub, keyed by organization, so
-// `installer new` can pull from them without re-installing on every
+// `install new` can pull from them without re-installing on every
 // invocation.
 //
 // The file is scoped to one operator, not one organization — entries
@@ -33,7 +33,7 @@ type Metadata struct {
 
 type StateSpec struct {
 	// Installs records each (organizationID, package) → Space slug
-	// the operator has bootstrapped. `installer new` consults this
+	// the operator has bootstrapped. `install new` consults this
 	// before pulling so the kubernetes-resources package only gets
 	// uploaded once per org.
 	Installs []InstallRecord `yaml:"installs,omitempty" json:"installs,omitempty"`

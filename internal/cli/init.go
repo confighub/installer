@@ -10,7 +10,7 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
-// defaultValidators is the validator chain `installer init` seeds new
+// defaultValidators is the validator chain `install init` seeds new
 // packages with. vet-placeholders is intentionally NOT in the list —
 // some packages exist precisely to ship `confighubplaceholder`-bearing
 // bases that get cloned into variants.
@@ -32,8 +32,8 @@ func newInitCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "init <dir>",
-		Short: "Scaffold a new installer package in <dir>",
-		Long: `Init creates the on-disk skeleton of a new installer package:
+		Short: "Scaffold a new install package in <dir>",
+		Long: `Init creates the on-disk skeleton of a new install package:
 
   <dir>/
   ├── installer.yaml           # the manifest with default validators
@@ -47,7 +47,7 @@ The seeded installer.yaml declares one default base, no components,
 and the recommended validator chain (vet-schemas, vet-merge-keys,
 vet-format). vet-placeholders is intentionally omitted — packages
 that ship cloneable bases would fail it. Add or remove validators
-later with 'installer edit validator add/remove' (when shipped) or
+later with 'install edit validator add/remove' (when shipped) or
 by hand-editing installer.yaml.
 
 Refuses to overwrite an existing installer.yaml unless --force.`,
@@ -106,7 +106,7 @@ Refuses to overwrite an existing installer.yaml unless --force.`,
 				return err
 			}
 
-			// Seed an empty kustomization.yaml so `installer render`
+			// Seed an empty kustomization.yaml so `install render`
 			// works against the empty base. The author replaces this
 			// with their actual resources.
 			kustPath := filepath.Join(dir, "bases", "default", "kustomization.yaml")

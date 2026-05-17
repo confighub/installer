@@ -59,13 +59,13 @@ working interactive flow built on `survey/v2`.
     feeding scripted input, asserting the resulting `Result`.
   - `internal/wizard/prior_test.go` — local-only prior state load;
     ConfigHub fetch is exercised in the e2e script.
-- Acceptance: `installer wizard ./examples/hello-app` (no flags) walks
+- Acceptance: `install wizard ./examples/hello-app` (no flags) walks
   through prompts and emits the same files the non-interactive path
   produces. Re-running it offers "Re-use last choices?" and renders an
   unchanged spec. Re-running it after `cub context set` to a different
   org fails fast naming both org IDs.
 
-## Phase B — `installer plan`
+## Phase B — `install plan`
 
 Goal: read-only diff of `<work-dir>/out` against ConfigHub.
 
@@ -85,7 +85,7 @@ Goal: read-only diff of `<work-dir>/out` against ConfigHub.
   - Per-Space `Images:` footer from
     `cub function do --space <slug> get-container-image '*'` against the
     just-rendered manifests (not against ConfigHub).
-- New: `internal/cli/plan.go` — `installer plan <work-dir>`. Reuses
+- New: `internal/cli/plan.go` — `install plan <work-dir>`. Reuses
   `upload.Discover` to walk packages.
 - New: `internal/cli/plan_test.go` (table tests for print rendering).
 - Add to existing e2e: after `upload`, edit one rendered file, re-render,
@@ -93,7 +93,7 @@ Goal: read-only diff of `<work-dir>/out` against ConfigHub.
 - Acceptance: plan against an unchanged work-dir prints
   "No changes." Hand-edit one resource, re-render, plan shows the diff.
 
-## Phase C — `installer update`
+## Phase C — `install update`
 
 Goal: execute the Phase B plan inside a ChangeSet.
 
@@ -110,7 +110,7 @@ Goal: execute the Phase B plan inside a ChangeSet.
   - `cub unit delete` for deletes; gated on `opts.Yes` or interactive
     confirm-each. Stale links are auto-removed by ConfigHub on Unit
     delete — no installer-side cleanup.
-- New: `internal/cli/update.go` — `installer update <work-dir> [--yes]
+- New: `internal/cli/update.go` — `install update <work-dir> [--yes]
   [--changeset <slug>]`. Default ChangeSet slug:
   `installer-update-<RFC3339-timestamp>`. Plan output names the
   ChangeSet that will be opened and prints the revert command.
@@ -126,7 +126,7 @@ Goal: execute the Phase B plan inside a ChangeSet.
   - Restoring `Before:ChangeSet:<slug>` reverts the updates from that
     invocation.
 
-## Phase D — `installer upgrade` and `installer upgrade-apply`
+## Phase D — `install upgrade` and `install upgrade-apply`
 
 Goal: split the upgrade flow into "stage" (pull, re-wizard non-
 interactively, re-collect facts, re-render, plan) and "promote"
@@ -142,21 +142,21 @@ interactively, re-collect facts, re-render, plan) and "promote"
   - Mirror helpers for components: `DiffComponents(oldPkg, newPkg,
     priorSelection)` honoring the prior preset (recorded in
     `selection.yaml`) for `default: true` adoption.
-- New: `internal/cli/upgrade.go` — `installer upgrade <work-dir> <ref>
+- New: `internal/cli/upgrade.go` — `install upgrade <work-dir> <ref>
   [--set-image …] [--apply]`.
   - Pulls into `<work-dir>/.upgrade/package`.
   - Runs `schemadiff.DiffInputs` and `DiffComponents`. Interactive
     mode prompts for new required inputs; non-interactive mode fails
-    with the missing input names and the `installer wizard <work-dir>`
+    with the missing input names and the `install wizard <work-dir>`
     hint.
   - Builds `RawAnswers` from carry + answers + prior selection.
   - Runs the collector against the new package.
   - Calls `render.Render` with `<work-dir>/.upgrade` as the work-dir.
   - Calls `diff.Compute` against current ConfigHub state and prints.
-  - `--apply` is sugar for `installer upgrade-apply <work-dir>`
+  - `--apply` is sugar for `install upgrade-apply <work-dir>`
     invoked immediately on success — does not change the staging
     contract.
-- New: `internal/cli/upgrade_apply.go` — `installer upgrade-apply
+- New: `internal/cli/upgrade_apply.go` — `install upgrade-apply
   <work-dir> [--yes]`.
   - Refuses if `.upgrade/` is missing or if the staged spec has
     unsatisfied required inputs (records this in
@@ -164,14 +164,14 @@ interactively, re-collect facts, re-render, plan) and "promote"
   - Atomic rename: archives the current `package/` and `out/` to
     `.upgrade-prev/`, then renames `.upgrade/package` → `package` and
     `.upgrade/out` → `out`.
-  - Invokes `installer update <work-dir>` with a ChangeSet slug
+  - Invokes `install update <work-dir>` with a ChangeSet slug
     `installer-upgrade-<from>-to-<to>-<timestamp>`.
 - Acceptance:
   - Starting from an installed `examples/hello-app`, `installer
     upgrade <work-dir> ./examples/hello-app` produces a `.upgrade/`
     tree and a "no changes" plan.
   - Editing `examples/hello-app/bases/default/...` and re-running
-    `installer upgrade` surfaces the change in plan; `installer
+    `install upgrade` surfaces the change in plan; `installer
     upgrade-apply <work-dir>` materializes it.
   - Adding a new required input to the package and running `installer
     upgrade` non-interactively fails fast with the new input named.
@@ -211,15 +211,15 @@ to [Principle 5](./principles.md#5-image-management-declare-a-kustomize-transfor
   - Unit: image overrides round-trip — `inputs.yaml` written by an
     upgrade-with-`--set-image` carries forward to a subsequent
     upgrade without `--set-image`.
-- Acceptance: `installer upgrade <work-dir> <same-ref> --set-image
-  hello=hello:v2 && installer upgrade-apply <work-dir>` produces a
+- Acceptance: `install upgrade <work-dir> <same-ref> --set-image
+  hello=hello:v2 && install upgrade-apply <work-dir>` produces a
   plan whose only diff is the image change.
 
 ## Cross-cutting
 
 ### Auth context check
 
-`installer wizard`'s ConfigHub fetch and `installer
+`install wizard`'s ConfigHub fetch and `installer
 plan/update/upgrade/upgrade-apply` all inherit the user's `cub` auth
 context. Each command starts by calling
 `cubctx.CheckOrganization(ctx, upload.Spec.OrganizationID)` (Phase A
@@ -241,8 +241,159 @@ to re-upload, but it is not required for the new commands to work.)
 ### Roadmap entries to update
 
 - README "Roadmap" section — replace the stub line about "interactive
-  wizard (e.g., `survey`)" and the "`installer plan`" stub with phase
+  wizard (e.g., `survey`)" and the "`install plan`" stub with phase
   pointers.
 - README "Status" section — same.
 - README "Design docs" section — link `principles.md` and
   `lifecycle.md`.
+
+## Phase F — Unified `--work-dir`, `setup` command, `upload`-absorbs-`update`, drop `upgrade`/`upgrade-apply`
+
+Goal: reduce the consumer-facing command count and remove the three-way
+inconsistency in how the working directory is named, by collapsing the
+"prepare files locally" half of the lifecycle into a single `setup`
+command and folding `update` into `upload`. See
+[`lifecycle.md`](./lifecycle.md) for the user-facing spec; this section
+is the implementation plan.
+
+### Working directory unification
+
+- `pull`: `--out <dir>` → `--work-dir <dir>` (default `.`). Pull now
+  writes to `<work-dir>/package/`, not directly into the destination
+  dir. Pulls into a sibling temp dir under `<work-dir>` and uses
+  `os.Rename` to swap into `package/` on success; any prior
+  `<work-dir>/package/` is renamed to a `.tmp-pkg-prev-<rand>` first
+  and removed only after the swap succeeds.
+- `render`, `upload`, `plan`, `vet`, `deps update`, `deps tree`,
+  `deps build` (stub), `preflight` (stub): positional `<work-dir>`
+  argument removed. Each gains `--work-dir <dir>` flag (default `.`).
+  No backward-compat positional accepted — pre-1.0, breaking change
+  approved.
+
+### New `setup` command
+
+`internal/cli/setup.go`:
+
+- Flags: `--pull <ref>` (optional, replaces `install pull
+  <ref> --work-dir`), plus every flag the existing `wizard` and
+  `render` commands accept (`--namespace`, `--select`, `--input`,
+  `--non-interactive`, `--components`, `--set-image`, `--reuse`,
+  `--base`, `--clean`).
+- Flow:
+  1. Resolve `--work-dir` (default `.`).
+  2. If `--pull <ref>`: pull into `<work-dir>/package/` (via the
+     new atomic-rename `pull` core).
+  3. Else: require `<work-dir>/package/installer.yaml` to exist;
+     error with a hint to pass `--pull` otherwise.
+  4. Load prior state (`wizard.LoadPriorState`).
+  5. Build raw answers via either the regular (`buildRawAnswers`) or
+     upgrade-style (`buildUpgradeAnswers`) path, dispatched on
+     `prior != nil && prior has Selection || Inputs`.
+  6. Run `wizard.Run` to write spec docs.
+  7. If multi-package, run `deps.Resolve` + write lock.
+  8. Run `render.Render` (+ `render.RenderDependencies`).
+- Auto-detection: prior state present → upgrade flow; absent → fresh
+  install flow. There is no `--upgrade` / `--first-install` flag in
+  this iteration; if the heuristic proves insufficient we can add one
+  later.
+
+The shared answer-building logic currently lives in `cli/wizard.go`
+(`buildRawAnswers`) and `cli/upgrade.go` (`buildUpgradeAnswers`); both
+move into the `setup` source file (or a shared `cli/answers.go`) so
+`wizard` and `setup` both call them.
+
+### `wizard` --render flag
+
+`internal/cli/wizard.go` gains `--render` (default `true`). When
+`true`, after `wizard.Run` writes spec docs it calls `render.Render`
+(and `render.RenderDependencies` for multi-package). When `false`,
+behavior matches today's `wizard`. The render path is the same code
+`render.go` runs.
+
+### `upload` absorbs `update`
+
+`internal/cli/upload.go`:
+
+- Auto-detects "first upload" vs "reconcile" by presence of
+  `<work-dir>/out/spec/upload.yaml`.
+- First upload: existing `uploadOnePackage` / cross-Space links /
+  `PlanCrossSpaceLinks` paths, writes `upload.yaml` at the end.
+- Reconcile: invokes the existing `diff.Compute` + `diff.Apply` path
+  (the body that `cli/update.go` currently calls).
+- Rename `--allow-exists` → `--retry`. Same semantics: idempotent
+  creates on first upload after a partial failure. Ignored on
+  reconcile.
+- New flags from old `update`: `--yes`, `--changeset`.
+
+`internal/cli/update.go` deleted. The hook function
+`refreshInstallerRecordHook` and helpers move into
+`internal/cli/upload.go` (or stay where they are if not in
+`update.go`).
+
+### Drop `upgrade` / `upgrade-apply`
+
+- Delete `internal/cli/upgrade.go` and
+  `internal/cli/upgrade_apply.go`.
+- Remove `newUpgradeCmd`, `newUpgradeApplyCmd` from `root.go`.
+- Move `buildUpgradeAnswers` and related helpers
+  (`stringifyAnyForUpgrade`, `runDepsUpdate`, `runRender`, etc.) into
+  `cli/setup.go` (or wherever they're shared). Drop the
+  `.upgrade-prev/` / `.upgrade/` constants and the `prepareStageDir` /
+  `copyUploadDoc` / `computeStagedPlan` / `loadPackageOptional` /
+  `moveIfExists` / `upgradeChangeSetSlug` / `upgradeChangeSetDescription`
+  helpers that exist only to serve the staged-upgrade path.
+- The pull-into-tmp-then-rename pattern in the new `pull` core makes
+  the `.upgrade/` staging area unnecessary: a failed pull leaves the
+  prior `package/` intact via the rename rollback.
+- Keep the ChangeSet name `installer-update-<timestamp>` for all
+  reconcile invocations. Upgrade-specific ChangeSet slug formatting
+  (`installer-upgrade-<from>-to-<to>-<timestamp>`) is dropped — the
+  schema-diff log lines that setup prints (`Adopted new default for
+  input X`, etc.) make the upgrade nature visible enough.
+
+### Internal helpers
+
+- `internal/pkg/pull.go`: factor out the existing
+  `pullOCI` / `pullLocal` paths so they take a "final destination"
+  (`<work-dir>/package/`) and use a sibling temp dir; add the
+  rename-with-rollback wrapper at the call site.
+- `internal/wizard`: no API changes; the existing
+  `LoadPriorState` / `DiffInputs` / `DiffComponents` / `AskOneInput`
+  helpers are exactly what setup needs.
+- `pkg/api`: no schema changes. `Upload` doc unchanged.
+
+### Tests
+
+- `test/e2e/package-and-deps.sh`: rewritten to use the new command
+  surface (single-package: `setup --pull` → `upload` → re-edit →
+  `setup` re-render → `upload` reconcile → `setup --pull <new-ref>` →
+  `upload` reconcile).
+- New `test/e2e/setup-flow.sh` (or absorbed into `package-and-deps.sh`)
+  that exercises the explicit setup flows: zero-to-render with
+  `setup --pull`, idempotent re-render with bare `setup`, upgrade via
+  `setup --pull <new>`, and `--set-image` carry-forward.
+- `internal/cli/upload_test.go` (new) — table-test that the first-vs-
+  reconcile detection picks the right code path on a synthetic
+  work-dir.
+
+### Acceptance
+
+- `bin/install setup --pull oci://… --work-dir /tmp/foo
+  --non-interactive --namespace foo` produces a render in
+  `/tmp/foo/out/manifests/` and `/tmp/foo/package/` exists. Re-running
+  the same command (no `--pull`) re-renders without re-pulling.
+- `bin/install upload --work-dir /tmp/foo --space foo-test` creates
+  Units; a second `bin/install upload --work-dir /tmp/foo` (no
+  `--space`) is a no-op on an unchanged work-dir.
+- Editing a rendered manifest and re-running `upload` opens a
+  ChangeSet, applies the diff.
+- `setup --pull <newer-version>` against an existing install produces
+  the expected schema-diff log lines, re-renders, and the next
+  `upload` reconciles.
+- `setup --set-image foo=foo:v2` (no `--pull`) re-renders with the
+  image override; the override persists in `out/spec/inputs.yaml`
+  across subsequent setup invocations.
+- No `.upgrade/` or `.upgrade-prev/` directories are created at any
+  point.
+- `install help` no longer lists `update`, `upgrade`, or
+  `upgrade-apply`.

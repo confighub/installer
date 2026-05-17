@@ -1,7 +1,7 @@
 # validation/
 
 Machine-readable documentation of the worker container, generated from the
-worker image itself. These files are not consumed by `installer render` —
+worker image itself. These files are not consumed by `install render` —
 they exist so a consumer (human operator or AI agent) can determine what
 env vars the workload accepts and what runtime contract it expects without
 re-pulling the image.

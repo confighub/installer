@@ -25,7 +25,7 @@ func newLoginCmd() *cobra.Command {
 		Short: "Store credentials for a registry",
 		Long: `Login stores a credential for the given registry in the docker-config-style
 credential store (typically ~/.docker/config.json), making it usable by
-installer push, pull, inspect, and list — plus any other tool that reads
+install push, pull, inspect, and list — plus any other tool that reads
 docker config (docker, podman, oras).
 
 If --username is omitted, it is read from stdin. If neither --password nor

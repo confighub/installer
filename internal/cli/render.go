@@ -16,10 +16,11 @@ import (
 
 func newRenderCmd() *cobra.Command {
 	var (
-		clean bool
+		workDir string
+		clean   bool
 	)
 	cmd := &cobra.Command{
-		Use:   "render <work-dir>",
+		Use:   "render",
 		Short: "Render selection + inputs into per-resource Kubernetes YAML",
 		Long: `Render reads <work-dir>/package + <work-dir>/out/spec/{selection,inputs}.yaml,
 runs kustomize on the chosen base + components, then runs the package's
@@ -32,14 +33,14 @@ The kustomize binary must be on PATH.
 
 Render is deterministic: the same package + selection + inputs always produce
 identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workDir, err := filepath.Abs(args[0])
+			absWork, err := filepath.Abs(workDir)
 			if err != nil {
 				return err
 			}
-			pkgDir := filepath.Join(workDir, "package")
-			outDir := filepath.Join(workDir, "out")
+			pkgDir := filepath.Join(absWork, "package")
+			outDir := filepath.Join(absWork, "out")
 			specDir := filepath.Join(outDir, "spec")
 			manifestsDir := filepath.Join(outDir, "manifests")
 
@@ -71,23 +72,19 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				return err
 			}
 
-			// Lock-state preflight: fail fast before any output is written
-			// if the package declares dependencies but the lock is missing
-			// or stale. Read the lock here; render reuses it after the
-			// parent renders.
 			var lock *api.Lock
 			if len(loaded.Package.Spec.Dependencies) > 0 {
-				lock, err = deps.ReadLock(workDir)
+				lock, err = deps.ReadLock(absWork)
 				if err != nil {
 					return err
 				}
 				if lock == nil {
-					return fmt.Errorf("package declares dependencies but %s does not exist; run `installer deps update %s`",
-						deps.LockPath(workDir), workDir)
+					return fmt.Errorf("package declares dependencies but %s does not exist; run `%s deps update --work-dir %s`",
+						deps.LockPath(absWork), InvocationName(), absWork)
 				}
 				if deps.IsStale(lock, loaded.Package) {
-					return fmt.Errorf("lock at %s is stale (installer.yaml's dependencies have changed); run `installer deps update %s`",
-						deps.LockPath(workDir), workDir)
+					return fmt.Errorf("lock at %s is stale (installer.yaml's dependencies have changed); run `%s deps update --work-dir %s`",
+						deps.LockPath(absWork), InvocationName(), absWork)
 				}
 			}
 
@@ -108,13 +105,11 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			}
 			fmt.Printf("Spec docs in %s\n", specDir)
 
-			// Multi-package render: lock was preflighted above; render each
-			// dependency into its own subtree under out/<dep-name>/.
 			if lock != nil {
 				depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
 					Lock:         lock,
 					ParentInputs: inputs,
-					WorkDir:      workDir,
+					WorkDir:      absWork,
 				})
 				if err != nil {
 					return err
@@ -127,15 +122,15 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				}
 			}
 
-			fmt.Printf("Next: %s upload %s --space <slug>\n", InvocationName(), workDir)
+			fmt.Printf("Next: %s upload --work-dir %s --space <slug>\n", InvocationName(), absWork)
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/spec, writes ./out/manifests)")
 	cmd.Flags().BoolVar(&clean, "clean", false, "remove out/manifests/ and out/secrets/ before rendering")
 	return cmd
 }
 
-// readFactsOptional reads facts.yaml if it exists, returning nil otherwise.
 func readFactsOptional(path string) (*api.Facts, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {

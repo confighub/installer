@@ -4,7 +4,7 @@ Kubernetes off-the-shelf component installer using
 [configuration as data](https://docs.confighub.com/background/config-as-data/).
 
 This tool is intended to play the role of an
-[installer wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
+[install wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
 and a [package dependency manager](https://medium.com/@sdboyer/so-you-want-to-write-a-package-manager-4ae9c17d9527).
 
 This installer aims to present only the minimal number of high-level decisions, such as
@@ -49,7 +49,7 @@ easier to experiment with different design choices.
 
 Working:
 
-- **Package authoring + distribution.** `installer package` (deterministic
+- **Package authoring + distribution.** `install package` (deterministic
   bundle), `push` / `pull` / `inspect` / `list` / `tag` /
   `login` / `logout` (OCI artifacts), `sign` / `verify` (cosign keyed +
   keyless) with a `~/.config/installer/policy.yaml` trust policy that
@@ -57,26 +57,29 @@ Working:
 - **Dependencies.** SemVer resolver + lock (`deps update`, `deps tree`),
   multi-package render into per-dep subtrees, upload into per-dep Spaces
   with cross-Space Links.
-- **Install lifecycle.** Interactive + non-interactive wizard with
-  high-level component presets (`minimal` / `default` / `all` /
-  `selected`), prior-state re-entry from ConfigHub (via the persisted
-  `installer-record` Unit) or local `out/spec/`, organization + server
-  sanity-check against the active cub context.
-- **Day-2 lifecycle.** `installer plan` / `update` / `upgrade` /
-  `upgrade-apply`. Plan is read-only; update wraps mutations in a
-  ChangeSet so updates are revertable; upgrade stages a re-pull +
-  re-render in `.upgrade/`, then `upgrade-apply` atomically promotes
-  it. `--merge-external-source` is the change predicate, so
-  post-install ConfigHub edits survive re-render. The
-  `installer-record` Unit is refreshed in cub after each apply so the
-  next upgrade re-enters from up-to-date state.
-- **Image overrides.** `installer wizard --set-image` and
-  `installer upgrade --set-image` apply `kustomize edit set image`
-  before render. Overrides round-trip via `Inputs.Spec.ImageOverrides`
-  and carry forward across upgrades. The chosen base must declare an
-  `images:` block; render fails fast otherwise.
+- **Install lifecycle.** `install setup` (the one-shot consumer entry
+  point: optional pull, wizard with high-level component presets
+  `minimal` / `default` / `all` / `selected`, render). Interactive +
+  non-interactive. Prior-state re-entry from ConfigHub (via the
+  persisted `installer-record` Unit) or local `out/spec/`,
+  organization + server sanity-check against the active cub context.
+- **Day-2 lifecycle.** `install setup` and `install upload`
+  auto-detect first-install vs upgrade vs reconcile via the presence
+  of prior spec files / `out/spec/upload.yaml`. Re-running `setup`
+  with `--pull <new-ref>` runs the schema-diff machinery (carry
+  forward existing values, adopt new defaults, prompt for new
+  required-without-default). Re-running `upload` against an already-
+  uploaded work-dir opens a ChangeSet and reconciles updates / adds /
+  deletes. `install plan` previews the reconcile diff read-only.
+  `--merge-external-source` is the change predicate, so post-install
+  ConfigHub edits survive re-render.
+- **Image overrides.** `install setup --set-image` applies
+  `kustomize edit set image` before render. Overrides round-trip via
+  `Inputs.Spec.ImageOverrides` and carry forward across re-renders /
+  upgrades. The chosen base must declare an `images:` block; render
+  fails fast otherwise.
 
-Stubbed: `installer preflight` — cluster-side constraint checks.
+Stubbed: `install preflight` — cluster-side constraint checks.
 
 ## Build
 
@@ -99,42 +102,48 @@ End to end against the included example, no ConfigHub server required:
 # 1. Inspect what's in the package.
 bin/install doc ./examples/hello-app
 
-# 2. Wizard: pick base + components, supply inputs. Writes
-#    /tmp/hello/out/spec/{selection,inputs}.yaml.
-bin/install wizard ./examples/hello-app \
-  --work-dir /tmp/hello \
+# 2. Setup: pull (here: a local dir), pick base + components, supply
+#    inputs, and render. One command replaces pull + wizard + render.
+mkdir -p /tmp/hello && cd /tmp/hello
+bin/install setup \
+  --pull ./examples/hello-app \
   --non-interactive \
   --select monitoring --select ingress \
   --namespace demo
 
-# 3. Render: composes a kustomization in out/compose/ with the ConfigHub
-#    function chain wired in as a kustomize transformer plugin, runs
-#    `kustomize build`, writes one file per resource to out/manifests/.
-bin/install render /tmp/hello
+# 3. Upload to ConfigHub. Records the destination Space(s) in
+#    out/spec/upload.yaml so subsequent commands re-enter the same
+#    Space without re-typing.
+bin/install upload --space my-greeter
 
-# 4. Upload to ConfigHub. Records the destination Space(s) in
-#    out/spec/upload.yaml so subsequent plan / update / upgrade
-#    re-enter the same Space without operator re-typing.
-bin/install upload /tmp/hello --space my-greeter
+# 4. Day-2: edit a rendered file, see what upload would do, apply.
+$EDITOR out/manifests/deployment-demo-hello-app.yaml
+bin/install plan                       # read-only diff vs ConfigHub
+bin/install upload --yes               # reconcile (ChangeSet-wrapped)
 
-# 5. Day-2: edit a rendered file, see what update would do, apply.
-$EDITOR /tmp/hello/out/manifests/deployment-demo-hello-app.yaml
-bin/install plan /tmp/hello              # read-only diff vs ConfigHub
-bin/install update /tmp/hello --yes      # apply inside a ChangeSet
-
-# 6. Upgrade: re-pull, re-render, plan, then apply atomically.
-bin/install upgrade /tmp/hello ./examples/hello-app \
+# 5. Upgrade: re-pull (atomic), re-render via setup, then upload.
+bin/install setup --pull ./examples/hello-app \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
-bin/install upgrade-apply /tmp/hello     # promote .upgrade/ + run update
+bin/install upload --yes
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
 selecting `ingress-tls` automatically pulls in `ingress`. Conflicts and
 `validForBases` are enforced at solve time.
 
+`setup` auto-detects whether the work-dir is a fresh install (no
+`out/spec/`) or a re-entry (prior state present, possibly with a
+newer package). On re-entry it runs the schema-diff machinery:
+silently carry prior values, adopt new defaults, drop removed inputs,
+prompt or fail-fast on newly-required inputs.
+
+The granular commands (`pull`, `wizard`, `render`) are still available
+when you want step-by-step control — see
+[consumer-guide.md](docs/consumer-guide.md#granular-commands).
+
 ## Working directory layout
 
-After `wizard` and `render`, the working dir looks like:
+After `setup` (or `wizard` + `render`), the working dir looks like:
 
 ```
 <work-dir>/
@@ -164,7 +173,7 @@ kustomize build --enable-exec --enable-alpha-plugins .` to reproduce
 the render byte-for-byte outside the installer.
 
 The two spec docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
-to re-render: edit them, re-run `installer render`, get a deterministic new set
+to re-render: edit them, re-run `install render`, get a deterministic new set
 of manifests.
 
 ## Package format
@@ -211,7 +220,7 @@ The `transformers:` list is resolved with Go `text/template` syntax —
 `{{ .Namespace }}`, `{{ .Inputs.* }}`, `{{ .Selection.* }}`,
 `{{ .Facts.* }}`, `{{ .Package.* }}` — then emitted as a
 `ConfigHubTransformers` KRM function config that kustomize invokes
-through the `installer transformer` exec plugin. Each group's
+through the `install transformer` exec plugin. Each group's
 `toolchain` and `whereResource` are applied per-group, so a single
 chain can mutate raw Kubernetes manifests with `Kubernetes/YAML` and
 AppConfig-carried files (`AppConfig/Properties`, `AppConfig/Env`, …)
@@ -239,7 +248,7 @@ installed, the same commands work via `cub install ...`.
 ├── internal/
 │   ├── cli/                    # cobra subcommands
 │   ├── pkg/                    # package load + OCI pull (oras-go)
-│   ├── bundle/                 # deterministic tarball for `installer package`
+│   ├── bundle/                 # deterministic tarball for `install package`
 │   ├── selection/              # required-deps closure + conflict detection
 │   ├── wizard/                 # interactive + non-interactive answer collection,
 │   │                           # prior-state load, schema diff for upgrades
@@ -258,7 +267,7 @@ installed, the same commands work via `cub install ...`.
 │                               # Lock, Upload schemas
 ├── packages/                   # "published" packages bundled in this repo
 │   ├── kubernetes-resources/   # 11 canonical resource templates with
-│   │                           # per-type defaults (used by `installer new`)
+│   │                           # per-type defaults (used by `install new`)
 │   └── worker/                 # ConfigHub bridge worker
 ├── examples/                   # test fixtures for the e2e + unit tests
 │   ├── hello-app/              # single-package end-to-end test package
@@ -311,7 +320,7 @@ authoring packages, the user docs above are what you want.
     vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
     schema-diff, and `--set-image` overrides. Phases A–E shipped.
 - [Kustomize transformer plugin and AppConfig support](docs/transformer.md)
-  — design for the `installer transformer` exec plugin (folds the
+  — design for the `install transformer` exec plugin (folds the
   function chain into kustomize), durable `out/compose/`,
   component-scoped function-chain mixins, and AppConfig support via
   `configMapGenerator` round-trip. Not yet implemented.
@@ -338,7 +347,7 @@ upgrade --set-image preflight rejection`. Spaces created with the
 ## Roadmap
 
 - Better Secrets support (currently we generate secrets during fact collection).
-- `installer preflight` — evaluate `externalRequires` against a live cluster.
+- `install preflight` — evaluate `externalRequires` against a live cluster.
 - Automatic apply ordering (CRDs before custom resources, Namespace before
   namespaced resources, etc.) inferred from resource kind plus the existing
   link graph — no per-package phase declarations.
