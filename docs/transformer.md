@@ -75,7 +75,7 @@ Three constraints from the current setup carry into the new design:
 
 ## Design
 
-### `installer transformer` subcommand
+### `install transformer` subcommand
 
 First-class CLI verb. Reads a KRM `ResourceList` from stdin, joins
 `items` into a YAML doc stream, runs the chain encoded in
@@ -274,10 +274,10 @@ that have a natural ConfigMap (or equivalent) carrier.
 
 Kustomize copies `options.annotations` from a `configMapGenerator`
 entry onto the rendered ConfigMap, so the `toolchain` annotation
-is what reaches the installer transformer (running as an exec
+is what reaches the install transformer (running as an exec
 plugin) and the upload step (reading `out/manifests/`).
 
-The installer transformer infers three more annotations from the
+The install transformer infers three more annotations from the
 rendered carrier and injects them back onto the ConfigMap so
 downstream consumers (upload, drift) see one canonical contract:
 
@@ -475,8 +475,8 @@ We test all of these against AppConfig-bearing ConfigMaps:
    `parseFunctionArguments`, `ValidatorFailure`,
    `FormatValidatorFailures`, `decodeValidatorFailures` from
    `internal/render/chain.go` into a new `internal/chainexec/`
-   package. Render and `installer vet` import it.
-2. **`installer transformer` subcommand. ✅** Standalone-usable
+   package. Render and `install vet` import it.
+2. **`install transformer` subcommand. ✅** Standalone-usable
    KRM Functions exec plugin. Two functionConfig kinds:
    `ConfigHubTransformers` and `ConfigHubValidators`.
 3. **Kustomize-driven render with durable `out/compose/`. ✅**
@@ -494,7 +494,7 @@ We test all of these against AppConfig-bearing ConfigMaps:
    `installer.confighub.com/toolchain` from kustomize-copied
    generator annotations.
 6. **AppConfig transformer round-trip + annotation injection. ✅**
-   `installer transformer` runs a pre-pass that derives and injects
+   `install transformer` runs a pre-pass that derives and injects
    `appconfig-mode` (file/env, from data: shape) and
    `appconfig-source-key`. Function groups with toolchain
    `AppConfig/*` extract from `data:`, invoke, write back. Both

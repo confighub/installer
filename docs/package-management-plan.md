@@ -11,13 +11,13 @@ Visible CLI surface, stubs only. Lets later phases land in small PRs without
 touching `root.go` each time.
 
 - New: `internal/cli/{package.go, push.go, inspect.go, list.go, tag.go, login.go, logout.go, deps.go, sign.go, verify.go}` — cobra commands returning "not yet implemented" with `--help` text taken from the spec.
-- Modify: `internal/cli/root.go` — register the new subcommands. Group `deps update|build|tree` under `installer deps`.
+- Modify: `internal/cli/root.go` — register the new subcommands. Group `deps update|build|tree` under `install deps`.
 - Modify: `internal/cli/stubs.go` — remove the stub-only helper once each command moves to its own file.
 - Modify: `README.md` Roadmap — link to the design doc; mark the new commands "planned" until their phase ships.
 
 No tests yet. Acceptance: `installer --help` lists every command in the spec.
 
-## Phase 1 — Deterministic bundler + `installer package`
+## Phase 1 — Deterministic bundler + `install package`
 
 Goal: a `.tgz` of the source tree that is byte-identical across machines.
 
@@ -28,9 +28,9 @@ Goal: a `.tgz` of the source tree that is byte-identical across machines.
   - Include: `installer.yaml` + every directory referenced by `bases[].path`, `components[].path`, `validation.*`, `collector.command` (if relative), plus an opt-in `examples/` (gated by a `package.bundleExamples` field in `installer.yaml`, default true).
 - New: `internal/bundle/bundle_test.go` — two `Bundle` invocations of the same source tree produce equal digests; rename of a single file changes the digest; `.env.secret` triggers a refusal.
 - Modify: `internal/cli/package.go` — `-o`, default output filename `<metadata.name>-<metadata.version>.tgz` in cwd; print the digest on success.
-- Decision deferred: reachability-scan vs ignore-list. v1 ships ignore-list; reachability becomes a `installer package --strict` follow-up.
+- Decision deferred: reachability-scan vs ignore-list. v1 ships ignore-list; reachability becomes a `install package --strict` follow-up.
 
-Acceptance: `installer package examples/hello-app` produces a tarball whose `sha256` is reproducible across machines.
+Acceptance: `install package examples/hello-app` produces a tarball whose `sha256` is reproducible across machines.
 
 ## Phase 2 — OCI publish (`push`, `inspect`, `list`, `tag`, hardened `pull`)
 
@@ -52,7 +52,7 @@ Goal: round-trip native artifacts; existing Helm-OCI pull keeps working.
   - `internal/pkg/oci_test.go` against a `zot` or `registry:2` container started by the test (skip if Docker unavailable).
   - `internal/pkg/pull_test.go` regression: pulling an existing Helm-OCI chart still works.
 
-Acceptance: `installer package` → `installer push` → `installer pull` on a fresh machine yields a byte-identical source tree.
+Acceptance: `install package` → `install push` → `install pull` on a fresh machine yields a byte-identical source tree.
 
 ## Phase 3 — Schema additions (parse-only)
 
@@ -64,12 +64,12 @@ Goal: packages can *declare* dependencies; nothing acts on them yet.
 - New types in `pkg/api/dependency.go`: `Dependency`, `ConflictRef`, `ReplaceRef` (fields per the design doc).
 - New: `pkg/api/lock.go` — `Lock`, `LockedDependency`.
 - Modify: `pkg/api/parse.go` and `parse_test.go` — round-trip tests.
-- Modify: `internal/cli/doc.go` — render `dependencies`, `conflicts`, `replaces`, `kubeVersion`, `installerVersion` in `installer doc`.
+- Modify: `internal/cli/doc.go` — render `dependencies`, `conflicts`, `replaces`, `kubeVersion`, `installerVersion` in `install doc`.
 - No changes to `wizard`, `render`, `upload`.
 
-Acceptance: a fixture package with the new fields parses and `installer doc` shows them; the existing examples still parse unchanged.
+Acceptance: a fixture package with the new fields parses and `install doc` shows them; the existing examples still parse unchanged.
 
-## Phase 4 — Resolver + `installer deps update`
+## Phase 4 — Resolver + `install deps update`
 
 Goal: produce `out/spec/lock.yaml` from `installer.yaml` + the current `Selection`.
 
@@ -104,7 +104,7 @@ Acceptance: re-rendering the same lock + inputs produces byte-identical `out/` t
 
 - **Collectors on dependencies are not supported.** Collectors run via the
   wizard, which is not invoked per-dep — the dep's Selection/Inputs come
-  straight from the lock. `installer deps update` rejects any candidate
+  straight from the lock. `install deps update` rejects any candidate
   whose installer.yaml declares `spec.collector` so the user discovers the
   limit at resolve time, not at render. Lifting the limit means either
   running the collector at render time for deps (and dragging the
@@ -126,13 +126,13 @@ Goal: each package gets its own Space; the lock survives as a Unit.
   - After all Spaces exist, for every dep edge in the lock create a Link from the parent's installer-record Unit to the dep's installer-record Unit (Link slug derived from the edge, idempotent).
 - Decision: the parent's installer-record Unit embeds the full lock; each dep's installer-record Unit holds only its own slice (its `installer.yaml` + `out/<dep>/spec/*`). This makes a dep's Space self-describing.
 
-Acceptance: `installer upload` on a fixture multi-package render creates N Spaces, N untargeted installer-record Units, M rendered Units, and the expected cross-Space Links.
+Acceptance: `install upload` on a fixture multi-package render creates N Spaces, N untargeted installer-record Units, M rendered Units, and the expected cross-Space Links.
 
 ## Phase 7 — Signing
 
 Goal: trust at the artifact level.
 
-- New: `internal/cli/sign.go`, `verify.go`. v1 shells out to the `cosign` binary; the Go SDK is large and re-pulls a lot of sigstore dependencies. Document the requirement in `installer doc` output and README.
+- New: `internal/cli/sign.go`, `verify.go`. v1 shells out to the `cosign` binary; the Go SDK is large and re-pulls a lot of sigstore dependencies. Document the requirement in `install doc` output and README.
 - New: `~/.config/installer/policy.yaml` — list of trusted issuers / keys, plus an `enforce: true|false` flag. Loaded by `pull` and `deps update` to enforce verification before trusting any digest.
 - Tests: integration test gated on `cosign` being on PATH.
 
@@ -156,7 +156,7 @@ Acceptance: signed artifact verifies; tampered artifact fails verification with 
 
 | Cut    | Phases | User-visible value |
 |--------|--------|--------------------|
-| 0.3    | 0, 1   | `installer package` produces shippable tarballs. |
+| 0.3    | 0, 1   | `install package` produces shippable tarballs. |
 | 0.4    | 2      | OCI publish round-trips; existing Helm pull still works. |
 | 0.5    | 3, 4   | Packages can declare deps; lock is generated. No behavior change at render. |
 | 0.6    | 5, 6   | Multi-package render + upload with per-dep Spaces and installer-record Units. |

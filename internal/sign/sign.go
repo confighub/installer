@@ -73,7 +73,7 @@ func Sign(ctx context.Context, ref string, opts SignOptions) error {
 }
 
 // VerifyOptions tune one Verify call. Caller usually loads a Policy and
-// passes the matching entries; for ad-hoc `installer verify`, a single
+// passes the matching entries; for ad-hoc `install verify`, a single
 // TrustedKey or TrustedKeyless is constructed from CLI flags.
 type VerifyOptions struct {
 	// TrustedKey forces a keyed verification against this public key.

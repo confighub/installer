@@ -22,9 +22,9 @@ import (
 const kubernetesResourcesPackageName = "kubernetes-resources"
 
 // canonicalExample names the kubernetes-resources example template
-// `installer new <kind>` clones for each Kubernetes kind. The slug
+// `install new <kind>` clones for each Kubernetes kind. The slug
 // uses the deterministic <kind-lowercase>-<namespace>-<name> shape
-// produced by render's splitForUnits — `installer new` substitutes
+// produced by render's splitForUnits — `install new` substitutes
 // the bootstrapped namespace at lookup time.
 //
 // origName is the placeholder name in the example (renamed to the
@@ -37,7 +37,7 @@ type canonicalExample struct {
 	origName string
 }
 
-// kindToExample maps the user-facing kind on `installer new <kind>`
+// kindToExample maps the user-facing kind on `install new <kind>`
 // to the canonical example Unit. Aliases included for ergonomics
 // (hpa → horizontalpodautoscaler, etc.).
 var kindToExample = map[string]canonicalExample{
@@ -98,13 +98,13 @@ func newNewCmd() *cobra.Command {
 			"Supported kinds (alphabetical): " + strings.Join(sortedKindNames(), ", ") + ".\n\n" +
 			"The kubernetes-resources package must be installed in the current\n" +
 			"cub organization first. Bootstrap with:\n\n" +
-			"  installer wizard <path>/packages/kubernetes-resources \\\n" +
+			"  install wizard <path>/packages/kubernetes-resources \\\n" +
 			"      --work-dir /tmp/k8s-res \\\n" +
 			"      --non-interactive --namespace kubernetes-resources\n" +
-			"  installer render /tmp/k8s-res\n" +
-			"  installer upload /tmp/k8s-res --space kubernetes-resources\n\n" +
+			"  install render /tmp/k8s-res\n" +
+			"  install upload /tmp/k8s-res --space kubernetes-resources\n\n" +
 			"The upload step records the install in\n" +
-			"~/.confighub/installer/state.yaml; subsequent `installer new` calls\n" +
+			"~/.confighub/installer/state.yaml; subsequent `install new` calls\n" +
 			"read the recorded Space and pull the canonical Unit body via cub.\n\n" +
 			"Output goes to <package>/bases/default/<kind>-<name>.yaml. Pass\n" +
 			"--stdout to print to stdout instead. Pass --update-kustomization\n" +
@@ -139,7 +139,7 @@ func newNewCmd() *cobra.Command {
 			}
 			// --space-slug overrides the recorded Space (useful when
 			// the operator wants to install kubernetes-resources to
-			// a non-default Space and wire `installer new` to it).
+			// a non-default Space and wire `install new` to it).
 			if spaceSlug == "" {
 				spaceSlug = install.SpaceSlug
 			}
@@ -187,7 +187,7 @@ func newNewCmd() *cobra.Command {
 			}
 			baseDir := filepath.Join(abs, "bases", "default")
 			if _, err := os.Stat(filepath.Join(abs, "installer.yaml")); err != nil {
-				return fmt.Errorf("%s does not look like a package (no installer.yaml); run `installer init` first or pass --package <dir>", abs)
+				return fmt.Errorf("%s does not look like a package (no installer.yaml); run `install init` first or pass --package <dir>", abs)
 			}
 			if outFile == "" {
 				outFile = filepath.Join(baseDir, example.kind+"-"+name+".yaml")
@@ -244,10 +244,10 @@ func findKubernetesResourcesInstall(orgID string) (*userconfig.InstallRecord, er
 	}
 	return nil, fmt.Errorf(
 		"kubernetes-resources is not installed for organization %s. Bootstrap with:\n"+
-			"  installer wizard <path>/packages/kubernetes-resources --work-dir /tmp/k8s-res --non-interactive --namespace kubernetes-resources\n"+
-			"  installer render /tmp/k8s-res\n"+
-			"  installer upload /tmp/k8s-res --space kubernetes-resources\n"+
-			"Then re-run `installer new`.",
+			"  install wizard <path>/packages/kubernetes-resources --work-dir /tmp/k8s-res --non-interactive --namespace kubernetes-resources\n"+
+			"  install render /tmp/k8s-res\n"+
+			"  install upload /tmp/k8s-res --space kubernetes-resources\n"+
+			"Then re-run `install new`.",
 		orgID,
 	)
 }

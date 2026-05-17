@@ -29,7 +29,7 @@ type File struct {
 	Namespace  string
 	// Sensitive marks resources that must never be uploaded as Units.
 	// Currently set for any v1/Secret. Routed to out/secrets/ instead of
-	// out/manifests/ and skipped by `installer upload`.
+	// out/manifests/ and skipped by `install upload`.
 	Sensitive bool
 }
 

@@ -25,10 +25,10 @@ Requires the cosign binary on PATH (override via INSTALLER_COSIGN_BIN).
 
 Examples:
   # Keyless (interactive OIDC flow):
-  installer sign oci://ghcr.io/me/pkg:0.1.0 --yes
+  install sign oci://ghcr.io/me/pkg:0.1.0 --yes
 
   # Keyed:
-  installer sign oci://ghcr.io/me/pkg:0.1.0 --key cosign.key`,
+  install sign oci://ghcr.io/me/pkg:0.1.0 --key cosign.key`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

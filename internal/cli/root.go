@@ -2,7 +2,7 @@
 // cmd/installer/main.go and works identically whether run as `installer ...`
 // standalone or as `cub install ...` via the cub plugin protocol — the only
 // difference is cosmetic (the plugin sets CUB_PLUGIN=1 in the env, which we
-// surface in `installer doc` output).
+// surface in `install doc` output).
 package cli
 
 import (
@@ -22,7 +22,7 @@ func invokedAsPlugin() bool {
 // can copy-paste the suggestion back into their shell; otherwise it
 // returns os.Args[0] verbatim (e.g. "bin/install", "install",
 // "/usr/local/bin/install") so the suggestion matches what they
-// actually typed. Falls back to "installer" if os.Args is empty.
+// actually typed. Falls back to "install" if os.Args is empty.
 func InvocationName() string {
 	if invokedAsPlugin() {
 		return "cub install"
@@ -30,15 +30,15 @@ func InvocationName() string {
 	if len(os.Args) > 0 && os.Args[0] != "" {
 		return os.Args[0]
 	}
-	return "installer"
+	return "install"
 }
 
 // NewRoot builds the root cobra command with all subcommands attached.
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "installer",
+		Use:   "install",
 		Short: "Render and install Kubernetes config-as-data packages",
-		Long: `Installer renders kustomize-based packages — wrapped with an installer.yaml
+		Long: `install renders kustomize-based packages — wrapped with an installer.yaml
 manifest — into per-resource Kubernetes YAML, customized with ConfigHub functions.
 
 Output is plain YAML files that can be uploaded to ConfigHub for delivery via
@@ -60,13 +60,11 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		newLoginCmd(),
 		newLogoutCmd(),
 		// Install lifecycle
+		newSetupCmd(),
 		newWizardCmd(),
 		newDepsCmd(),
 		newRenderCmd(),
 		newPlanCmd(),
-		newUpdateCmd(),
-		newUpgradeCmd(),
-		newUpgradeApplyCmd(),
 		newPreflightCmd(),
 		newUploadCmd(),
 		// Publish

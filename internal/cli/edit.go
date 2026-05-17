@@ -12,28 +12,28 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
-// `installer edit` lets package authors mutate installer.yaml fields
+// `install edit` lets package authors mutate installer.yaml fields
 // without hand-editing YAML. Mirrors `kustomize edit add/remove/set`
 // shape for inputs / components / dependencies.
 //
 // Scope (v1):
-//   installer edit add input <name> --type T [--default V] [--required]
+//   install edit add input <name> --type T [--default V] [--required]
 //                                   [--prompt P] [--description D]
 //                                   [--option O ...]
-//   installer edit remove input <name>
-//   installer edit set input <name> [same flags as add]
+//   install edit remove input <name>
+//   install edit set input <name> [same flags as add]
 //
-//   installer edit add component <name> --path P [--default] [--description D]
+//   install edit add component <name> --path P [--default] [--description D]
 //                                       [--requires NAME ...] [--conflicts NAME ...]
 //                                       [--valid-for-bases NAME ...]
-//   installer edit remove component <name>
-//   installer edit set component <name> [same flags as add]
+//   install edit remove component <name>
+//   install edit set component <name> [same flags as add]
 //
-//   installer edit add dependency <name> --package OCI --version SEMVER
+//   install edit add dependency <name> --package OCI --version SEMVER
 //                                        [--when-component NAME]
 //                                        [--optional]
-//   installer edit remove dependency <name>
-//   installer edit set dependency <name> [same flags as add]
+//   install edit remove dependency <name>
+//   install edit set dependency <name> [same flags as add]
 //
 // Every leaf reads installer.yaml from --package (default ".") and
 // writes it back through api.MarshalYAML for deterministic output.
@@ -45,17 +45,17 @@ func newEditCmd() *cobra.Command {
 		Long: `Edit walks installer.yaml field-by-field, like kustomize edit.
 
 Subcommands:
-  installer edit add input    <name> ...   add an input declaration
-  installer edit remove input <name>       remove an input
-  installer edit set input    <name> ...   update an existing input
+  install edit add input    <name> ...   add an input declaration
+  install edit remove input <name>       remove an input
+  install edit set input    <name> ...   update an existing input
 
-  installer edit add component    <name> ...   add an opt-in component
-  installer edit remove component <name>       remove a component
-  installer edit set component    <name> ...   update an existing component
+  install edit add component    <name> ...   add an opt-in component
+  install edit remove component <name>       remove a component
+  install edit set component    <name> ...   update an existing component
 
-  installer edit add dependency    <name> ...   add a dependency
-  installer edit remove dependency <name>       remove a dependency
-  installer edit set dependency    <name> ...   update an existing dependency
+  install edit add dependency    <name> ...   add a dependency
+  install edit remove dependency <name>       remove a dependency
+  install edit set dependency    <name> ...   update an existing dependency
 
 Each leaf reads installer.yaml from --package (default ".") and
 writes it back through the deterministic MarshalYAML.`,

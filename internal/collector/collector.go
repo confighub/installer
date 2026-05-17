@@ -34,7 +34,7 @@ type Inputs struct {
 	// WorkDir is the absolute path to the parent working directory
 	// (PackageDir's parent).
 	WorkDir string
-	// Namespace is the value of `installer wizard --namespace`.
+	// Namespace is the value of `install wizard --namespace`.
 	Namespace string
 	// Base is the selected base name.
 	Base string

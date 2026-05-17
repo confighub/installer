@@ -7,11 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/confighub/installer/internal/changeset"
+	"github.com/confighub/installer/internal/cubctx"
 	"github.com/confighub/installer/internal/deps"
+	"github.com/confighub/installer/internal/diff"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/pkg/api"
@@ -19,57 +23,66 @@ import (
 
 func newUploadCmd() *cobra.Command {
 	var (
-		space        string
-		spacePattern string
-		target       string
-		annotations  []string
-		labels       []string
-		appCfgWorker string
-		allowExists  bool
+		workDir       string
+		space         string
+		spacePattern  string
+		target        string
+		annotations   []string
+		labels        []string
+		appCfgWorker  string
+		retry         bool
+		yes           bool
+		changeSetSlug string
 	)
 	cmd := &cobra.Command{
-		Use:   "upload <work-dir>",
-		Short: "Upload rendered manifests to ConfigHub Space(s)",
-		Long: `Upload sends rendered manifests to ConfigHub. The shape depends on whether
-the package declares dependencies:
+		Use:   "upload",
+		Short: "Reconcile rendered manifests with ConfigHub Space(s) (create or update)",
+		Long: `Upload reconciles <work-dir>/out/manifests/ with ConfigHub. It auto-
+detects whether this is a first upload or a subsequent reconcile via the
+presence of <work-dir>/out/spec/upload.yaml (written by the first upload):
 
-Single-package (no deps):
-  --space chooses the Space; one Unit per file in <work-dir>/out/manifests.
+First upload (no upload.yaml):
+  Creates Space(s), one Unit per rendered manifest, plus the untargeted
+  installer-record Unit. ConfigMapRenderer Targets + AppConfig Unit pairs
+  for AppConfig-annotated ConfigMaps. Cross-Space links between parent
+  and dependency installer-record Units. Intra-Space NeedsProvides link
+  inference runs per Space at the end. Writes upload.yaml on success.
 
-Multi-package (parent declares dependencies):
-  --space-pattern is a Go template evaluated per package (vars:
-  .PackageName, .PackageVersion, .Variant — Variant is empty in v1).
-  Default: '{{.PackageName}}'. Each package — parent + each locked dep —
-  gets its own Space. The Units for the parent come from
-  <work-dir>/out/manifests; each dep's Units come from
-  <work-dir>/out/<dep>/manifests.
+Reconcile (upload.yaml exists):
+  Re-computes the same plan install plan would produce. Opens one
+  ChangeSet per Space, runs cub unit update --merge-external-source
+  --changeset for updates, cub unit create for adds (with --label
+  Component=<pkg>), cub unit delete for deletes (gated on --yes or
+  per-delete confirmation). Re-runs intra-Space link inference; existing
+  links pointing at still-present Units are left as-is. Refreshes the
+  installer-record Unit so subsequent setups re-enter from up-to-date
+  state. A reconcile against an unchanged work-dir is a no-op (no
+  ChangeSet opened). Only updates are revertable via
+  cub unit update --restore Before:ChangeSet:<slug>; creates and deletes
+  from a reconcile require manual undo (delete the Unit / re-render +
+  re-upload).
 
-In both modes, every Space additionally receives one untargeted
-"installer-record" Unit holding installer.yaml + that package's spec docs
-(selection, inputs, function-chain, manifest-index, plus the lock for the
-parent). The record Unit makes a Space self-describing — it can be
-re-rendered from its own ConfigHub state.
+Space selection (first upload only):
+  Single-package: --space S       → one Space named S.
+  Multi-package : --space-pattern → Go template evaluated per package
+                                    (vars: .PackageName, .PackageVersion,
+                                    .Variant). Default '{{.PackageName}}'.
+  On reconcile, --space / --space-pattern are read from upload.yaml.
 
-Cross-Space NeedsProvides Links are created from the parent's record Unit
-to each dep's record Unit so downstream tooling can see the dependency
-relationship.
+Every Unit and Link upload creates carries a "Component" label whose
+value is the package name (the parent's name for cross-Space dep
+links), so all entities belonging to one package can be queried
+together.
 
-Files in <work-dir>/out/secrets/ (and each <dep>/secrets/) are never
-uploaded — they hold rendered Secret resources flagged as sensitive by
-render.
+Files in <work-dir>/out/secrets/ are never uploaded — they hold rendered
+Secret resources flagged as sensitive by render. Apply them out-of-band
+or stage them however your environment manages secrets.
 
 --target, --annotation, and --label are forwarded to ` + "`cub unit create`" + ` on
-each rendered manifest Unit. They do NOT apply to the installer-record
-Unit (which must remain untargeted).
-
-Every Unit and Link created by upload also carries a "Component" label
-whose value is the package name (the parent's name for cross-Space dep
-links), so all entities belonging to one package can be queried together.
-
-After per-Space upload, the existing get-resources / get-references /
-get-workload-labels link-inference runs once per Space to materialize
-intra-Space NeedsProvides links.`,
-		Args: cobra.ExactArgs(1),
+adds (first upload OR reconcile). They do NOT apply to existing Units
+on reconcile — that would clobber post-install metadata edits in
+ConfigHub.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := exec.LookPath("cub"); err != nil {
 				return fmt.Errorf("cub CLI not found on PATH: %w", err)
@@ -80,15 +93,30 @@ intra-Space NeedsProvides links.`,
 			if err := validateKeyValueFlags("--label", labels); err != nil {
 				return err
 			}
-			workDir, err := filepath.Abs(args[0])
+			absWork, err := filepath.Abs(workDir)
 			if err != nil {
 				return err
 			}
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
 
-			loaded, err := ipkg.Load(filepath.Join(workDir, "package"))
+			loaded, err := ipkg.Load(filepath.Join(absWork, "package"))
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
+
+			// Auto-detect first-upload vs reconcile. The presence of
+			// <work-dir>/out/spec/upload.yaml is the canonical signal that
+			// this work-dir has already been pushed to ConfigHub once.
+			uploadDocPath := filepath.Join(absWork, "out", "spec", upload.UploadDocFilename)
+			if _, statErr := os.Stat(uploadDocPath); statErr == nil {
+				return runUploadReconcile(ctx, absWork, loaded, target, annotations, labels, yes, changeSetSlug, space, spacePattern)
+			} else if !os.IsNotExist(statErr) {
+				return statErr
+			}
+			workDir = absWork
 
 			// Reconcile --space vs --space-pattern.
 			//
@@ -121,12 +149,12 @@ intra-Space NeedsProvides links.`,
 					return err
 				}
 				if lock == nil {
-					return fmt.Errorf("package declares dependencies but %s does not exist; run `installer deps update %s` and `installer render %s` first",
-						deps.LockPath(workDir), workDir, workDir)
+					return fmt.Errorf("package declares dependencies but %s does not exist; run `%s deps update --work-dir %s` and `%s render --work-dir %s` first",
+						deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
 				}
 				if deps.IsStale(lock, loaded.Package) {
-					return fmt.Errorf("lock at %s is stale; run `installer deps update %s` and `installer render %s` again",
-						deps.LockPath(workDir), workDir, workDir)
+					return fmt.Errorf("lock at %s is stale; run `%s deps update --work-dir %s` and `%s render --work-dir %s` again",
+						deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
 				}
 			}
 
@@ -142,7 +170,7 @@ intra-Space NeedsProvides links.`,
 
 			// Persist where this work-dir is being uploaded before any
 			// cub calls so the upload.yaml is included in each parent's
-			// installer-record body. Subsequent `installer wizard /
+			// installer-record body. Subsequent `install wizard /
 			// plan / update / upgrade` invocations read it to re-enter
 			// from ConfigHub and to sanity-check the active cub
 			// context.
@@ -151,20 +179,20 @@ intra-Space NeedsProvides links.`,
 			}
 
 			for _, pkg := range packages {
-				if err := uploadOnePackage(pkg, target, annotations, labels, appCfgWorker, allowExists); err != nil {
+				if err := uploadOnePackage(pkg, target, annotations, labels, appCfgWorker, retry); err != nil {
 					return err
 				}
 			}
 
 			for _, l := range upload.PlanCrossSpaceLinks(packages) {
-				if err := createCrossSpaceLink(l, allowExists); err != nil {
+				if err := createCrossSpaceLink(l, retry); err != nil {
 					return err
 				}
 			}
 
 			// Record the parent package's install in the per-user
 			// state file (~/.confighub/installer/state.yaml). Other
-			// commands (notably `installer new`) read this to find
+			// commands (notably `install new`) read this to find
 			// kubernetes-resources without re-asking the operator.
 			// Best-effort: failure here should NOT fail the upload.
 			if err := recordUploadInUserState(cmd.Context(), packages); err != nil {
@@ -178,9 +206,100 @@ intra-Space NeedsProvides links.`,
 	cmd.Flags().StringVar(&target, "target", "", "target slug; forwarded to cub unit create --target on every rendered Unit (not the installer-record Unit)")
 	cmd.Flags().StringSliceVar(&annotations, "annotation", nil, "annotation key=value to set on every rendered Unit (repeatable)")
 	cmd.Flags().StringSliceVar(&labels, "label", nil, "label key=value to set on every rendered Unit (repeatable)")
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
 	cmd.Flags().StringVar(&appCfgWorker, "appconfig-worker", "renderer-worker", "worker slug (Space-relative) attached to ConfigMapRenderer Targets for AppConfig-annotated ConfigMaps; auto-created as a server-side worker in the destination Space if missing")
-	cmd.Flags().BoolVar(&allowExists, "allow-exists", false, "tolerate Units, Targets, and Links that already exist (so a partial upload can be retried). Space and renderer-worker auto-create are always idempotent — this flag only affects content. Default off so re-running 'upload' against an already-uploaded work-dir errors instead of silently no-op'ing where the operator likely meant 'update'.")
+	cmd.Flags().BoolVar(&retry, "retry", false, "first upload only: tolerate Units, Targets, and Links that already exist so a partially-failed first upload can be retried. Space and renderer-worker auto-create are always idempotent — this flag only affects content. Ignored on reconcile (reconcile is always idempotent).")
+	cmd.Flags().BoolVar(&yes, "yes", false, "reconcile only: skip confirmation for deletes (required when stdin is not a TTY and the plan contains deletes)")
+	cmd.Flags().StringVar(&changeSetSlug, "changeset", "", "reconcile only: ChangeSet slug to open per Space (default: installer-update-<timestamp>)")
 	return cmd
+}
+
+// runUploadReconcile is the second-and-subsequent-upload code path:
+// reads upload.yaml, computes a diff against ConfigHub, opens a
+// ChangeSet, and applies. Same semantics as the previous standalone
+// `install update` command.
+func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded, target string, annotations, labels []string, yes bool, changeSetSlug, spaceFlag, spacePatternFlag string) error {
+	if spaceFlag != "" || spacePatternFlag != "" {
+		fmt.Fprintln(os.Stderr, "note: --space / --space-pattern are read from upload.yaml on reconcile; flag value ignored")
+	}
+	uploadDoc, err := readUploadDoc(workDir)
+	if err != nil {
+		return err
+	}
+	if err := cubctx.CheckMatches(ctx, uploadDoc.Spec.OrganizationID, uploadDoc.Spec.Server); err != nil {
+		return err
+	}
+	lock, err := loadLockIfNeeded(workDir, loaded.Package)
+	if err != nil {
+		return err
+	}
+	pattern := uploadDoc.Spec.SpacePattern
+	if pattern == "" {
+		pattern = "{{.PackageName}}"
+	}
+	packages, err := upload.Discover(upload.DiscoverInput{
+		WorkDir:       workDir,
+		SpacePattern:  pattern,
+		ParentPackage: loaded.Package,
+		Lock:          lock,
+	})
+	if err != nil {
+		return err
+	}
+
+	plan, err := diff.Compute(ctx, packages)
+	if err != nil {
+		return err
+	}
+	diff.Print(os.Stdout, plan)
+
+	if !plan.HasChanges() {
+		return nil
+	}
+
+	if changeSetSlug == "" {
+		changeSetSlug = changeset.DefaultSlug(time.Now())
+	}
+	res, err := diff.Apply(ctx, plan, diff.ApplyOptions{
+		Yes:                  yes,
+		ChangeSetSlug:        changeSetSlug,
+		ChangeSetDescription: fmt.Sprintf("install upload (reconcile) from %s@%s", loaded.Package.Metadata.Name, loaded.Package.Metadata.Version),
+		Target:               target,
+		Annotations:          annotations,
+		Labels:               labels,
+		PostSpaceHook:        refreshInstallerRecordHook(packages),
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\nApplied: %d created, %d updated, %d deleted.\n", res.Created, res.Updated, res.Deleted)
+	if len(res.ChangeSetsOpened) > 0 {
+		fmt.Println("Updates revertable via:")
+		for _, cs := range res.ChangeSetsOpened {
+			fmt.Printf("  %s\n", changeset.RestoreCommand(cs.Space, cs.Slug, cs.UpdatedSlugs))
+		}
+	}
+	return nil
+}
+
+// refreshInstallerRecordHook builds an Apply PostSpaceHook that
+// matches each SpacePlan to its upload.Package by space slug and
+// upserts the installer-record Unit so the cub-side spec body stays
+// in sync with the local out/spec/. Without this, a subsequent
+// setup reads stale state (notably ImageOverrides) from ConfigHub
+// via wizard.LoadPriorState.
+func refreshInstallerRecordHook(packages []upload.Package) diff.PackageRefresher {
+	bySlug := make(map[string]upload.Package, len(packages))
+	for _, p := range packages {
+		bySlug[p.SpaceSlug] = p
+	}
+	return func(ctx context.Context, sp diff.SpacePlan) error {
+		pkg, ok := bySlug[sp.SpaceSlug]
+		if !ok {
+			return nil
+		}
+		return upload.RefreshInstallerRecord(ctx, pkg)
+	}
 }
 
 // uploadOnePackage creates pkg.SpaceSlug if missing, uploads each rendered
@@ -188,7 +307,7 @@ intra-Space NeedsProvides links.`,
 // AppConfig-annotated ConfigMaps into AppConfig Unit + ConfigMapRenderer
 // Target pairs, creates the untargeted installer-record Unit, and runs
 // the intra-Space link inference.
-func uploadOnePackage(pkg upload.Package, target string, annotations, labels []string, appCfgWorker string, allowExists bool) error {
+func uploadOnePackage(pkg upload.Package, target string, annotations, labels []string, appCfgWorker string, retry bool) error {
 	fmt.Printf("== %s@%s → Space %s ==\n", pkg.Name, pkg.Version, pkg.SpaceSlug)
 
 	if err := ensureSpace(pkg.SpaceSlug); err != nil {
@@ -252,14 +371,14 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 
 	for _, m := range manifests {
 		if m.appCfg != nil {
-			if err := uploadAppConfigManifest(pkg, m.appCfg, appCfgWorker, target, componentLabel, namespace, annotations, labels, allowExists); err != nil {
+			if err := uploadAppConfigManifest(pkg, m.appCfg, appCfgWorker, target, componentLabel, namespace, annotations, labels, retry); err != nil {
 				return err
 			}
 			continue
 		}
 		slug := trimExt(m.base)
 		cubArgs := []string{"unit", "create"}
-		if allowExists {
+		if retry {
 			cubArgs = append(cubArgs, "--allow-exists")
 		}
 		cubArgs = append(cubArgs, "--space", pkg.SpaceSlug, "--merge-external-source", m.base, "--label", componentLabel)
@@ -281,7 +400,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		}
 	}
 
-	if err := createInstallerRecordUnit(pkg, allowExists); err != nil {
+	if err := createInstallerRecordUnit(pkg, retry); err != nil {
 		return err
 	}
 	renderedSecrets := loadRenderedSecretsFromDir(pkg.SecretsDir)
@@ -412,7 +531,7 @@ func reportSecretsNotUploaded(pkg upload.Package, secrets []renderedSecret) {
 // Idempotent via --allow-exists on the Target, Units, and link; re-running
 // upload after re-rendering refreshes the AppConfig Unit body via the
 // --merge-external-source mechanism the regular path uses.
-func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, worker, target, componentLabel, namespace string, annotations, labels []string, allowExists bool) error {
+func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, worker, target, componentLabel, namespace string, annotations, labels []string, retry bool) error {
 	fmt.Printf("AppConfig: %s (toolchain=%s, mode=%s)\n", appCfg.CarrierName, appCfg.Toolchain, appCfg.Mode)
 
 	// 1. Stage the extracted raw config in a temp file so cub unit
@@ -432,7 +551,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	//    by `cub target create` and is Space-relative by convention.
 	workerRef := pkg.SpaceSlug + "/" + worker
 	targetArgs := []string{"target", "create"}
-	if allowExists {
+	if retry {
 		targetArgs = append(targetArgs, "--allow-exists")
 	}
 	targetArgs = append(targetArgs,
@@ -454,7 +573,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 
 	// 3. Create the AppConfig Unit pointing at that Target.
 	unitArgs := []string{"unit", "create"}
-	if allowExists {
+	if retry {
 		unitArgs = append(unitArgs, "--allow-exists")
 	}
 	unitArgs = append(unitArgs,
@@ -503,7 +622,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	//    UnitSlug() after the merge); intra-Space link inference wires
 	//    them into this placeholder via the merged content.
 	placeholderArgs := []string{"unit", "create"}
-	if allowExists {
+	if retry {
 		placeholderArgs = append(placeholderArgs, "--allow-exists")
 	}
 	placeholderArgs = append(placeholderArgs,
@@ -535,7 +654,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	//    AppConfig Unit is re-applied. --update-type MergeUnits is the
 	//    rendering link. Slug "-" tells the server to assign one.
 	linkArgs := []string{"link", "create"}
-	if allowExists {
+	if retry {
 		linkArgs = append(linkArgs, "--allow-exists")
 	}
 	linkArgs = append(linkArgs,
@@ -626,7 +745,7 @@ func ensureRendererWorker(spaceSlug, workerSlug string) error {
 // createInstallerRecordUnit builds the multi-doc YAML body and creates the
 // untargeted installer-record Unit. The body file is staged in a temp
 // location and passed to `cub unit create`.
-func createInstallerRecordUnit(pkg upload.Package, allowExists bool) error {
+func createInstallerRecordUnit(pkg upload.Package, retry bool) error {
 	body, err := upload.BuildInstallerRecord(pkg)
 	if err != nil {
 		return err
@@ -643,7 +762,7 @@ func createInstallerRecordUnit(pkg upload.Package, allowExists bool) error {
 	tmp.Close()
 
 	args := []string{"unit", "create"}
-	if allowExists {
+	if retry {
 		args = append(args, "--allow-exists")
 	}
 	args = append(args,
@@ -664,9 +783,9 @@ func createInstallerRecordUnit(pkg upload.Package, allowExists bool) error {
 
 // createCrossSpaceLink wires the parent's record Unit to a dep's record
 // Unit. The 4th positional arg to `cub link create` is the target Space.
-func createCrossSpaceLink(l upload.CrossSpaceLink, allowExists bool) error {
+func createCrossSpaceLink(l upload.CrossSpaceLink, retry bool) error {
 	args := []string{"link", "create"}
-	if allowExists {
+	if retry {
 		args = append(args, "--allow-exists")
 	}
 	args = append(args,

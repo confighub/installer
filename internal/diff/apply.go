@@ -30,7 +30,7 @@ type ApplyOptions struct {
 	// changeset.DefaultSlug(time.Now()) when empty.
 	ChangeSetSlug string
 	// ChangeSetDescription is the human-readable description on the
-	// opened ChangeSet. Defaults to a generic "installer update" line
+	// opened ChangeSet. Defaults to a generic "install update" line
 	// when empty.
 	ChangeSetDescription string
 	// Target is forwarded to `cub unit create --target` for adds. Empty
@@ -132,7 +132,7 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 		}
 		// Close the ChangeSet by detaching the updated units. The
 		// ChangeSet itself is preserved (for revert); the units are
-		// freed so the next `installer update` can open a new
+		// freed so the next `install update` can open a new
 		// ChangeSet on them. Without this step ConfigHub rejects all
 		// subsequent updates against these units (the ChangeSet acts
 		// as a lock per docs/guide/change-apply.md).
@@ -149,7 +149,7 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 			res.Deleted += deleted
 		}
 		// Re-run link inference now that the Unit set has changed.
-		// No skip set here — `installer update` doesn't have the
+		// No skip set here — `install update` doesn't have the
 		// installer's rendered out/secrets/ context in hand.
 		if err := upload.ReconcileLinks(ctx, sp.SpaceSlug, sp.Package, nil); err != nil {
 			return res, err
@@ -168,9 +168,9 @@ func descriptionOrDefault(d, pkg, ver string) string {
 		return d
 	}
 	if ver != "" {
-		return fmt.Sprintf("installer update from %s@%s", pkg, ver)
+		return fmt.Sprintf("install update from %s@%s", pkg, ver)
 	}
-	return fmt.Sprintf("installer update from %s", pkg)
+	return fmt.Sprintf("install update from %s", pkg)
 }
 
 func createUnit(ctx context.Context, space, component string, a SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) error {
@@ -199,14 +199,38 @@ func createUnit(ctx context.Context, space, component string, a SlugDiff, opts A
 }
 
 func updateUnit(ctx context.Context, space string, u SlugDiff, changeSetSlug string, stdout, stderr io.Writer) error {
+	// For AppConfig Units, the local source is the raw env content
+	// (not the rendered ConfigMap manifest). Stage it to a temp file
+	// so cub reads it from disk the same way it reads regular
+	// manifest paths. The merge-external-source identity matches
+	// what upload used when creating the Unit (the carrier
+	// manifest's basename).
+	path := u.Path
+	srcName := baseName(u.Path)
+	if u.AppCfg != nil {
+		tmp, err := os.CreateTemp("", "appconfig-update-*-"+u.Slug)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(tmp.Name())
+		if _, err := tmp.Write(u.AppCfg.Content); err != nil {
+			tmp.Close()
+			return err
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		path = tmp.Name()
+		srcName = baseName(u.AppCfg.ManifestPath)
+	}
 	args := []string{"unit", "update",
 		"--space", space,
-		"--merge-external-source", baseName(u.Path),
+		"--merge-external-source", srcName,
 	}
 	if changeSetSlug != "" {
 		args = append(args, "--changeset", changeSetSlug)
 	}
-	args = append(args, u.Slug, u.Path)
+	args = append(args, u.Slug, path)
 	cmd := exec.CommandContext(ctx, "cub", args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

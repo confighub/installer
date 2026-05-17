@@ -11,7 +11,7 @@ import (
 
 // recordedPackages is the allowlist of package names whose upload
 // gets recorded in ~/.confighub/installer/state.yaml. Only packages
-// `installer new` (or another reader) needs to locate later belong
+// `install new` (or another reader) needs to locate later belong
 // here. Most installs do not — operators would not benefit from a
 // listing of every package they have ever uploaded, and the user-
 // state file should stay scoped to actually-used metadata.
@@ -24,7 +24,7 @@ var recordedPackages = map[string]bool{
 // ~/.confighub/installer/state.yaml IF the package is in
 // recordedPackages. No-op for any other package.
 //
-// Used by `installer upload` so `installer new` can locate the
+// Used by `install upload` so `install new` can locate the
 // kubernetes-resources package without operator intervention.
 func recordUploadInUserState(ctx context.Context, packages []upload.Package) error {
 	if len(packages) == 0 || !packages[0].IsParent {

@@ -29,6 +29,10 @@ import (
 //
 // dest is the working directory the caller wants the package extracted to;
 // for local directory references it is returned unchanged.
+//
+// Most callers should use PullToWorkDir instead — it wraps Pull with an
+// atomic-rename pattern so a failed fetch never leaves the prior
+// <workDir>/package/ in an indeterminate state.
 func Pull(ctx context.Context, ref, dest string) (string, error) {
 	switch {
 	case strings.HasPrefix(ref, "oci://"):
@@ -38,6 +42,80 @@ func Pull(ctx context.Context, ref, dest string) (string, error) {
 	default:
 		return pullLocal(ref, dest)
 	}
+}
+
+// PullToWorkDir fetches ref into <workDir>/package/ atomically.
+//
+// The fetch is staged into a sibling temp directory inside workDir; on
+// success, the staged tree is renamed into <workDir>/package/. Any
+// existing <workDir>/package/ is first renamed to a sibling temp
+// location and removed only after the swap succeeds. A failed fetch or
+// rename leaves the prior package/ intact via rollback.
+//
+// On success, <workDir>/package/installer.yaml is guaranteed to exist.
+// Returns the absolute path to <workDir>/package/.
+func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
+	absWork, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(absWork, 0o755); err != nil {
+		return "", err
+	}
+	finalDest := filepath.Join(absWork, "package")
+
+	stage, err := os.MkdirTemp(absWork, ".tmp-pull-")
+	if err != nil {
+		return "", err
+	}
+	stageCleanedUp := false
+	defer func() {
+		if !stageCleanedUp {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+
+	loaded, err := Pull(ctx, ref, stage)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(filepath.Join(loaded, ManifestFile)); err != nil {
+		return "", fmt.Errorf("pulled artifact missing %s: %w", ManifestFile, err)
+	}
+
+	// Park any existing package/ in a sibling so we can roll back on
+	// failure. We use MkdirTemp + Remove to claim a unique name without
+	// racing another concurrent pull, then rename the existing dir into
+	// that slot.
+	var prevDest string
+	if _, err := os.Stat(finalDest); err == nil {
+		prevDest, err = os.MkdirTemp(absWork, ".tmp-pkg-prev-")
+		if err != nil {
+			return "", err
+		}
+		if err := os.Remove(prevDest); err != nil {
+			return "", err
+		}
+		if err := os.Rename(finalDest, prevDest); err != nil {
+			return "", fmt.Errorf("stash existing %s: %w", finalDest, err)
+		}
+	}
+
+	if err := os.Rename(loaded, finalDest); err != nil {
+		if prevDest != "" {
+			_ = os.Rename(prevDest, finalDest)
+		}
+		return "", fmt.Errorf("promote pulled package to %s: %w", finalDest, err)
+	}
+	if prevDest != "" {
+		_ = os.RemoveAll(prevDest)
+	}
+	// Successful swap — the stage dir may still hold an empty wrapper
+	// directory if `loaded` was a subdir of stage. RemoveAll the stage
+	// to be tidy.
+	_ = os.RemoveAll(stage)
+	stageCleanedUp = true
+	return finalDest, nil
 }
 
 func pullLocal(src, dest string) (string, error) {
@@ -51,7 +129,7 @@ func pullLocal(src, dest string) (string, error) {
 	}
 	if info.IsDir() {
 		// For local directories, prefer in-place use unless an explicit dest
-		// is requested. This keeps `installer wizard ./examples/hello-app`
+		// is requested. This keeps `install wizard ./examples/hello-app`
 		// fast and avoids copying.
 		if dest == "" {
 			return abs, nil

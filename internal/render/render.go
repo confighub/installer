@@ -43,7 +43,7 @@ type Result struct {
 }
 
 // Render reads the package + selection + inputs, drives kustomize (which
-// invokes `installer transformer` as an exec plugin to apply the function
+// invokes `install transformer` as an exec plugin to apply the function
 // chain and validators), and writes per-resource files plus the spec docs
 // to outDir.
 //
@@ -96,7 +96,7 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	}
 
 	// 2. Compose out/compose/ and run kustomize against it. Kustomize
-	//    invokes the wrapper, which execs `installer transformer`,
+	//    invokes the wrapper, which execs `install transformer`,
 	//    which runs each transformer group through chainexec in-process.
 	composeDir := filepath.Join(outDir, "compose")
 	if err := composeKustomization(composeInputs{
