@@ -1,0 +1,81 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: argocd
+  version: 3.3.0
+  kubeVersion: ">= 1.28"
+spec:
+  bases:
+    - name: cluster-install
+      path: bases/cluster-install
+      default: true
+      description: |
+        Standard install with cluster-admin: in-namespace components +
+        cluster-scoped RBAC + CRDs. Use this when ArgoCD will deploy
+        applications into the same cluster it runs in
+        (kubernetes.default.svc). Mirrors upstream manifests/install.yaml.
+
+    - name: namespace-install
+      path: bases/namespace-install
+      description: |
+        Namespace-scoped install: only the in-namespace components, no
+        ClusterRole/ClusterRoleBinding, no CRDs. Use this for tenant
+        instances that only deploy to external clusters via inputted
+        credentials. CRDs must be installed separately and cluster-wide;
+        run the cluster-install base once (or `kubectl apply -k
+        github.com/argoproj/argo-cd/manifests/crds?ref=stable`) to install
+        them. Mirrors upstream manifests/namespace-install.yaml.
+
+    - name: ha-cluster-install
+      path: bases/ha-cluster-install
+      description: |
+        HA install with cluster-admin: multi-replica components +
+        redis-ha + cluster-scoped RBAC + CRDs. Use this for production
+        when ArgoCD deploys into the same cluster. The redis-ha StatefulSet
+        runs 3 replicas with anti-affinity, so this base requires at
+        least 3 nodes. Mirrors upstream manifests/ha/install.yaml.
+
+    - name: ha-namespace-install
+      path: bases/ha-namespace-install
+      description: |
+        HA namespace-scoped install: multi-replica components + redis-ha
+        but only namespace-level privileges. Mirrors upstream
+        manifests/ha/namespace-install.yaml. Requires ≥3 nodes and
+        separately-installed CRDs (see namespace-install above).
+
+  # Cluster-scoped resources the cluster-install / ha-cluster-install
+  # bases provide. Downstream packages (App-of-Apps stacks, etc.) can
+  # declare these as externalRequires.
+  provides:
+    - { kind: CRD, name: applications.argoproj.io }
+    - { kind: CRD, name: applicationsets.argoproj.io }
+    - { kind: CRD, name: appprojects.argoproj.io }
+
+  # ArgoCD's application-controller uses a leader-election lease named
+  # after itself; only one controller (per ArgoCD instance) can hold it.
+  # In HA mode the StatefulSet runs N replicas, but only one is leader.
+  clusterSingleton:
+    - kind: leader-election-lease
+      name: argocd-application-controller
+
+  transformers:
+    # Upstream cluster-rbac ClusterRoleBindings hardcode
+    # subjects[].namespace = argocd. set-namespace rewrites those
+    # subjects along with metadata.namespace on every namespaced
+    # resource. The ha redis-ha bundle also has many hardcoded
+    # `namespace: "argocd"` values in its rendered chart output —
+    # set-namespace rewrites those too.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set the namespace on every namespaced resource and on RBAC subjects.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+
+  validators:
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format

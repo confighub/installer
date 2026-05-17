@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Equivalent to upstream manifests/ha/install: multi-replica components
+# + redis-ha + cluster-scoped RBAC + CRDs. Use this for production
+# installations where ArgoCD deploys into the same cluster.
+
+resources:
+  - ../../upstream/ha/namespace-install
+  - ../../upstream/cluster-rbac
+  - ../../upstream/crds
+
+images:
+  - name: quay.io/argoproj/argocd
+    newName: quay.io/argoproj/argocd
+    newTag: v3.3.0
