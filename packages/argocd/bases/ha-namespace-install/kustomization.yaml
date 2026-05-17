@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Equivalent to upstream manifests/ha/namespace-install: multi-replica
+# components + redis-ha but only namespace-scoped privileges (no
+# ClusterRole / ClusterRoleBinding, no CRDs). For production tenants
+# whose ArgoCD instance only deploys to external clusters via inputted
+# credentials. CRDs must be installed separately.
+
+resources:
+  - ../../upstream/ha/namespace-install
+
+images:
+  - name: quay.io/argoproj/argocd
+    newName: quay.io/argoproj/argocd
+    newTag: v3.3.0

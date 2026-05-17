@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Equivalent to upstream manifests/namespace-install: only the in-namespace
+# components (no ClusterRole / ClusterRoleBinding, no CRDs). Use this when
+# you don't need ArgoCD to deploy into kubernetes.default.svc — multiple
+# tenants each running their own ArgoCD against external clusters via
+# inputted credentials. CRDs must be installed separately and are NOT in
+# this base; install them once cluster-wide with the upstream CRD bundle.
+
+resources:
+  - ../../upstream/base
+
+images:
+  - name: quay.io/argoproj/argocd
+    newName: quay.io/argoproj/argocd
+    newTag: v3.3.0
