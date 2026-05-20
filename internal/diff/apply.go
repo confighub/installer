@@ -3,10 +3,13 @@ package diff
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"sort"
+	"strings"
 
 	"github.com/confighub/installer/internal/changeset"
 	"github.com/confighub/installer/internal/upload"
@@ -142,7 +145,7 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 			}
 		}
 		if len(sp.Deletes) > 0 {
-			deleted, err := deleteUnits(ctx, sp.SpaceSlug, sp.Deletes, opts, stdout, stderr)
+			deleted, err := emptyUnits(ctx, sp.SpaceSlug, sp.Deletes, opts, stdout, stderr)
 			if err != nil {
 				return res, err
 			}
@@ -260,29 +263,122 @@ func closeChangeSet(ctx context.Context, space string, updates []SlugDiff, stdou
 	return nil
 }
 
-func deleteUnits(ctx context.Context, space string, deletes []SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) (int, error) {
+// emptyUnits reconciles Units that exist in ConfigHub (under this
+// package's Component label) but no longer appear in the rendered
+// output. It does NOT run `cub unit delete`: upload reconciles Data
+// only, never the deployed live state. Deleting the Unit record would
+// orphan whatever it has deployed (the resources must be destroyed via
+// `cub unit apply` first, which upload does not do), discard any
+// post-install edits the operator made, and fail outright on Units
+// guarded by DeleteGates.
+//
+// Instead it feeds empty content through a `cub unit update
+// --merge-external-source`. That is a 3-way merge against the last
+// external (installer) push, so it removes only the resources the
+// installer contributed and leaves any post-install additions in place
+// — never a blunt full-replace-to-empty. The Unit record, target
+// binding, and metadata survive; the next `cub unit apply` removes the
+// now-absent resources through the normal deploy path. Prior Data stays
+// in revision history, so an emptying can be reverted with `cub unit
+// update --restore`.
+//
+// Because applying an emptied Unit destroys its deployed resources,
+// emptying is refused for any Unit carrying a DestroyGate — the same
+// protection the server enforces on the destroy action itself. The
+// whole batch is scanned first so a gated Unit is reported before
+// anything is touched.
+func emptyUnits(ctx context.Context, space string, deletes []SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) (int, error) {
 	if !opts.Yes {
-		fmt.Fprintf(stdout, "Refusing to delete %d Unit(s) in %s without --yes:\n", len(deletes), space)
+		fmt.Fprintf(stdout, "Refusing to empty %d Unit(s) in %s without --yes:\n", len(deletes), space)
 		for _, d := range deletes {
 			fmt.Fprintf(stdout, "  - %s\n", d.Slug)
 		}
-		return 0, fmt.Errorf("re-run with --yes to delete Units")
+		return 0, fmt.Errorf("re-run with --yes to empty Units no longer in the rendered output")
 	}
-	deleted := 0
+
+	var gated []string
 	for _, d := range deletes {
-		cmd := exec.CommandContext(ctx, "cub", "unit", "delete",
-			"--space", space, "--quiet", d.Slug)
+		gates, err := unitDestroyGates(ctx, space, d.Slug, stderr)
+		if err != nil {
+			return 0, err
+		}
+		if len(gates) > 0 {
+			gated = append(gated, fmt.Sprintf("  - %s (DestroyGates: %s)", d.Slug, strings.Join(gates, ", ")))
+		}
+	}
+	if len(gated) > 0 {
+		fmt.Fprintf(stdout, "Refusing to empty %d Unit(s) in %s guarded by DestroyGates:\n", len(gated), space)
+		for _, line := range gated {
+			fmt.Fprintln(stdout, line)
+		}
+		return 0, fmt.Errorf("remove the DestroyGate(s) (e.g. `cub unit update --patch --destroy-gate <key>=-`) before these Units can be emptied")
+	}
+
+	// Stage a single empty file to feed every merge-on-update.
+	empty, err := os.CreateTemp("", "installer-empty-*")
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(empty.Name())
+	if err := empty.Close(); err != nil {
+		return 0, err
+	}
+
+	emptied := 0
+	for _, d := range deletes {
+		// --merge-external-source makes this a 3-way merge against the
+		// last installer push (the server picks that base by source
+		// type, so the identifier value only labels the change). Pass
+		// the slug as that label; --change-desc below is what actually
+		// lands on the revision.
+		cmd := exec.CommandContext(ctx, "cub", "unit", "update",
+			"--space", space, "--quiet",
+			"--merge-external-source", d.Slug,
+			"--change-desc", fmt.Sprintf("install upload: emptied %s (no longer in rendered output)", d.Slug),
+			d.Slug, empty.Name())
 		var combined bytes.Buffer
 		cmd.Stdout = &combined
 		cmd.Stderr = &combined
 		if err := cmd.Run(); err != nil {
 			io.Copy(stderr, &combined)
-			return deleted, fmt.Errorf("cub unit delete %s in %s: %w", d.Slug, space, err)
+			return emptied, fmt.Errorf("cub unit update (empty) %s in %s: %w", d.Slug, space, err)
 		}
-		fmt.Fprintf(stdout, "Deleted %s/%s\n", space, d.Slug)
-		deleted++
+		fmt.Fprintf(stdout, "Emptied %s/%s (apply to remove its deployed resources)\n", space, d.Slug)
+		emptied++
 	}
-	return deleted, nil
+	return emptied, nil
+}
+
+// unitDestroyGates returns the DestroyGate keys set on a Unit, or nil if
+// it has none. Used to refuse emptying a Unit whose deployed resources
+// the gate is meant to protect.
+func unitDestroyGates(ctx context.Context, space, slug string, stderr io.Writer) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "cub", "unit", "get",
+		"--space", space, "-o", "json", slug)
+	var stdout, errb bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		io.Copy(stderr, &errb)
+		return nil, fmt.Errorf("cub unit get %s in %s: %w", slug, space, err)
+	}
+	var resp struct {
+		Unit struct {
+			DestroyGates map[string]bool `json:"DestroyGates"`
+		} `json:"Unit"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		return nil, fmt.Errorf("parse cub unit get %s in %s: %w", slug, space, err)
+	}
+	if len(resp.Unit.DestroyGates) == 0 {
+		return nil, nil
+	}
+	gates := make([]string, 0, len(resp.Unit.DestroyGates))
+	for k := range resp.Unit.DestroyGates {
+		gates = append(gates, k)
+	}
+	sort.Strings(gates)
+	return gates, nil
 }
 
 func baseName(path string) string {

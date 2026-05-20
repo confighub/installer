@@ -341,10 +341,7 @@ func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded
 	outDir := filepath.Join(workDir, "out")
 	manifestsDir := filepath.Join(outDir, "manifests")
 	if clean {
-		if err := os.RemoveAll(manifestsDir); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(filepath.Join(outDir, "secrets")); err != nil {
+		if err := render.CleanRenderedOutput(outDir); err != nil {
 			return err
 		}
 	}
@@ -466,6 +463,6 @@ Setup does NOT upload. Run install upload to push to ConfigHub.`,
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
 	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); applied via `kustomize edit set image` against the chosen base before render. The base's kustomization.yaml must declare an `images:` block.")
-	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove out/manifests/ and out/secrets/ before rendering")
+	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }

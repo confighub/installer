@@ -107,9 +107,14 @@ Goal: execute the Phase B plan inside a ChangeSet.
     for adds.
   - `cub unit update --merge-external-source --changeset <slug> ...`
     for updates (no `--dry-run`).
-  - `cub unit delete` for deletes; gated on `opts.Yes` or interactive
-    confirm-each. Stale links are auto-removed by ConfigHub on Unit
-    delete — no installer-side cleanup.
+  - `cub unit update --merge-external-source` with empty content for
+    Units that dropped out of the render — **empty**, never `cub unit
+    delete` (deleting would orphan deployed resources, discard
+    post-install edits, and fail on DeleteGates). The merge drops only
+    installer-contributed resources, preserving post-install edits.
+    Gated on `opts.Yes` or interactive confirm-each, and refused for
+    Units carrying a DestroyGate. Stale links are auto-removed by
+    ConfigHub when the Data no longer references them.
 - New: `internal/cli/update.go` — `install update <work-dir> [--yes]
   [--changeset <slug>]`. Default ChangeSet slug:
   `installer-update-<RFC3339-timestamp>`. Plan output names the

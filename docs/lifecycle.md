@@ -239,10 +239,17 @@ work-dir has been uploaded before:
 - **Reconcile** — `out/spec/upload.yaml` exists. Re-computes the same
   plan `install plan` would produce, opens one ChangeSet per Space,
   runs `cub unit update --merge-external-source --changeset <slug>` for
-  updates, `cub unit create` for adds, `cub unit delete` for deletes
-  (gated on `--yes` or interactive confirmation). Refreshes the
-  `installer-record` Unit so subsequent setups re-enter from
-  up-to-date state.
+  updates, `cub unit create` for adds, and for Units that dropped out of
+  the rendered output, `cub unit update --merge-external-source` with
+  empty content to **empty** them (gated on `--yes` or interactive
+  confirmation). Emptying — never `cub unit delete` — is a 3-way merge
+  against the last installer push, so it removes only the installer-
+  contributed resources and preserves the Unit record, its target
+  binding, and any post-install edits, leaving prior Data in revision
+  history; applying the emptied Unit later removes its deployed
+  resources through the normal deploy path. Units guarded by a
+  DestroyGate are refused. Refreshes the `installer-record` Unit so
+  subsequent setups re-enter from up-to-date state.
 
 The two modes share most of the implementation; the detection rule is
 purely "is this the first time we're talking to ConfigHub for this
@@ -260,8 +267,9 @@ Flags:
   retried without erroring on the entries that did succeed. (Replaces
   the previous `--allow-exists` flag — same behavior, clearer name.)
   Ignored on reconcile (reconcile is always idempotent).
-- `--yes` — skip per-delete confirmation on reconcile (required when
-  stdin is not a TTY and the plan contains deletes).
+- `--yes` — skip the empty-Units confirmation on reconcile (required
+  when stdin is not a TTY and the plan empties Units that dropped out of
+  the rendered output).
 - `--changeset` — explicit ChangeSet slug on reconcile. Default:
   `installer-update-<RFC3339-timestamp>`.
 

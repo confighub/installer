@@ -22,6 +22,10 @@
 #   re-run         — second upload is a no-op (no ChangeSet)
 #   AppConfig edit — edits the .env carrier, re-renders, reconciles —
 #                    proves the AppConfig pathway round-trips
+#   drop manifest  — removes a rendered manifest so its Unit falls out of
+#                    the rendered set; reconcile EMPTIES the Unit (via
+#                    merge-external-source), never `cub unit delete`, and
+#                    refuses outright while the Unit carries a DestroyGate
 #
 # Unlike package-and-deps.sh, this test does NOT delete the destination
 # Space on exit — the resulting Space is left for manual inspection.
@@ -285,7 +289,7 @@ if grep -q "~ confighub-worker-env-rendered" "$WORK_TMP/plan-appcfg.log"; then
 fi
 
 run upload-appcfg "$BIN" upload --work-dir "$WORK_TMP" --yes || fail "upload after AppConfig edit failed (see $WORK_TMP/upload-appcfg.log)"
-grep -qE "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upload-appcfg.log" \
+grep -qE "^Applied: 0 created, 1 updated, 0 emptied\\.$" "$WORK_TMP/upload-appcfg.log" \
   || fail "upload reconcile after AppConfig edit should report exactly 1 update (see $WORK_TMP/upload-appcfg.log)"
 
 # Verify the AppConfig Unit body on the server actually has the new
@@ -335,7 +339,7 @@ grep -q "~ $EDIT_SLUG" "$WORK_TMP/plan-edited.log" \
 # 11. upload reconcile — applies the diff inside a ChangeSet.
 log "install upload (reconcile Deployment marker) — applies 1 change"
 run upload-reconcile "$BIN" upload --work-dir "$WORK_TMP" --yes || fail "upload reconcile failed (see $WORK_TMP/upload-reconcile.log)"
-grep -q "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upload-reconcile.log" \
+grep -q "^Applied: 0 created, 1 updated, 0 emptied\\.$" "$WORK_TMP/upload-reconcile.log" \
   || fail "upload reconcile should apply 1 change (see $WORK_TMP/upload-reconcile.log)"
 grep -q "ChangeSet: " "$WORK_TMP/upload-reconcile.log" \
   || fail "upload reconcile should open and name a ChangeSet"
@@ -360,6 +364,60 @@ grep -q "^No changes\\.$" "$WORK_TMP/upload-converge-2.log" \
 if grep -q "ChangeSet: " "$WORK_TMP/upload-converge-2.log"; then
   fail "converge upload should not open a ChangeSet (no changes)"
 fi
+
+# 13. Resource deletion: drop a rendered manifest so its Unit falls out
+#     of the rendered set. Reconcile must EMPTY the Unit (via `cub unit
+#     update --merge-external-source` with empty content) — never `cub
+#     unit delete`. The Unit record, target binding, and metadata must
+#     survive so the next apply can remove the deployed resources. The
+#     ClusterRoleBinding is a safe leaf to drop (cluster-scoped, nothing
+#     Needs it).
+log "resource deletion: drop a rendered manifest, reconcile empties (not deletes) the Unit"
+DEL_FILE=$(ls "$WORK_TMP/out/manifests"/clusterrolebinding-*.yaml 2>/dev/null | head -1)
+[[ -n "$DEL_FILE" ]] || fail "no rendered ClusterRoleBinding manifest to delete"
+DEL_SLUG=$(basename "$DEL_FILE" .yaml)
+note "dropping rendered manifest for slug $DEL_SLUG"
+rm -f "$DEL_FILE"
+
+# Plan surfaces exactly one delete, naming the slug under "-".
+run plan-deleted "$BIN" plan --work-dir "$WORK_TMP" || fail "plan after manifest drop failed (see $WORK_TMP/plan-deleted.log)"
+grep -q "^Plan: 0 to add, 0 to change, 1 to delete\\.$" "$WORK_TMP/plan-deleted.log" \
+  || fail "plan after manifest drop should report exactly 1 delete (see $WORK_TMP/plan-deleted.log)"
+grep -q "^  - $DEL_SLUG$" "$WORK_TMP/plan-deleted.log" \
+  || fail "plan after manifest drop should list '  - $DEL_SLUG' (see $WORK_TMP/plan-deleted.log)"
+
+# 13a. DestroyGate refusal: a Unit guarded by a DestroyGate must NOT be
+#      emptied (emptying + apply would destroy its deployed resources).
+log "DestroyGate refusal: gated Unit must not be emptied"
+cub unit update --patch --space "$SPACE" --destroy-gate "installer-e2e" "$DEL_SLUG" >/dev/null \
+  || fail "failed to set DestroyGate on $DEL_SLUG"
+if run upload-gated "$BIN" upload --work-dir "$WORK_TMP" --yes; then
+  fail "upload must refuse to empty $DEL_SLUG while it carries a DestroyGate (see $WORK_TMP/upload-gated.log)"
+fi
+grep -q "guarded by DestroyGates" "$WORK_TMP/upload-gated.log" \
+  || fail "upload refusal should mention DestroyGates (see $WORK_TMP/upload-gated.log)"
+cub unit data --space "$SPACE" "$DEL_SLUG" 2>/dev/null | grep -q "kind: ClusterRoleBinding" \
+  || fail "gated Unit $DEL_SLUG must remain intact (still a ClusterRoleBinding) after refusal"
+note "gated Unit $DEL_SLUG left untouched"
+
+# 13b. Clear the gate, reconcile for real: the Unit is emptied, not deleted.
+log "clear the gate, reconcile empties the Unit"
+cub unit update --patch --space "$SPACE" --destroy-gate "installer-e2e=-" "$DEL_SLUG" >/dev/null \
+  || fail "failed to remove DestroyGate from $DEL_SLUG"
+run upload-emptied "$BIN" upload --work-dir "$WORK_TMP" --yes || fail "upload empty failed (see $WORK_TMP/upload-emptied.log)"
+grep -qE "^Applied: 0 created, 0 updated, 1 emptied\\.$" "$WORK_TMP/upload-emptied.log" \
+  || fail "upload should report exactly 1 emptied (see $WORK_TMP/upload-emptied.log)"
+grep -q "Emptied $SPACE/$DEL_SLUG" "$WORK_TMP/upload-emptied.log" \
+  || fail "upload should print 'Emptied $SPACE/$DEL_SLUG' (see $WORK_TMP/upload-emptied.log)"
+
+# The Unit record must still exist (no cub unit delete) and its Data must
+# no longer contain the ClusterRoleBinding.
+cub unit get --space "$SPACE" "$DEL_SLUG" >/dev/null 2>&1 \
+  || fail "emptied Unit $DEL_SLUG must still exist — upload must never run 'cub unit delete'"
+if cub unit data --space "$SPACE" "$DEL_SLUG" 2>/dev/null | grep -q "kind: ClusterRoleBinding"; then
+  fail "emptied Unit $DEL_SLUG should no longer contain the ClusterRoleBinding"
+fi
+note "Unit $DEL_SLUG still exists and no longer contains the ClusterRoleBinding"
 
 log "summary"
 note "Space:           $SPACE"

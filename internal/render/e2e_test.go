@@ -96,6 +96,15 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 			t.Errorf("missing spec doc %s: %v", name, err)
 		}
 	}
+
+	// out/.gitignore keeps rendered secrets out of version control.
+	gi, err := os.ReadFile(filepath.Join(outDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read out/.gitignore: %v", err)
+	}
+	if !strings.Contains(string(gi), "secrets/") {
+		t.Errorf("out/.gitignore should ignore the secrets/ subdirectory, got:\n%s", gi)
+	}
 }
 
 func filenames(files []render.File) []string {

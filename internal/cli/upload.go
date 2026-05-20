@@ -272,7 +272,7 @@ func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nApplied: %d created, %d updated, %d deleted.\n", res.Created, res.Updated, res.Deleted)
+	fmt.Printf("\nApplied: %d created, %d updated, %d emptied.\n", res.Created, res.Updated, res.Deleted)
 	if len(res.ChangeSetsOpened) > 0 {
 		fmt.Println("Updates revertable via:")
 		for _, cs := range res.ChangeSetsOpened {

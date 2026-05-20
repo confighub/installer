@@ -300,6 +300,30 @@ func TestApplyNoChangesNoOp(t *testing.T) {
 	}
 }
 
+func TestEmptyUnitsRefusesWithoutYes(t *testing.T) {
+	// Without --yes, emptyUnits must refuse the whole batch up front —
+	// before shelling out to cub — listing every Unit it would empty.
+	var stdout, stderr bytes.Buffer
+	deletes := []SlugDiff{{Slug: "deployment-gone"}, {Slug: "service-gone"}}
+	n, err := emptyUnits(context.Background(), "statusboard-prod", deletes,
+		ApplyOptions{Yes: false}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error when --yes is not set")
+	}
+	if n != 0 {
+		t.Errorf("expected 0 emptied, got %d", n)
+	}
+	out := stdout.String()
+	for _, slug := range []string{"deployment-gone", "service-gone"} {
+		if !strings.Contains(out, slug) {
+			t.Errorf("expected refusal to list %q, got:\n%s", slug, out)
+		}
+	}
+	if strings.Contains(out, "Emptied") {
+		t.Errorf("must not empty anything when refusing, got:\n%s", out)
+	}
+}
+
 func mustWrite(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
