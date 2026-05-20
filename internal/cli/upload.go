@@ -29,7 +29,6 @@ func newUploadCmd() *cobra.Command {
 		target        string
 		annotations   []string
 		labels        []string
-		appCfgWorker  string
 		retry         bool
 		yes           bool
 		changeSetSlug string
@@ -43,10 +42,12 @@ presence of <work-dir>/out/spec/upload.yaml (written by the first upload):
 
 First upload (no upload.yaml):
   Creates Space(s), one Unit per rendered manifest, plus the untargeted
-  installer-record Unit. ConfigMapRenderer Targets + AppConfig Unit pairs
-  for AppConfig-annotated ConfigMaps. Cross-Space links between parent
-  and dependency installer-record Units. Intra-Space NeedsProvides link
-  inference runs per Space at the end. Writes upload.yaml on success.
+  installer-record Unit. For AppConfig-annotated ConfigMaps: an AppConfig
+  Unit + a render-configmap Invocation + a placeholder Kubernetes/YAML
+  Unit, wired by an Upsert link that renders the ConfigMap into the
+  placeholder. Cross-Space links between parent and dependency
+  installer-record Units. Intra-Space NeedsProvides link inference runs
+  per Space at the end. Writes upload.yaml on success.
 
 Reconcile (upload.yaml exists):
   Re-computes the same plan install plan would produce. Opens one
@@ -179,7 +180,7 @@ ConfigHub.`,
 			}
 
 			for _, pkg := range packages {
-				if err := uploadOnePackage(pkg, target, annotations, labels, appCfgWorker, retry); err != nil {
+				if err := uploadOnePackage(pkg, target, annotations, labels, retry); err != nil {
 					return err
 				}
 			}
@@ -207,8 +208,7 @@ ConfigHub.`,
 	cmd.Flags().StringSliceVar(&annotations, "annotation", nil, "annotation key=value to set on every rendered Unit (repeatable)")
 	cmd.Flags().StringSliceVar(&labels, "label", nil, "label key=value to set on every rendered Unit (repeatable)")
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
-	cmd.Flags().StringVar(&appCfgWorker, "appconfig-worker", "renderer-worker", "worker slug (Space-relative) attached to ConfigMapRenderer Targets for AppConfig-annotated ConfigMaps; auto-created as a server-side worker in the destination Space if missing")
-	cmd.Flags().BoolVar(&retry, "retry", false, "first upload only: tolerate Units, Targets, and Links that already exist so a partially-failed first upload can be retried. Space and renderer-worker auto-create are always idempotent — this flag only affects content. Ignored on reconcile (reconcile is always idempotent).")
+	cmd.Flags().BoolVar(&retry, "retry", false, "first upload only: tolerate Units, Invocations, and Links that already exist so a partially-failed first upload can be retried. Space auto-create is always idempotent — this flag only affects content. Ignored on reconcile (reconcile is always idempotent).")
 	cmd.Flags().BoolVar(&yes, "yes", false, "reconcile only: skip confirmation for deletes (required when stdin is not a TTY and the plan contains deletes)")
 	cmd.Flags().StringVar(&changeSetSlug, "changeset", "", "reconcile only: ChangeSet slug to open per Space (default: installer-update-<timestamp>)")
 	return cmd
@@ -304,10 +304,10 @@ func refreshInstallerRecordHook(packages []upload.Package) diff.PackageRefresher
 
 // uploadOnePackage creates pkg.SpaceSlug if missing, uploads each rendered
 // manifest as a Unit (with --target/--annotation/--label applied), splits
-// AppConfig-annotated ConfigMaps into AppConfig Unit + ConfigMapRenderer
-// Target pairs, creates the untargeted installer-record Unit, and runs
-// the intra-Space link inference.
-func uploadOnePackage(pkg upload.Package, target string, annotations, labels []string, appCfgWorker string, retry bool) error {
+// AppConfig-annotated ConfigMaps into AppConfig Unit + render-configmap
+// Invocation + placeholder + Upsert link, creates the untargeted
+// installer-record Unit, and runs the intra-Space link inference.
+func uploadOnePackage(pkg upload.Package, target string, annotations, labels []string, retry bool) error {
 	fmt.Printf("== %s@%s → Space %s ==\n", pkg.Name, pkg.Version, pkg.SpaceSlug)
 
 	if err := ensureSpace(pkg.SpaceSlug); err != nil {
@@ -315,9 +315,9 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 	}
 
 	// Read the wizard's namespace from out/spec/inputs.yaml. AppConfig
-	// placeholders need it post-merge: the ConfigMapRenderer bridge stamps
-	// metadata.namespace=confighubplaceholder onto its live state (it
-	// expects a namespace link to fill that in at apply time), but our
+	// placeholders need it post-render: render-configmap stamps
+	// metadata.namespace=confighubplaceholder onto the rendered ConfigMap
+	// (it expects a namespace link to fill that in at apply time), but our
 	// intra-Space link inference matches by namespace and a placeholder
 	// value never resolves. set-namespace on the placeholder Unit lets
 	// the inference wire the Deployment → ConfigMap link.
@@ -334,17 +334,6 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		return fmt.Errorf("read %s: %w", pkg.ManifestsDir, err)
 	}
 
-	// Pre-scan for AppConfig-annotated ConfigMaps. If any exist, we need
-	// a server-side worker in the destination Space to render them — auto
-	// create it the same way we auto-create the Space, so a fresh
-	// installation has every dependency in place without operator
-	// pre-staging. Idempotent via --allow-exists.
-	type manifestEntry struct {
-		path   string
-		base   string
-		appCfg *upload.AppConfigManifest
-	}
-	var manifests []manifestEntry
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -354,34 +343,18 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		if err != nil {
 			return err
 		}
-		manifests = append(manifests, manifestEntry{path: path, base: e.Name(), appCfg: appCfg})
-	}
-	hasAppConfig := false
-	for _, m := range manifests {
-		if m.appCfg != nil {
-			hasAppConfig = true
-			break
-		}
-	}
-	if hasAppConfig {
-		if err := ensureRendererWorker(pkg.SpaceSlug, appCfgWorker); err != nil {
-			return err
-		}
-	}
-
-	for _, m := range manifests {
-		if m.appCfg != nil {
-			if err := uploadAppConfigManifest(pkg, m.appCfg, appCfgWorker, target, componentLabel, namespace, annotations, labels, retry); err != nil {
+		if appCfg != nil {
+			if err := uploadAppConfigManifest(pkg, appCfg, target, componentLabel, namespace, annotations, labels, retry); err != nil {
 				return err
 			}
 			continue
 		}
-		slug := trimExt(m.base)
+		slug := trimExt(e.Name())
 		cubArgs := []string{"unit", "create"}
 		if retry {
 			cubArgs = append(cubArgs, "--allow-exists")
 		}
-		cubArgs = append(cubArgs, "--space", pkg.SpaceSlug, "--merge-external-source", m.base, "--label", componentLabel)
+		cubArgs = append(cubArgs, "--space", pkg.SpaceSlug, "--merge-external-source", e.Name(), "--label", componentLabel)
 		if target != "" {
 			cubArgs = append(cubArgs, "--target", target)
 		}
@@ -391,7 +364,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		for _, l := range labels {
 			cubArgs = append(cubArgs, "--label", l)
 		}
-		cubArgs = append(cubArgs, slug, m.path)
+		cubArgs = append(cubArgs, slug, path)
 		ccmd := exec.Command("cub", cubArgs...)
 		ccmd.Stdout = os.Stdout
 		ccmd.Stderr = os.Stderr
@@ -507,31 +480,35 @@ func reportSecretsNotUploaded(pkg upload.Package, secrets []renderedSecret) {
 // uploadAppConfigManifest materializes the AppConfig bundle in pkg's
 // Space:
 //
-//  1. ConfigMapRenderer Target — one per carrier ConfigMap.
-//  2. AppConfig Unit — Data is the extracted raw file body, target is
-//     the renderer. This is the day-2 source of truth in the native
-//     format (.properties, .env, etc.).
-//  3. cub unit apply --wait against the AppConfig Unit — the
-//     ConfigMapRenderer worker produces the rendered ConfigMap as live
-//     state. Doing this before creating the link below means the link's
-//     initial MergeUnits pulls real content into the placeholder, so
-//     the link inference at the end of uploadOnePackage can read the
-//     placeholder's rendered metadata.name to wire workload references.
-//  4. Placeholder Kubernetes/YAML ConfigMap Unit — same slug as the
-//     carrier so other Units in the Space link to it by name via
-//     intra-Space link inference. Body is empty at creation; populated
-//     when the live-merge link below fires.
-//  5. Live-state MergeUnits link placeholder → AppConfig Unit.
+//  1. render-configmap Invocation — one per carrier ConfigMap. Its
+//     toolchain matches the AppConfig Unit; its args encode immutable /
+//     as-key-value mode.
+//  2. AppConfig Unit — Data is the extracted raw file body. No target;
+//     it is a pure data source. This is the day-2 source of truth in the
+//     native format (.properties, .env, etc.).
+//  3. Placeholder Kubernetes/YAML ConfigMap Unit — carries a "-rendered"
+//     suffix so it doesn't collide with the AppConfig Unit (which owns
+//     the carrier's name, equal to the rendered ConfigMap's
+//     metadata.name). Body is empty at creation; populated by the Upsert
+//     link below. Other workload Units reference the ConfigMap by
+//     metadata.name; intra-Space link inference wires them into this
+//     placeholder via the rendered content.
+//  4. Upsert link placeholder → AppConfig Unit, with the render-configmap
+//     Invocation as its TransformInvocation. On resolution the function
+//     renders the AppConfig Unit's Data into a Kubernetes ConfigMap and
+//     upserts it into the placeholder's Data. --auto-update keeps it in
+//     sync as the AppConfig Unit changes. No bridge, no worker, no apply.
+//  5. set-namespace on the placeholder so intra-Space link inference can
+//     match it (the rendered ConfigMap carries a namespace placeholder).
 //
 // The placeholder Unit inherits the upload-wide `target` flag (typically a
 // Kubernetes namespace target) so it applies into the same place as every
-// other rendered manifest. The renderer Target itself is attached only to
-// the AppConfig Unit.
+// other rendered manifest.
 //
-// Idempotent via --allow-exists on the Target, Units, and link; re-running
-// upload after re-rendering refreshes the AppConfig Unit body via the
-// --merge-external-source mechanism the regular path uses.
-func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, worker, target, componentLabel, namespace string, annotations, labels []string, retry bool) error {
+// Idempotent via --allow-exists on the Invocation, Units, and link;
+// re-running upload after re-rendering refreshes the AppConfig Unit body
+// via the --merge-external-source mechanism the regular path uses.
+func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, target, componentLabel, namespace string, annotations, labels []string, retry bool) error {
 	fmt.Printf("AppConfig: %s (toolchain=%s, mode=%s)\n", appCfg.CarrierName, appCfg.Toolchain, appCfg.Mode)
 
 	// 1. Stage the extracted raw config in a temp file so cub unit
@@ -547,31 +524,28 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	}
 	tmp.Close()
 
-	// 2. Create the ConfigMapRenderer Target. The worker arg is required
-	//    by `cub target create` and is Space-relative by convention.
-	workerRef := pkg.SpaceSlug + "/" + worker
-	targetArgs := []string{"target", "create"}
+	// 2. Create the render-configmap Invocation. The "--" separator tells
+	//    cub the following tokens are function arguments, not invocation
+	//    flags.
+	invArgs := []string{"invocation", "create"}
 	if retry {
-		targetArgs = append(targetArgs, "--allow-exists")
+		invArgs = append(invArgs, "--allow-exists")
 	}
-	targetArgs = append(targetArgs,
+	invArgs = append(invArgs,
 		"--space", pkg.SpaceSlug,
-		appCfg.TargetSlug(), "", workerRef,
-		"--provider", "ConfigMapRenderer",
-		"--toolchain", appCfg.Toolchain,
-		"--livestate-type", "Kubernetes/YAML",
+		"--label", componentLabel,
+		appCfg.InvocationSlug(), appCfg.Toolchain,
+		"--", "render-configmap",
 	)
-	if opts := appCfg.RendererOptions(); opts != "" {
-		targetArgs = append(targetArgs, "--option", opts)
-	}
-	tcmd := exec.Command("cub", targetArgs...)
-	tcmd.Stdout = os.Stdout
-	tcmd.Stderr = os.Stderr
-	if err := tcmd.Run(); err != nil {
-		return fmt.Errorf("cub target create %s in %s: %w", appCfg.TargetSlug(), pkg.SpaceSlug, err)
+	invArgs = append(invArgs, appCfg.RenderConfigMapArgs()...)
+	icmd := exec.Command("cub", invArgs...)
+	icmd.Stdout = os.Stdout
+	icmd.Stderr = os.Stderr
+	if err := icmd.Run(); err != nil {
+		return fmt.Errorf("cub invocation create %s in %s: %w", appCfg.InvocationSlug(), pkg.SpaceSlug, err)
 	}
 
-	// 3. Create the AppConfig Unit pointing at that Target.
+	// 3. Create the AppConfig Unit (no target — pure data source).
 	unitArgs := []string{"unit", "create"}
 	if retry {
 		unitArgs = append(unitArgs, "--allow-exists")
@@ -579,7 +553,6 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	unitArgs = append(unitArgs,
 		"--space", pkg.SpaceSlug,
 		"--toolchain", appCfg.Toolchain,
-		"--target", appCfg.TargetSlug(),
 		"--merge-external-source", filepath.Base(appCfg.ManifestPath),
 		"--label", componentLabel,
 	)
@@ -597,30 +570,8 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		return fmt.Errorf("cub unit create %s in %s: %w", appCfg.UnitSlug(), pkg.SpaceSlug, err)
 	}
 
-	// 4. Apply the AppConfig Unit so the ConfigMapRenderer worker produces
-	//    a rendered ConfigMap as its live state. The live-merge link in
-	//    step 6 pulls from that live state to populate the placeholder's
-	//    Data; without this apply the placeholder stays empty, and the
-	//    intra-Space link inference run at the end of uploadOnePackage
-	//    can't see the rendered ConfigMap's metadata.name to wire up
-	//    workload references (Deployment envFrom, volumes, etc.).
-	acmd := exec.Command("cub", "unit", "apply",
-		"--space", pkg.SpaceSlug, "--wait", "--quiet",
-		appCfg.UnitSlug())
-	acmd.Stdout = os.Stdout
-	acmd.Stderr = os.Stderr
-	if err := acmd.Run(); err != nil {
-		return fmt.Errorf("cub unit apply %s in %s: %w", appCfg.UnitSlug(), pkg.SpaceSlug, err)
-	}
-
-	// 5. Create the placeholder ConfigMap Unit. Its slug carries a
-	//    "-rendered" suffix so it doesn't collide with the AppConfig
-	//    Unit (which owns the carrier's name so the bridge stamps that
-	//    name onto the rendered ConfigMap). Body is empty at creation;
-	//    populated by the live-merge link below. Other workload Units
-	//    reference the ConfigMap by metadata.name (which equals
-	//    UnitSlug() after the merge); intra-Space link inference wires
-	//    them into this placeholder via the merged content.
+	// 4. Create the placeholder ConfigMap Unit. Body is empty at creation;
+	//    populated by the Upsert link below.
 	placeholderArgs := []string{"unit", "create"}
 	if retry {
 		placeholderArgs = append(placeholderArgs, "--allow-exists")
@@ -647,12 +598,11 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		return fmt.Errorf("cub unit create %s in %s: %w", appCfg.PlaceholderSlug(), pkg.SpaceSlug, err)
 	}
 
-	// 6. Live-state MergeUnits link from placeholder → AppConfig Unit.
-	//    --use-live-state pulls the rendered ConfigMap from the
-	//    AppConfig Unit's live state (populated by step 4's apply) into
-	//    the placeholder's Data; --auto-update keeps it in sync as the
-	//    AppConfig Unit is re-applied. --update-type MergeUnits is the
-	//    rendering link. Slug "-" tells the server to assign one.
+	// 5. Upsert link placeholder → AppConfig Unit. On resolution the
+	//    TransformInvocation (render-configmap) renders the AppConfig
+	//    Unit's Data into a Kubernetes ConfigMap and upserts it into the
+	//    placeholder's Data; --auto-update keeps it in sync as the
+	//    AppConfig Unit changes. Slug "-" tells the server to assign one.
 	linkArgs := []string{"link", "create"}
 	if retry {
 		linkArgs = append(linkArgs, "--allow-exists")
@@ -660,7 +610,8 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	linkArgs = append(linkArgs,
 		"--wait",
 		"--space", pkg.SpaceSlug,
-		"--use-live-state", "--auto-update", "--update-type", "MergeUnits",
+		"--update-type", "Upsert", "--auto-update",
+		"--transform-invocation", pkg.SpaceSlug+"/"+appCfg.InvocationSlug(),
 		"--label", componentLabel,
 		"-", appCfg.PlaceholderSlug(), appCfg.UnitSlug(),
 	)
@@ -671,11 +622,10 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		return fmt.Errorf("cub link create %s → %s in %s: %w", appCfg.PlaceholderSlug(), appCfg.UnitSlug(), pkg.SpaceSlug, err)
 	}
 
-	// 7. Stamp the correct namespace onto the placeholder Unit's now-
-	//    populated Data. The ConfigMapRenderer bridge writes
-	//    metadata.namespace=confighubplaceholder to the live state it
-	//    produces — the placeholder is meant to be filled in later via a
-	//    namespace link at apply time. But link inference (the
+	// 6. Stamp the correct namespace onto the placeholder Unit's now-
+	//    populated Data. render-configmap writes
+	//    metadata.namespace=confighubplaceholder (it expects a namespace
+	//    link to fill that in at apply time). But link inference (the
 	//    intra-Space pass below) matches by metadata.namespace, and a
 	//    placeholder value never resolves, so Deployments referencing
 	//    the carrier by name don't link to the placeholder Unit. Setting
@@ -720,24 +670,6 @@ func ensureSpace(slug string) error {
 	ccmd.Stderr = os.Stderr
 	if err := ccmd.Run(); err != nil {
 		return fmt.Errorf("cub space create %s: %w", slug, err)
-	}
-	return nil
-}
-
-// ensureRendererWorker creates a server-side worker (the cub server hosts
-// it, no separately-deployed bridge worker required) in the destination
-// Space if missing. ConfigMapRenderer Targets that materialize AppConfig
-// Units reference this worker; we auto-create it so a fresh install
-// doesn't require operators to pre-stage anything beyond their cub login.
-// Idempotent via --allow-exists.
-func ensureRendererWorker(spaceSlug, workerSlug string) error {
-	ccmd := exec.Command("cub", "worker", "create",
-		"--space", spaceSlug,
-		"--allow-exists", "--quiet", "--is-server-worker",
-		workerSlug)
-	ccmd.Stderr = os.Stderr
-	if err := ccmd.Run(); err != nil {
-		return fmt.Errorf("cub worker create %s in %s: %w", workerSlug, spaceSlug, err)
 	}
 	return nil
 }

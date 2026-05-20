@@ -230,10 +230,11 @@ work-dir has been uploaded before:
 
 - **First upload** — `out/spec/upload.yaml` does not exist. Creates
   Spaces (idempotent), creates one Unit per rendered manifest plus the
-  untargeted `installer-record` Unit, creates ConfigMapRenderer
-  Targets + AppConfig Units for any AppConfig-tagged manifests,
-  creates cross-Space `installer-record → installer-record` links for
-  dependencies, runs intra-Space NeedsProvides link inference. Writes
+  untargeted `installer-record` Unit, creates an AppConfig Unit +
+  `render-configmap` Invocation + placeholder Unit + Upsert link for
+  any AppConfig-tagged manifests, creates cross-Space
+  `installer-record → installer-record` links for dependencies, runs
+  intra-Space NeedsProvides link inference. Writes
   `out/spec/upload.yaml` at the end.
 - **Reconcile** — `out/spec/upload.yaml` exists. Re-computes the same
   plan `install plan` would produce, opens one ChangeSet per Space,

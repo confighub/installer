@@ -3,8 +3,8 @@
 # upload-reconcile.sh — end-to-end smoke for `install upload` against a
 # live ConfigHub server, driven by the worker package so the test
 # exercises BOTH the standard Unit pathway and the AppConfig pathway
-# (ConfigMapRenderer Target + AppConfig Unit + placeholder + live-state
-# MergeUnits link).
+# (render-configmap Invocation + AppConfig Unit + placeholder + Upsert
+# link).
 #
 # Flow:
 #
@@ -13,9 +13,9 @@
 #                    via `install render` (bypasses setup's collector,
 #                    which would overwrite facts back to :latest)
 #   upload         — first upload: creates Space + Units + installer-
-#                    record + AppConfig trio (Target/AppConfig Unit/
-#                    placeholder) + cross-Unit links + auto-creates
-#                    renderer-worker
+#                    record + AppConfig set (render-configmap Invocation/
+#                    AppConfig Unit/placeholder + Upsert link) + cross-Unit
+#                    links
 #   plan (clean)   — No changes
 #   edit + plan    — surfaces the edited slug
 #   reconcile      — applies inside a ChangeSet
@@ -98,7 +98,7 @@ cleanup_msg() {
   printf '\n----- inspection state preserved -----\n'
   printf 'Space:    %s\n' "$SPACE"
   printf 'Work-dir: %s\n' "$WORK_TMP"
-  printf '\nClean up the Space (and everything in it — Units, Targets, Links,\nthe BridgeWorker entity, the renderer-worker, ChangeSets) with:\n  cub space delete --recursive %s\n' "$SPACE"
+  printf '\nClean up the Space (and everything in it — Units, Invocations, Links,\nthe BridgeWorker entity, ChangeSets) with:\n  cub space delete --recursive %s\n' "$SPACE"
   if [[ "$KEEP_WD" = "1" ]]; then
     printf 'Clean up the work-dir with:\n  rm -rf %s\n' "$WORK_TMP"
   fi
@@ -198,8 +198,8 @@ grep -q "image: $PINNED_IMAGE" "$DEP_FILE" \
 note "rendered Deployment now references $PINNED_IMAGE"
 
 # The AppConfig ConfigMap (confighub-worker-env) should be present in
-# rendered manifests — upload will split it into a renderer Target +
-# AppConfig Unit + placeholder.
+# rendered manifests — upload will split it into a render-configmap
+# Invocation + AppConfig Unit + placeholder.
 appcfg_cm=$(grep -l "installer.confighub.com/toolchain: AppConfig/Env" "$WORK_TMP/out/manifests"/*.yaml | head -1)
 [[ -n "$appcfg_cm" ]] || fail "expected at least one AppConfig-tagged ConfigMap among rendered manifests"
 note "AppConfig carrier ConfigMap: $(basename "$appcfg_cm")"
@@ -222,19 +222,22 @@ note "Units in $SPACE after first upload: $unit_count"
 cub unit list --space "$SPACE" 2>/dev/null | awk '{print $1}' | grep -qx "installer-record" \
   || fail "first upload did not create installer-record Unit in $SPACE"
 
-# 6b. AppConfig-pathway assertions: one ConfigMapRenderer Target, one
-# *-rendered placeholder Unit, and the auto-created renderer-worker.
-target_count=$(cub target list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /-renderer/' | wc -l | tr -d ' ')
-[[ "$target_count" -ge 1 ]] || fail "expected at least one ConfigMapRenderer Target in $SPACE (got $target_count)"
-note "ConfigMapRenderer Targets:"
-cub target list --space "$SPACE" 2>/dev/null | awk 'NR>1 {print "      "$1}' || true
+# 6b. AppConfig-pathway assertions: one render-configmap Invocation and
+# one *-rendered placeholder Unit. No bridge Target and no renderer
+# worker — the rendering happens via the render-configmap function on an
+# Upsert link.
+invocation_count=$(cub invocation list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /-render/' | wc -l | tr -d ' ')
+[[ "$invocation_count" -ge 1 ]] || fail "expected at least one render-configmap Invocation in $SPACE (got $invocation_count)"
+note "render-configmap Invocations:"
+cub invocation list --space "$SPACE" 2>/dev/null | awk 'NR>1 {print "      "$1}' || true
 
 placeholder_count=$(cub unit list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /-rendered/' | wc -l | tr -d ' ')
 [[ "$placeholder_count" -ge 1 ]] || fail "expected at least one *-rendered placeholder Unit in $SPACE"
 
-cub worker list --space "$SPACE" 2>/dev/null | awk '{print $1}' | grep -qx "renderer-worker" \
-  || fail "upload should auto-create the renderer-worker server-side worker in $SPACE"
-note "renderer-worker auto-created OK"
+# The placeholder should hold a rendered ConfigMap (the Upsert link ran).
+cub unit data --space "$SPACE" confighub-worker-env-rendered 2>/dev/null | grep -q "kind: ConfigMap" \
+  || fail "placeholder confighub-worker-env-rendered should contain a rendered ConfigMap"
+note "rendered ConfigMap present in placeholder Unit"
 
 link_count=$(cub link list --space "$SPACE" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')
 [[ "$link_count" -ge 1 ]] || fail "expected at least one intra-Space link in $SPACE"
@@ -278,7 +281,7 @@ grep -q "^Plan: 0 to add, 1 to change, 0 to delete\\.$" "$WORK_TMP/plan-appcfg.l
 grep -q "~ confighub-worker-env\b" "$WORK_TMP/plan-appcfg.log" \
   || fail "plan after AppConfig edit should name the AppConfig Unit slug confighub-worker-env (see $WORK_TMP/plan-appcfg.log)"
 if grep -q "~ confighub-worker-env-rendered" "$WORK_TMP/plan-appcfg.log"; then
-  fail "plan should NOT name the *-rendered placeholder (it's maintained by the live-merge link, not by reconcile)"
+  fail "plan should NOT name the *-rendered placeholder (it's maintained by the Upsert link, not by reconcile)"
 fi
 
 run upload-appcfg "$BIN" upload --work-dir "$WORK_TMP" --yes || fail "upload after AppConfig edit failed (see $WORK_TMP/upload-appcfg.log)"

@@ -143,7 +143,7 @@ func computeOne(ctx context.Context, pkg upload.Package) (SpacePlan, error) {
 	for _, slug := range sortedKeys(rendered) {
 		item := rendered[slug]
 		// Placeholder Units exist in cub but their body is maintained
-		// by the live-merge link from upload's AppConfig pathway.
+		// by the Upsert link from upload's AppConfig pathway.
 		// They have no separate local source — registering them in
 		// the rendered set keeps them out of delete candidates;
 		// add/update is a no-op.
@@ -192,7 +192,7 @@ func computeOne(ctx context.Context, pkg upload.Package) (SpacePlan, error) {
 //     from AppCfg.Content via merge-external-source, with Base
 //     matching the carrier filename upload used as the source name.
 //   - Placeholder ConfigMap Unit (toolchain Kubernetes/YAML; body
-//     empty at create, populated via live-merge link from the
+//     empty at create, populated via the Upsert link from the
 //     AppConfig Unit) — IsPlaceholder=true; never directly updated
 //     and never a delete candidate while the AppConfig manifest is
 //     present.

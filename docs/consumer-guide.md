@@ -146,12 +146,11 @@ install upload --space-pattern '{{.PackageName}}-prod'
 If the package ships application-config files (a `configMapGenerator`
 tagged with `installer.confighub.com/toolchain`, e.g.
 `AppConfig/Properties` or `AppConfig/Env`), `install upload` also
-creates a `ConfigMapRenderer` Target plus a separate AppConfig Unit
-holding the raw config body. The renderer Target needs a worker; the
-installer auto-creates a server-side worker named `renderer-worker` in
-the destination Space (idempotent — re-uploading is safe). Override
-with `install upload --space ... --appconfig-worker <slug>` if
-you'd rather point at an existing worker.
+creates a separate AppConfig Unit holding the raw config body, a
+`render-configmap` Invocation, and a placeholder Kubernetes/YAML Unit
+wired by an Upsert link that renders the ConfigMap into the
+placeholder. No bridge worker is required — rendering runs as a
+built-in function on the server.
 
 ## Where to make changes
 

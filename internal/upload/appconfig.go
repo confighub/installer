@@ -21,6 +21,10 @@ const (
 
 	appConfigModeFile = "file"
 	appConfigModeEnv  = "env"
+
+	// AppConfigToolchainEnv is the only AppConfig toolchain where the
+	// as-key-value rendering option is meaningful (envFrom injection).
+	AppConfigToolchainEnv = "AppConfig/Env"
 )
 
 // AppConfigManifest describes one annotated ConfigMap discovered in a
@@ -46,11 +50,12 @@ type AppConfigManifest struct {
 	// SourceKey is the data: key whose value is the raw file body
 	// (file mode only). Empty in env mode.
 	SourceKey string
-	// Mutable reflects appconfig-mutable: when true, the renderer Target
-	// gets RevisionHistoryLimit=0 so the rendered ConfigMap updates in
-	// place (stable name, hash-annotation-driven workload rolling). When
-	// false, RevisionHistoryLimit is left at the bridge default so each
-	// content change produces a new, immutable ConfigMap revision.
+	// Mutable reflects appconfig-mutable: when true, the render-configmap
+	// Invocation is created with `--immutable=false`, producing a single
+	// mutable ConfigMap with a stable name (updates in place; workloads
+	// roll via the hash annotation on the pod template). When false (the
+	// kustomize default for configMapGenerator), `--immutable=true`
+	// produces immutable ConfigMaps with hashed names.
 	Mutable bool
 	// Content is the raw AppConfig file body. file mode reads
 	// data[SourceKey] verbatim; env mode emits a `.env`-shaped doc
@@ -141,59 +146,50 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 }
 
 // UnitSlug returns the slug for the AppConfig Unit. It matches the
-// carrier ConfigMap's name with no suffix because the ConfigMapRenderer
-// bridge uses the Unit slug as the rendered ConfigMap's metadata.name —
-// so the Unit slug must equal the name workloads use (envFrom,
+// carrier ConfigMap's name with no suffix because the rendered ConfigMap
+// uses the Unit slug as its metadata.name (the render-configmap function
+// emits `<UnitSlug>-<hash>` in immutable mode and `<UnitSlug>` in mutable
+// mode), so the Unit slug must equal the name workloads use (envFrom,
 // configMapRef, etc.) for refs to resolve at apply time.
 func (m *AppConfigManifest) UnitSlug() string {
 	return m.CarrierName
 }
 
 // PlaceholderSlug returns the slug for the placeholder Kubernetes/YAML
-// ConfigMap Unit that the live-merge link populates from the AppConfig
-// Unit's live state. It carries a "-rendered" suffix so it doesn't
-// collide with UnitSlug in the same Space; the slug is not user-facing
-// (workloads still resolve by the ConfigMap's metadata.name, which
-// equals UnitSlug after the merge).
+// ConfigMap Unit that the Upsert link populates with the rendered
+// ConfigMap. It carries a "-rendered" suffix so it doesn't collide with
+// UnitSlug in the same Space; the slug is not user-facing (workloads
+// still resolve by the ConfigMap's metadata.name, which equals UnitSlug
+// after the render).
 func (m *AppConfigManifest) PlaceholderSlug() string {
 	return m.CarrierName + "-rendered"
 }
 
-// TargetSlug returns the slug for the ConfigMapRenderer Target. One Target
-// per AppConfig Unit, named for symmetry with UnitSlug.
-func (m *AppConfigManifest) TargetSlug() string {
-	return m.CarrierName + "-renderer"
+// InvocationSlug returns the slug for the render-configmap Invocation
+// that the Upsert link references as its TransformInvocation. One
+// Invocation per AppConfig Unit, named for symmetry with UnitSlug.
+func (m *AppConfigManifest) InvocationSlug() string {
+	return m.CarrierName + "-render"
 }
 
-// RendererOptions returns the value for a single `--option K=V` flag
-// appropriate for this AppConfig manifest's ConfigMapRenderer Target.
-// Multiple bridge options for one ConfigType are semicolon-joined in a
-// single flag value — cub's `cub target create --option` is position-
-// aligned (each --option flag corresponds to a ConfigType slot), so
-// repeating --option N times would tell cub we want N ConfigTypes,
-// which fails validation when only one --provider/--toolchain/--livestate-type
-// triple is supplied. Returns "" when no options apply.
+// RenderConfigMapArgs returns the function-argument tokens to pass to
+// `cub invocation create … -- render-configmap …`. Each token already
+// includes its `--<name>=<value>` form so the caller can append them
+// directly to its arg list.
 //
-// AsKeyValue=true is set only when the carrier was generated from `envs:`
-// AND the toolchain is AppConfig/Env (the bridge silently ignores it for
-// other toolchains; we set it only where it's meaningful).
-//
-// RevisionHistoryLimit=0 is set when the carrier is mutable (kustomize
-// did NOT append a hash suffix, indicating disableNameSuffixHash: true).
-// Mutable ConfigMaps update in place and rely on a hash annotation on
-// the workload to trigger rolling restarts; immutable ConfigMaps (the
-// kustomize default) roll on every content change, so we leave
-// RevisionHistoryLimit at the bridge default to retain a few revisions
-// in cub for rollback.
-func (m *AppConfigManifest) RendererOptions() string {
-	var parts []string
-	if m.Mode == appConfigModeEnv && m.Toolchain == "AppConfig/Env" {
-		parts = append(parts, "AsKeyValue=true")
+//   - --immutable=true  (kustomize default for configMapGenerator)
+//     or --immutable=false when the carrier was generated with
+//     disableNameSuffixHash: true.
+//   - --as-key-value=true only when the carrier was generated from
+//     `envs:` AND the toolchain is AppConfig/Env. The function silently
+//     ignores it for other toolchains; we set it only where it's
+//     meaningful.
+func (m *AppConfigManifest) RenderConfigMapArgs() []string {
+	args := []string{fmt.Sprintf("--immutable=%t", !m.Mutable)}
+	if m.Mode == appConfigModeEnv && m.Toolchain == AppConfigToolchainEnv {
+		args = append(args, "--as-key-value=true")
 	}
-	if m.Mutable {
-		parts = append(parts, "RevisionHistoryLimit=0")
-	}
-	return strings.Join(parts, ";")
+	return args
 }
 
 // parseMutable parses the appconfig-mutable annotation value. Missing →

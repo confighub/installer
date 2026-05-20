@@ -692,8 +692,8 @@ native format (a real `.properties`, `.toml`, `.env`, etc. file in
 your package tree) so per-format ConfigHub functions can mutate it
 correctly, ConfigHub can validate against a schema, and the upload
 step can split the rendered output into an AppConfig Unit + a
-ConfigMapRenderer Target so day-2 edits stay in the source format
-too.
+`render-configmap` Invocation so day-2 edits stay in the source
+format too.
 
 ### Author contract
 
@@ -754,16 +754,17 @@ toolchain annotation and:
 
 At upload time, an annotated ConfigMap becomes a four-piece bundle:
 an AppConfig Unit (toolchain from the annotation, data = the
-extracted raw file), a ConfigMapRenderer Target attached to it, a
-placeholder Kubernetes/YAML ConfigMap Unit whose slug matches the
-kustomize-generated name (so other workloads in the Space link to
-it by name via the existing intra-Space inference), and a live-state
-`MergeUnits` link from the placeholder to the AppConfig Unit so the
-runtime ConfigMap name flows through to the workload reference at
-apply time.
+extracted raw file), a `render-configmap` Invocation, a placeholder
+Kubernetes/YAML ConfigMap Unit whose slug matches the
+kustomize-generated name (so other workloads in the Space link to it
+by name via the existing intra-Space inference), and an `Upsert` link
+from the placeholder to the AppConfig Unit with the Invocation as its
+TransformInvocation. On resolution the function renders the ConfigMap
+into the placeholder so the runtime ConfigMap name flows through to
+the workload reference at apply time.
 
-The worker the renderer Target uses is `<space>/server-worker` by
-default; override with `install upload --appconfig-worker <slug>`.
+Rendering runs as a built-in function on the server — no bridge
+worker, Target, or apply step is involved.
 
 ### disableNameSuffixHash
 
