@@ -59,10 +59,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			}
 
 			if clean {
-				if err := os.RemoveAll(manifestsDir); err != nil {
-					return err
-				}
-				if err := os.RemoveAll(filepath.Join(outDir, "secrets")); err != nil {
+				if err := render.CleanRenderedOutput(outDir); err != nil {
 					return err
 				}
 			}
@@ -127,7 +124,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/spec, writes ./out/manifests)")
-	cmd.Flags().BoolVar(&clean, "clean", false, "remove out/manifests/ and out/secrets/ before rendering")
+	cmd.Flags().BoolVar(&clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }
 

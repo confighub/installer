@@ -214,6 +214,13 @@ This is the right layer for changes that don't warrant a re-render
 — ad-hoc fixes, exploratory tuning, anything where you want the
 change tracked in cub's revision history rather than your work-dir.
 
+Post-install mutations can also be made with [kpt](https://kpt.dev)
+instead of ConfigHub — a git-based configuration-as-data tool whose
+package merge preserves your edits across re-renders the same way
+`--merge-external-source` does. This is an alternative to `install
+upload` + `cub unit apply` for kpt users, or for trying post-install
+changes without ConfigHub first. See the [kpt guide](./kpt-guide.md).
+
 ### What NOT to do
 
 - **Don't edit the package source tree** (`./package/`). The next

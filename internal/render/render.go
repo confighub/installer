@@ -148,6 +148,14 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	if err := os.MkdirAll(specDir, 0o755); err != nil {
 		return nil, err
 	}
+	// Keep rendered secrets out of version control. out/secrets/ holds
+	// sensitive resources (e.g. Secrets split off the upload path); a
+	// .gitignore at the out/ root ignores the whole subdirectory so its
+	// contents can never be committed by accident.
+	gitignore := filepath.Join(outDir, ".gitignore")
+	if err := os.WriteFile(gitignore, []byte("# Rendered secrets must never be committed.\nsecrets/\n"), 0o644); err != nil {
+		return nil, err
+	}
 	if len(secrets) > 0 {
 		if err := os.MkdirAll(secretsDir, 0o700); err != nil {
 			return nil, err
