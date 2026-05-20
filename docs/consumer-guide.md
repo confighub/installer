@@ -265,7 +265,7 @@ install upload --yes
 # ChangeSet: statusboard-prod/installer-update-20260514-…
 # Successfully updated unit deployment-statusboard-statusboard …
 #
-# Applied: 0 created, 1 updated, 0 deleted.
+# Applied: 0 created, 1 updated, 0 emptied.
 # Updates revertable via:
 #   cub unit update --patch --space statusboard-prod \
 #       --restore Before:ChangeSet:installer-update-20260514-… \
@@ -275,8 +275,15 @@ install upload --yes
 The ChangeSet name is printed and the precise revert command is
 written to stdout — copy/paste it later if you need to roll back.
 
-`--yes` is required when stdin isn't a TTY and the plan contains
-deletes; otherwise upload prompts per delete.
+`--yes` is required when stdin isn't a TTY and the plan empties Units
+(those that dropped out of the rendered output); otherwise upload
+prompts before emptying. Upload never runs `cub unit delete`: a Unit
+that left the render is **emptied** rather than deleted. Emptying is a
+`--merge-external-source` 3-way merge that drops only the installer-
+contributed resources, so the Unit record, target binding, and any
+post-install edits survive, and applying the emptied Unit later removes
+its deployed resources. Units guarded by a DestroyGate are refused —
+clear the gate first if you really intend to tear them down.
 
 A re-run on a converged work-dir is a no-op (no ChangeSet opened):
 
@@ -294,8 +301,11 @@ To revert a reconcile upload, run the printed `cub unit update --patch
 - **Creates** from that upload are not reverted automatically — to
   undo a create, delete the Unit (`cub unit delete --space S
   <slug>`).
-- **Deletes** from that upload are not reverted automatically —
-  re-render and re-run `install upload` to re-create.
+- **Empties** from that upload (Units that dropped out of the render)
+  are not part of the ChangeSet, but the prior Data is preserved in the
+  Unit's revision history — restore it with `cub unit update --restore`
+  against the pre-empty revision, or re-render and re-run `install
+  upload` to repopulate it.
 
 If you need to roll back a multi-Unit change, this is where having
 the Component label pays off:
