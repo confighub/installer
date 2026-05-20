@@ -33,9 +33,9 @@ chain can operate on it from inside the kustomize pipeline.
   ConfigMap → AppConfig content boundary in-process, mutates, and
   writes back.
 - At upload, materialize annotated ConfigMaps into the right
-  ConfigHub triple: AppConfig Unit + ConfigMapRenderer Target +
-  Kubernetes/YAML Unit, linked via existing intra-Space link
-  inference.
+  ConfigHub objects: AppConfig Unit + render-configmap Invocation +
+  Kubernetes/YAML placeholder Unit, wired by an Upsert link and the
+  existing intra-Space link inference.
 
 ## Non-goals
 
@@ -297,8 +297,8 @@ downstream consumers (upload, drift) see one canonical contract:
   (versioned ConfigMaps, each content change rolls a new one);
   unmatched → mutable (stable name, hash annotation on the
   consuming workload triggers restarts). The upload step reads
-  this to set `RevisionHistoryLimit=0` on the renderer Target in
-  the mutable case.
+  this to pass `--immutable=false` to the render-configmap
+  Invocation in the mutable case.
 
 Authors don't write the mode, source-key, or mutable annotations
 themselves; the transformer infers and injects them. Authors who
@@ -350,53 +350,49 @@ split into four ConfigHub objects:
 - **AppConfig Unit** (slug = `<carrier-name>`, matching the
   kustomize-generated ConfigMap name). Toolchain from the annotation.
   Data = the extracted raw file body. Day-2 source of truth in the
-  native format. The ConfigMapRenderer bridge uses the Unit slug as
-  the rendered ConfigMap's `metadata.name`, so the slug deliberately
-  has no suffix — workloads can reference the carrier by its
-  kustomize-generated name (e.g. `envFrom.configMapRef.name`) and the
-  rendered ConfigMap will match.
-- **ConfigMapRenderer Target** (slug `<carrier-name>-renderer`).
-  Provider `ConfigMapRenderer`, toolchain from the annotation,
-  livestate-type `Kubernetes/YAML`. Attached to the AppConfig Unit
-  so applying it renders a ConfigMap in the cluster. Worker is
-  `<space>/<--appconfig-worker>` (default `server-worker`). Options:
-  - `AsKeyValue=true` iff mode=env AND toolchain=AppConfig/Env. The
-    bridge ignores it for non-Env toolchains; we set it only where
-    it's meaningful.
-  - `RevisionHistoryLimit=0` iff `appconfig-mutable=true` (the
-    transformer pre-pass infers this from kustomize's hash-suffix
-    convention; see "Author contract" above). Mutable ConfigMaps
-    update in place; immutable ones (the kustomize default) leave
-    `RevisionHistoryLimit` at the bridge default so cub retains
-    a few revisions for rollback.
-- **Apply the AppConfig Unit** (`cub unit apply --wait`) right after
-  creating it. The renderer Target's worker produces the rendered
-  ConfigMap as the AppConfig Unit's live state. Doing the apply
-  before the link is created (next step) means the link's initial
-  MergeUnits pulls real content into the placeholder's Data — which
-  link inference at the end of `uploadOnePackage` then reads to wire
-  workload references (envFrom, volumes, etc.) into the placeholder.
+  native format. No target — it is a pure data source. The
+  `render-configmap` function uses the Unit slug as the rendered
+  ConfigMap's `metadata.name` (`<slug>-<hash>` in immutable mode,
+  `<slug>` in mutable mode), so the slug deliberately has no suffix —
+  workloads can reference the carrier by its kustomize-generated name
+  (e.g. `envFrom.configMapRef.name`) and the rendered ConfigMap will
+  match.
+- **render-configmap Invocation** (slug `<carrier-name>-render`).
+  Toolchain from the annotation. This is the `TransformInvocation`
+  the Upsert link runs to render the AppConfig Unit's data into a
+  Kubernetes ConfigMap. Function arguments:
+  - `--as-key-value=true` iff mode=env AND toolchain=AppConfig/Env.
+    The function ignores it for non-Env toolchains; we set it only
+    where it's meaningful.
+  - `--immutable=false` iff `appconfig-mutable=true` (the transformer
+    pre-pass infers this from kustomize's hash-suffix convention; see
+    "Author contract" above), otherwise `--immutable=true`. Mutable
+    ConfigMaps update in place with a stable name; immutable ones (the
+    kustomize default) get hashed names and accumulate as revisions
+    (bound via a separate `prune-configmaps` trigger if desired).
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>-rendered`). Body is empty at creation; populated by
-  the live-merge link below using the live state from the
-  just-applied AppConfig Unit. Inherits the upload-wide `--target`
-  flag (typically a Kubernetes namespace target) so it applies into
-  the same place as every other rendered manifest. The `-rendered`
-  suffix avoids colliding with the AppConfig Unit (which owns the
-  bare carrier name). Workloads still resolve to the rendered
-  ConfigMap by `metadata.name` (= `<carrier-name>`, set by the bridge
-  from the AppConfig Unit's slug), so intra-Space link inference
+  the Upsert link below. Inherits the upload-wide `--target` flag
+  (typically a Kubernetes namespace target) so it applies into the
+  same place as every other rendered manifest. The `-rendered` suffix
+  avoids colliding with the AppConfig Unit (which owns the bare
+  carrier name). Workloads still resolve to the rendered ConfigMap by
+  `metadata.name` (= `<carrier-name>`, set by render-configmap from
+  the AppConfig Unit's slug), so intra-Space link inference
   (`internal/upload/links.go`) wires them into this placeholder via
-  the merged content.
-- **Live-merge link** (server-assigned slug via `-`).
-  `--use-live-state --auto-update --update-type MergeUnits`. Pulls
-  the rendered ConfigMap from the AppConfig Unit's live state into
-  the placeholder's Data so the runtime ConfigMap name (with its
-  hash suffix) flows through to the workload's
-  `volumeMounts` / `envFrom` reference.
+  the rendered content.
+- **Upsert link** (server-assigned slug via `-`).
+  `--update-type Upsert --auto-update --transform-invocation
+  <space>/<carrier-name>-render`. On resolution the
+  `render-configmap` function renders the AppConfig Unit's data into a
+  Kubernetes ConfigMap and upserts it into the placeholder's Data — no
+  bridge, no worker, no apply — so the runtime ConfigMap name flows
+  through to the workload's `volumeMounts` / `envFrom` reference.
+  `--auto-update` keeps the placeholder in sync as the AppConfig Unit
+  changes.
 - **`cub function do set-namespace`** on the placeholder Unit, using
-  the wizard's `Inputs.Spec.Namespace`. The ConfigMapRenderer bridge
-  stamps `metadata.namespace=confighubplaceholder` on its live state
+  the wizard's `Inputs.Spec.Namespace`. `render-configmap` stamps
+  `metadata.namespace=confighubplaceholder` on the rendered ConfigMap
   (the placeholder is meant to be resolved by a namespace link at
   apply time), but the intra-Space link inference matches by
   `metadata.namespace` and a placeholder value never resolves. Stamping
@@ -412,9 +408,9 @@ auto-inferred link to the placeholder Unit even with the namespace
 fix above. Tracked separately.
 
 The rendered ConfigMap YAML in `out/manifests/` is NOT uploaded as a
-Unit — the renderer Target re-derives the ConfigMap from the
-AppConfig Unit's content at apply time, and the placeholder + link
-pair handles the namespace/reference wiring.
+Unit — the render-configmap Invocation re-derives the ConfigMap from
+the AppConfig Unit's content via the Upsert link, and the placeholder
++ link pair handles the namespace/reference wiring.
 
 The `manifest-index.yaml` schema can later gain fields recording the
 AppConfig source-key and toolchain so `update` / `upgrade` can
@@ -500,11 +496,11 @@ We test all of these against AppConfig-bearing ConfigMaps:
    `AppConfig/*` extract from `data:`, invoke, write back. Both
    mutating and validating paths supported.
 7. **AppConfig upload split. ✅** Detected ConfigMaps become a
-   four-piece bundle: renderer Target, AppConfig Unit, placeholder
-   Kubernetes/YAML ConfigMap Unit (slug matches the carrier name so
-   intra-Space link inference works), and a live-state MergeUnits
-   link from placeholder → AppConfig Unit. Behind
-   `--appconfig-worker` (default `server-worker`).
+   four-piece bundle: render-configmap Invocation, AppConfig Unit,
+   placeholder Kubernetes/YAML ConfigMap Unit (slug matches the
+   carrier name so intra-Space link inference works), and an Upsert
+   link from placeholder → AppConfig Unit with the Invocation as its
+   TransformInvocation. No bridge worker required.
 8. **Cleanup.** Remove the AppConfig roadmap bullet from
    README.md once 5–7 land.
 

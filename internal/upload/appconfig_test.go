@@ -52,18 +52,21 @@ data:
 	if got.PlaceholderSlug() != "app-config-rendered" {
 		t.Errorf("PlaceholderSlug: want app-config-rendered, got %q", got.PlaceholderSlug())
 	}
-	if got.TargetSlug() != "app-config-renderer" {
-		t.Errorf("TargetSlug: want app-config-renderer, got %q", got.TargetSlug())
+	if got.InvocationSlug() != "app-config-render" {
+		t.Errorf("InvocationSlug: want app-config-render, got %q", got.InvocationSlug())
 	}
-	if len(got.RendererOptions()) != 0 {
-		t.Errorf("file-mode non-Env toolchain should not set AsKeyValue, got %v", got.RendererOptions())
+	args := got.RenderConfigMapArgs()
+	// Mutable defaults to false, so the render-configmap arg should be --immutable=true,
+	// and a Properties-mode-file carrier should not set --as-key-value.
+	if len(args) != 1 || args[0] != "--immutable=true" {
+		t.Errorf("RenderConfigMapArgs: want [\"--immutable=true\"], got %v", args)
 	}
 }
 
-// TestDetectAppConfigManifest_MutableTriggersRevisionHistoryLimit
-// verifies that appconfig-mutable=true on the rendered ConfigMap maps
-// to RevisionHistoryLimit=0 on the renderer Target.
-func TestDetectAppConfigManifest_MutableTriggersRevisionHistoryLimit(t *testing.T) {
+// TestDetectAppConfigManifest_MutableMapsToFunctionArg verifies that
+// appconfig-mutable=true on the rendered ConfigMap maps to
+// --immutable=false on the render-configmap Invocation.
+func TestDetectAppConfigManifest_MutableMapsToFunctionArg(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cm.yaml")
 	writeFile(t, path, `apiVersion: v1
@@ -85,16 +88,15 @@ data:
 	if !got.Mutable {
 		t.Errorf("Mutable: want true, got false")
 	}
-	opts := got.RendererOptions()
-	if !strings.Contains(opts, "RevisionHistoryLimit=0") {
-		t.Errorf("mutable=true should include RevisionHistoryLimit=0; got %q", opts)
+	args := got.RenderConfigMapArgs()
+	if len(args) == 0 || args[0] != "--immutable=false" {
+		t.Errorf("mutable=true should produce --immutable=false; got %v", args)
 	}
 }
 
-// TestDetectAppConfigManifest_ImmutableSkipsRevisionHistoryLimit
-// verifies that the immutable case (the kustomize default) leaves
-// RevisionHistoryLimit unset so the bridge default applies.
-func TestDetectAppConfigManifest_ImmutableSkipsRevisionHistoryLimit(t *testing.T) {
+// TestDetectAppConfigManifest_ImmutableMapsToFunctionArg verifies that
+// the immutable case (the kustomize default) maps to --immutable=true.
+func TestDetectAppConfigManifest_ImmutableMapsToFunctionArg(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cm.yaml")
 	writeFile(t, path, `apiVersion: v1
@@ -116,8 +118,9 @@ data:
 	if got.Mutable {
 		t.Errorf("Mutable: want false, got true")
 	}
-	if strings.Contains(got.RendererOptions(), "RevisionHistoryLimit") {
-		t.Errorf("immutable case must not set RevisionHistoryLimit; got %q", got.RendererOptions())
+	args := got.RenderConfigMapArgs()
+	if len(args) == 0 || args[0] != "--immutable=true" {
+		t.Errorf("immutable case should produce --immutable=true; got %v", args)
 	}
 }
 
@@ -148,8 +151,15 @@ data:
 	if got.Mode != "env" {
 		t.Errorf("Mode: want env, got %q", got.Mode)
 	}
-	if opts := got.RendererOptions(); opts != "AsKeyValue=true" {
-		t.Errorf("RendererOptions: want \"AsKeyValue=true\", got %q", opts)
+	args := got.RenderConfigMapArgs()
+	wantArgs := []string{"--immutable=true", "--as-key-value=true"}
+	if len(args) != len(wantArgs) {
+		t.Fatalf("RenderConfigMapArgs: want %v, got %v", wantArgs, args)
+	}
+	for i, want := range wantArgs {
+		if args[i] != want {
+			t.Errorf("RenderConfigMapArgs[%d]: want %q, got %q", i, want, args[i])
+		}
 	}
 	// Env content is rendered with sorted keys for determinism: BAZ before FOO.
 	wantContent := "BAZ=qux\nFOO=bar\n"
