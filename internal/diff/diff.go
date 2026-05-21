@@ -3,9 +3,10 @@
 // `install plan` (read-only) and `install update` (executes the
 // plan).
 //
-// The Component label written by upload (Component=<pkg.Name>) is what
+// The Package label written by upload (Package=<pkg.Name>) is what
 // scopes ownership: a Space may contain Units owned by other tools or
-// other packages, and we must never delete those.
+// other packages (or added by the operator before cloning the Space),
+// and we must never delete those.
 package diff
 
 import (
@@ -30,7 +31,7 @@ type Plan struct {
 
 // SpacePlan is the slice of a Plan that lives in one ConfigHub Space.
 type SpacePlan struct {
-	// Package is the source-package name (the value of the Component
+	// Package is the source-package name (the value of the Package
 	// label).
 	Package string
 	// PackageVersion is informational; rendered alongside Package.
@@ -44,7 +45,7 @@ type SpacePlan struct {
 	// reporting non-empty mutations. DiffText is the cub -o mutations
 	// output (ANSI-stripped).
 	Updates []SlugDiff
-	// Deletes are slugs that exist in ConfigHub (under the Component
+	// Deletes are slugs that exist in ConfigHub (under the Package
 	// label) but not in the rendered output. The installer-record Unit
 	// is excluded.
 	Deletes []SlugDiff
@@ -93,7 +94,7 @@ func (p Plan) Counts() (adds, updates, deletes int) {
 }
 
 // Compute walks the discovered packages and produces a Plan by
-// querying ConfigHub for the current Unit set under the Component
+// querying ConfigHub for the current Unit set under the Package
 // label, then running a dry-run merge-external-source per intersecting
 // slug. ConfigHub state is the single source of truth — local-only
 // state (e.g., a stale prior render) is not considered.
@@ -276,9 +277,9 @@ func listRenderedSlugs(dir string) (map[string]renderedItem, error) {
 }
 
 // listCurrentSlugs returns the slugs of Units in space scoped by the
-// Component=<pkg> label.
+// Package=<pkg> label.
 func listCurrentSlugs(ctx context.Context, space, pkg string) ([]string, error) {
-	where := fmt.Sprintf("Labels.Component='%s'", pkg)
+	where := fmt.Sprintf("Labels.Package='%s'", pkg)
 	cmd := exec.CommandContext(ctx, "cub", "unit", "list",
 		"--space", space, "--where", where,
 		"-o", "jq=.[].Unit.Slug")
@@ -401,10 +402,10 @@ func filterBookkeepingMutations(in string) string {
 		dropped bool
 	}
 	var (
-		out         []string
-		currentRes  []string
-		blocks      []block
-		flushRes    func()
+		out        []string
+		currentRes []string
+		blocks     []block
+		flushRes   func()
 	)
 	flushBlocks := func() {
 		for _, b := range blocks {

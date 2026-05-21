@@ -252,7 +252,7 @@ Images in statusboard-prod (post-render):
 ```
 
 Plan computes the diff by listing existing Units (filtered by the
-`Component=<package>` label) and dry-running a merge of each
+`Package=<package>` label) and dry-running a merge of each
 rendered file against ConfigHub. Empty diff (after filtering
 ConfigHub bookkeeping) means no change.
 
@@ -315,12 +315,12 @@ To revert a reconcile upload, run the printed `cub unit update --patch
   upload` to repopulate it.
 
 If you need to roll back a multi-Unit change, this is where having
-the Component label pays off:
+the Package label pays off:
 
 ```bash
 # Delete every Unit this package owns in this Space.
 cub unit delete --space statusboard-prod \
-    --where "Labels.Component='statusboard'"
+    --where "Labels.Package='statusboard'"
 # Then re-render + re-upload from the work-dir's prior state.
 ```
 

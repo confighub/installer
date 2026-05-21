@@ -20,7 +20,7 @@ import (
 // missing. Idempotent: existing links matching (FromUnit.Slug,
 // ToUnit.Slug, ToSpace == space) are left alone.
 //
-// Each new link is labeled Component=<component> so it can be
+// Each new link is labeled Package=<pkgName> so it can be
 // filtered alongside the package's units.
 //
 // skipUnmatched suppresses entries from the unmatched-references
@@ -35,7 +35,7 @@ import (
 // Used by `install upload` (after the per-package Unit creation
 // loop) and by `install update` (after Apply mutates the Unit set).
 // The two paths share an implementation so behavior cannot drift.
-func ReconcileLinks(ctx context.Context, space, component string, skipUnmatched map[string]struct{}) error {
+func ReconcileLinks(ctx context.Context, space, pkgName string, skipUnmatched map[string]struct{}) error {
 	resources, err := loadResources(ctx, space)
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func ReconcileLinks(ctx context.Context, space, component string, skipUnmatched 
 		if _, exists := existing[key]; exists {
 			continue
 		}
-		if err := createLink(ctx, space, component, e); err != nil {
+		if err := createLink(ctx, space, pkgName, e); err != nil {
 			return err
 		}
 		existing[key] = struct{}{}
@@ -149,11 +149,11 @@ type UnmatchedReference struct {
 	TargetName string
 }
 
-func createLink(ctx context.Context, space, component string, e LinkEdge) error {
+func createLink(ctx context.Context, space, pkgName string, e LinkEdge) error {
 	slug := "-"
 	cmd := exec.CommandContext(ctx, "cub", "link", "create",
 		"--space", space, "--quiet",
-		"--label", "Component="+component,
+		"--label", "Package="+pkgName,
 		slug, e.FromUnit, e.ToUnit,
 	)
 	cmd.Stderr = os.Stderr

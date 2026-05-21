@@ -5,9 +5,9 @@
 //
 // Phase 6 wires this up:
 //   - One Space per package (parent + each locked dep).
-//   - One untargeted installer-record Unit per Space, holding installer.yaml
-//     + every file in that package's out/<pkg>/spec/ (plus the lock for the
-//     parent).
+//   - One untargeted installer-record Unit per Space, holding
+//     installer.yaml plus every file in that package's out/<pkg>/spec/
+//     (plus the lock for the parent).
 //   - Cross-Space NeedsProvides links from the parent's record Unit to each
 //     dep's record Unit, derived from the lock.
 package upload
@@ -501,9 +501,9 @@ func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages 
 type CrossSpaceLink struct {
 	// Slug is the link's deterministic slug, derived from the dep name.
 	Slug string
-	// Component is the parent package name, used as the value of the
-	// "Component" label on the created link.
-	Component string
+	// Package is the parent package name, used as the value of the
+	// "Package" label on the created link.
+	Package string
 	// FromSpace is the parent's Space; FromUnit is the parent's
 	// installer-record Unit slug.
 	FromSpace string
@@ -531,7 +531,7 @@ func PlanCrossSpaceLinks(packages []Package) []CrossSpaceLink {
 	for _, dep := range packages[1:] {
 		out = append(out, CrossSpaceLink{
 			Slug:      "dep-" + dep.LocalHandle,
-			Component: parent.Name,
+			Package:   parent.Name,
 			FromSpace: parent.SpaceSlug,
 			FromUnit:  InstallerRecordSlug,
 			ToSpace:   dep.SpaceSlug,
