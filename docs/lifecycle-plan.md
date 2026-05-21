@@ -72,7 +72,7 @@ Goal: read-only diff of `<work-dir>/out` against ConfigHub.
 - New: `internal/diff/diff.go`
   - `Compute(ctx, pkg upload.Package) (Plan, error)`.
   - Lists current Units via
-    `cub unit list --space <slug> --where "Labels.Component='<pkg.Name>'" -o json`
+    `cub unit list --space <slug> --where "Labels.Package='<pkg.Name>'" -o json`
     to bucket adds vs updates (the dry-run path errors on a
     non-existent Unit, so the list step is required).
   - For each intersection slug, runs
@@ -103,7 +103,7 @@ Goal: execute the Phase B plan inside a ChangeSet.
   formats the user-facing revert hint.
 - New: `internal/diff/apply.go` — `Apply(ctx, plan Plan, opts
   ApplyOptions)`.
-  - `cub unit create --label Component=<pkg> --merge-external-source ...`
+  - `cub unit create --label Package=<pkg> --merge-external-source ...`
     for adds.
   - `cub unit update --merge-external-source --changeset <slug> ...`
     for updates (no `--dry-run`).
@@ -237,7 +237,7 @@ remediation. We do not silently switch contexts.
 
 Existing work-dirs without `out/spec/upload.yaml` fall through to local
 spec on wizard re-entry — no migration needed. Existing Units without
-the `Component=<pkg>` label are not visible to plan/update; once the
+the `Package=<pkg>` label are not visible to plan/update; once the
 prior task ships and the Space is re-uploaded with the label, they
 participate normally. (We could add an
 `installer migrate-labels <work-dir>` one-shot for users who do not want

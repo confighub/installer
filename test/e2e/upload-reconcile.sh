@@ -12,11 +12,24 @@
 #   pin image      — edits facts.yaml to a known release tag, re-renders
 #                    via `install render` (bypasses setup's collector,
 #                    which would overwrite facts back to :latest)
+#   make Target    — creates a Target in its own Space so the upload can
+#                    bind Units to it via cross-Space <space>/<target>
 #   upload         — first upload: creates Space + Units + installer-
 #                    record + AppConfig set (render-configmap Invocation/
 #                    AppConfig Unit/placeholder + Upsert link) + cross-Unit
-#                    links
+#                    links. Carries the well-known Space labels (Component
+#                    via --component, plus Layer/Environment/Region/Owner/Variant),
+#                    --space-label/--space-annotation, --unit-label/
+#                    --unit-annotation, and --target.
+#   metadata check — asserts the Space labels/annotations, the Unit
+#                    Package label + PackageVersion + --unit-* pairs, the
+#                    cross-Space TargetID annotation and per-Unit binding,
+#                    and that the AppConfig Unit has no Target
 #   plan (clean)   — No changes
+#   add w/o target — reconcile creates a new Unit with NO --target; it
+#                    binds to the Target read back from the Space's
+#                    TargetID annotation. Re-passes --environment to prove
+#                    "set once, update if re-passed" (others preserved)
 #   edit + plan    — surfaces the edited slug
 #   reconcile      — applies inside a ChangeSet
 #   re-run         — second upload is a no-op (no ChangeSet)
@@ -71,10 +84,22 @@ KEEP_WD=${INSTALLER_UPLOAD_KEEP_WD:-1}
 VERBOSE=${INSTALLER_UPLOAD_VERBOSE:-0}
 WORKER_SLUG=installer-test-worker
 PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-ghcr.io/confighubai/confighub-worker:v0.1.44}
+# A Target lives in its own Space so the first upload can bind Units to it
+# via the cross-Space <space>/<target> --target syntax and record the
+# resolved TargetID as $SPACE's "TargetID" annotation.
+TARGET_SPACE="${SPACE}-targets"
+TARGET_SLUG=installer-test-target
+TARGET_WORKER_SLUG=installer-test-target-worker
 
 log()    { printf '\n=== %s ===\n' "$*" >&2; }
 note()   { printf '    %s\n' "$*" >&2; }
 fail()   { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
+
+# jq helpers: read a single field from a Space/Unit, stripping the quotes
+# jq prints around string values (prints "null"/empty when the field is
+# absent). Used by the metadata assertions below.
+space_jq() { cub space get "$SPACE" -o "jq=$1" 2>/dev/null | tr -d '"'; }
+unit_jq()  { cub unit get --space "$SPACE" "$1" -o "jq=$2" 2>/dev/null | tr -d '"'; }
 
 # run <log-name> <cmd> [args...]
 # Runs the command, redirecting both stdout and stderr to
@@ -102,7 +127,7 @@ cleanup_msg() {
   printf '\n----- inspection state preserved -----\n'
   printf 'Space:    %s\n' "$SPACE"
   printf 'Work-dir: %s\n' "$WORK_TMP"
-  printf '\nClean up the Space (and everything in it — Units, Invocations, Links,\nthe BridgeWorker entity, ChangeSets) with:\n  cub space delete --recursive %s\n' "$SPACE"
+  printf '\nClean up the Space (and everything in it — Units, Invocations, Links,\nthe BridgeWorker entity, ChangeSets) plus the Target Space with:\n  cub space delete --recursive %s\n  cub space delete --recursive %s\n' "$SPACE" "$TARGET_SPACE"
   if [[ "$KEEP_WD" = "1" ]]; then
     printf 'Clean up the work-dir with:\n  rm -rf %s\n' "$WORK_TMP"
   fi
@@ -212,9 +237,47 @@ note "AppConfig carrier ConfigMap: $(basename "$appcfg_cm")"
 cub worker list --space "$SPACE" 2>/dev/null | awk '{print $1}' | grep -qx "$WORKER_SLUG" \
   || fail "collector did not create BridgeWorker '$WORKER_SLUG' in Space $SPACE"
 
-# 6. First upload — creates Units + AppConfig artifacts.
-log "install upload --space $SPACE (first upload — exercises AppConfig pathway)"
-run upload-first "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" || fail "first upload failed (see $WORK_TMP/upload-first.log)"
+# 5c. Create the cross-Space Target the first upload will bind Units to.
+#     It needs no live cluster — upload only binds Units (sets TargetID),
+#     it never applies — so a backing worker entity that merely *declares*
+#     Kubernetes/YAML support (no running process) plus a default
+#     Kubernetes Target with empty parameters is enough. Resolving its
+#     UUID up front lets later steps assert the recorded "TargetID"
+#     annotation and the per-Unit bindings.
+log "create cross-Space Target ($TARGET_SPACE/$TARGET_SLUG)"
+cub space create --quiet "$TARGET_SPACE" >/dev/null || fail "failed to create Target Space $TARGET_SPACE"
+# A Target needs a BridgeWorker that advertises the ConfigType. We don't
+# run a worker here (no cluster), so declare the supported ConfigType on
+# the worker entity directly via --from-stdin — enough for target-create
+# validation and for binding Units (upload binds, it never applies).
+printf '%s' '{"ProvidedInfo":{"BridgeWorkerInfo":{"SupportedConfigTypes":[{"ProviderType":"Kubernetes","ToolchainType":"Kubernetes/YAML"}]}}}' \
+  | cub worker create --space "$TARGET_SPACE" --from-stdin "$TARGET_WORKER_SLUG" >/dev/null \
+  || fail "failed to create Target worker $TARGET_SPACE/$TARGET_WORKER_SLUG"
+cub target create --space "$TARGET_SPACE" "$TARGET_SLUG" '{}' "$TARGET_WORKER_SLUG" >/dev/null \
+  || fail "failed to create Target $TARGET_SPACE/$TARGET_SLUG"
+TARGET_ID=$(cub target get --space "$TARGET_SPACE" "$TARGET_SLUG" -o jq=.Target.TargetID 2>/dev/null | tr -d '"')
+[[ -n "$TARGET_ID" && "$TARGET_ID" != "null" ]] || fail "could not resolve TargetID for $TARGET_SPACE/$TARGET_SLUG"
+note "Target $TARGET_SPACE/$TARGET_SLUG → TargetID $TARGET_ID"
+
+# 6. First upload — creates Units + AppConfig artifacts, carrying the
+#    well-known Space labels (Component overridden via --component), the
+#    free-form --space-label / --space-annotation pairs, the --unit-label
+#    / --unit-annotation pairs on every Unit, and binding Units to the
+#    cross-Space Target (whose TargetID is recorded as a Space annotation).
+log "install upload --space $SPACE (first upload — exercises AppConfig pathway + Space/Unit metadata + cross-Space --target)"
+run upload-first "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" \
+  --component my-component \
+  --layer App \
+  --environment Prod \
+  --region us-east1 \
+  --owner Engineering \
+  --variant Base \
+  --space-label tier=infra \
+  --space-annotation note=e2e \
+  --unit-label managed-by=installer-e2e \
+  --unit-annotation install-note=hello \
+  --target "$TARGET_SPACE/$TARGET_SLUG" \
+  || fail "first upload failed (see $WORK_TMP/upload-first.log)"
 
 [[ -f "$WORK_TMP/out/spec/upload.yaml" ]] || fail "first upload did not write out/spec/upload.yaml"
 
@@ -249,6 +312,38 @@ note "Links in $SPACE: $link_count"
 
 note "Units in $SPACE:"
 cub unit list --space "$SPACE" 2>/dev/null | awk 'NR>1 {print "      "$1}'
+
+# 6c. Metadata assertions: the well-known Space labels, the free-form
+#     --space-label / --space-annotation pairs, the --unit-* pairs and the
+#     Package/PackageVersion the installer owns, and the --target →
+#     TargetID round-trip (Space annotation + per-Unit binding).
+log "metadata assertions: Space labels/annotations, Unit labels/annotations, TargetID round-trip"
+[[ "$(space_jq .Space.Labels.Component)"   == "my-component" ]] || fail "Space label Component != my-component (got '$(space_jq .Space.Labels.Component)')"
+[[ "$(space_jq .Space.Labels.Layer)"       == "App" ]]          || fail "Space label Layer != App"
+[[ "$(space_jq .Space.Labels.Environment)" == "Prod" ]]         || fail "Space label Environment != Prod"
+[[ "$(space_jq .Space.Labels.Region)"      == "us-east1" ]]     || fail "Space label Region != us-east1"
+[[ "$(space_jq .Space.Labels.Owner)"       == "Engineering" ]]  || fail "Space label Owner != Engineering"
+[[ "$(space_jq .Space.Labels.Variant)"     == "Base" ]]         || fail "Space label Variant != Base"
+[[ "$(space_jq .Space.Labels.tier)"        == "infra" ]]        || fail "Space label tier != infra (--space-label)"
+[[ "$(space_jq '.Space.Annotations.note')" == "e2e" ]]          || fail "Space annotation note != e2e (--space-annotation)"
+[[ "$(space_jq '.Space.Annotations.TargetID')" == "$TARGET_ID" ]] || fail "Space TargetID annotation != $TARGET_ID (got '$(space_jq '.Space.Annotations.TargetID')')"
+note "Space carries Component=my-component + Layer/Environment/Region/Owner/Variant + tier + note + TargetID=$TARGET_ID"
+
+# A standard (non-AppConfig) Unit carries the Package label, the
+# PackageVersion annotation, the --unit-* pairs, and the Target binding.
+META_UNIT=$(cub unit list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /^deployment-/ {print $1; exit}')
+[[ -n "$META_UNIT" ]] || fail "no deployment Unit to check metadata on"
+[[ "$(unit_jq "$META_UNIT" .Unit.Labels.Package)" == "confighub-worker" ]] || fail "Unit $META_UNIT Package label != confighub-worker"
+[[ "$(unit_jq "$META_UNIT" '.Unit.Labels["managed-by"]')" == "installer-e2e" ]] || fail "Unit $META_UNIT managed-by label != installer-e2e (--unit-label)"
+pv=$(unit_jq "$META_UNIT" .Unit.Annotations.PackageVersion); [[ -n "$pv" && "$pv" != "null" ]] || fail "Unit $META_UNIT missing PackageVersion annotation"
+[[ "$(unit_jq "$META_UNIT" '.Unit.Annotations["install-note"]')" == "hello" ]] || fail "Unit $META_UNIT install-note annotation != hello (--unit-annotation)"
+[[ "$(unit_jq "$META_UNIT" .Unit.TargetID)" == "$TARGET_ID" ]] || fail "Unit $META_UNIT TargetID != $TARGET_ID (cross-Space --target binding)"
+note "Unit $META_UNIT: Package=confighub-worker, managed-by=installer-e2e, PackageVersion=$pv, install-note=hello, TargetID=$TARGET_ID"
+
+# The AppConfig Unit is a pure data source → it must NOT be bound to a Target.
+appcfg_tid=$(unit_jq confighub-worker-env .Unit.TargetID)
+[[ -z "$appcfg_tid" || "$appcfg_tid" == "null" ]] || fail "AppConfig Unit confighub-worker-env should have no Target, got '$appcfg_tid'"
+note "AppConfig Unit confighub-worker-env has no Target (pure data source)"
 
 # 7. plan against unchanged work-dir → No changes.
 log "install plan (clean) — expect No changes"
@@ -305,6 +400,43 @@ log "install upload (no changes after AppConfig edit) — re-run is a no-op"
 run upload-converge-1 "$BIN" upload --work-dir "$WORK_TMP" || fail "converge upload failed (see $WORK_TMP/upload-converge-1.log)"
 grep -q "^No changes\\.$" "$WORK_TMP/upload-converge-1.log" \
   || fail "upload on the same work-dir after AppConfig reconcile should be No changes (see $WORK_TMP/upload-converge-1.log)"
+
+# 9b. Reconcile an ADD without --target: the new Unit must bind to the
+#     Target read back from the Space's TargetID annotation. Re-pass ONE
+#     well-known label (--environment) with a new value to prove
+#     "set once, update if re-passed": Environment updates while the
+#     others (not re-passed) and the TargetID annotation are preserved.
+#     The manifest is dropped into out/manifests directly (no re-render,
+#     so it survives into the reconcile dry-run like the marker edit below).
+log "reconcile add without --target: binds from Space TargetID annotation; --environment re-pass updates only Environment"
+EXTRA_SLUG=extra-e2e-config
+cat > "$WORK_TMP/out/manifests/$EXTRA_SLUG.yaml" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: $EXTRA_SLUG
+  namespace: $SPACE
+data:
+  hello: world
+EOF
+
+run upload-readback "$BIN" upload --work-dir "$WORK_TMP" --yes --environment Staging \
+  || fail "reconcile add without --target failed (see $WORK_TMP/upload-readback.log)"
+grep -qE "^Applied: 1 created, 0 updated, 0 emptied\\.$" "$WORK_TMP/upload-readback.log" \
+  || fail "reconcile add should report exactly 1 created (see $WORK_TMP/upload-readback.log)"
+
+# The added Unit must be bound to the Target read back from the annotation.
+extra_tid=$(unit_jq "$EXTRA_SLUG" .Unit.TargetID)
+[[ "$extra_tid" == "$TARGET_ID" ]] || fail "added Unit $EXTRA_SLUG TargetID = '$extra_tid', want $TARGET_ID (read back from Space annotation, no --target passed)"
+note "added Unit $EXTRA_SLUG bound to TargetID $TARGET_ID without --target (read back from Space annotation)"
+
+# set-once: Environment updated; Component/Layer untouched; TargetID preserved.
+[[ "$(space_jq .Space.Labels.Environment)" == "Staging" ]]       || fail "Environment label != Staging (re-passed value should update)"
+[[ "$(space_jq .Space.Labels.Component)"   == "my-component" ]]  || fail "Component label changed; should be set-once (not re-passed)"
+[[ "$(space_jq .Space.Labels.Layer)"       == "App" ]]           || fail "Layer label changed; should be set-once (not re-passed)"
+[[ "$(space_jq .Space.Labels.Region)"      == "us-east1" ]]      || fail "Region label changed; should be set-once (not re-passed)"
+[[ "$(space_jq '.Space.Annotations.TargetID')" == "$TARGET_ID" ]] || fail "TargetID annotation changed across reconcile without --target"
+note "set-once verified: Environment→Staging; Component/Layer/Region + TargetID preserved"
 
 # 10. Edit a rendered Kubernetes manifest (the Deployment) → plan
 #     surfaces the diff. This exercises the standard (non-AppConfig)

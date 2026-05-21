@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -23,15 +24,23 @@ import (
 
 func newUploadCmd() *cobra.Command {
 	var (
-		workDir       string
-		space         string
-		spacePattern  string
-		target        string
-		annotations   []string
-		labels        []string
-		retry         bool
-		yes           bool
-		changeSetSlug string
+		workDir          string
+		space            string
+		spacePattern     string
+		target           string
+		unitAnnotations  []string
+		unitLabels       []string
+		spaceAnnotations []string
+		spaceLabels      []string
+		component        string
+		layer            string
+		environment      string
+		region           string
+		owner            string
+		variant          string
+		retry            bool
+		yes              bool
+		changeSetSlug    string
 	)
 	cmd := &cobra.Command{
 		Use:   "upload",
@@ -53,13 +62,13 @@ Reconcile (upload.yaml exists):
   Re-computes the same plan install plan would produce. Opens one
   ChangeSet per Space, runs cub unit update --merge-external-source
   --changeset for updates, cub unit create for adds (with --label
-  Component=<pkg>), cub unit delete for deletes (gated on --yes or
-  per-delete confirmation). Re-runs intra-Space link inference; existing
+  Package=<pkg>), cub unit update with no data for deletes (gated on --yes
+  or per-delete confirmation). Re-runs intra-Space link inference; existing
   links pointing at still-present Units are left as-is. Refreshes the
   installer-record Unit so subsequent setups re-enter from up-to-date
   state. A reconcile against an unchanged work-dir is a no-op (no
   ChangeSet opened). Only updates are revertable via
-  cub unit update --restore Before:ChangeSet:<slug>; creates and deletes
+  cub unit update --restore Before:ChangeSet:<slug>; creates
   from a reconcile require manual undo (delete the Unit / re-render +
   re-upload).
 
@@ -70,29 +79,66 @@ Space selection (first upload only):
                                     .Variant). Default '{{.PackageName}}'.
   On reconcile, --space / --space-pattern are read from upload.yaml.
 
-Every Unit and Link upload creates carries a "Component" label whose
+Every Unit and Link upload creates carries a "Package" label whose
 value is the package name (the parent's name for cross-Space dep
 links), so all entities belonging to one package can be queried
-together.
+together and Units the operator added to the Space themselves are left
+alone. Units also get a "PackageVersion" annotation, refreshed on
+update, so you can see which package version last touched each Unit.
+
+Spaces carry the well-known capitalized labels set via --component
+(default: the package name), --layer, --environment, --region, --owner,
+and --variant, plus any --space-label / --space-annotation pairs. When
+--target is given its resolved TargetID is recorded as the Space's
+"TargetID" annotation; on a later reconcile --target may be omitted and
+is read back from there. None of this Space/Unit metadata is stored in
+upload.yaml — ConfigHub is its source of truth; upload.yaml only needs
+enough to find the Space(s).
 
 Files in <work-dir>/out/secrets/ are never uploaded — they hold rendered
 Secret resources flagged as sensitive by render. Apply them out-of-band
 or stage them however your environment manages secrets.
 
---target, --annotation, and --label are forwarded to ` + "`cub unit create`" + ` on
-adds (first upload OR reconcile). They do NOT apply to existing Units
+--target, --unit-annotation, and --unit-label are forwarded to ` + "`cub unit create`" + `
+on adds (first upload OR reconcile). They do NOT apply to existing Units
 on reconcile — that would clobber post-install metadata edits in
-ConfigHub.`,
+ConfigHub. The well-known Space labels and --space-* pairs are set on
+first upload and re-applied on a reconcile only when their flag is
+passed again.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := exec.LookPath("cub"); err != nil {
 				return fmt.Errorf("cub CLI not found on PATH: %w", err)
 			}
-			if err := validateKeyValueFlags("--annotation", annotations); err != nil {
+			if err := validateKeyValueFlags("--unit-annotation", unitAnnotations); err != nil {
 				return err
 			}
-			if err := validateKeyValueFlags("--label", labels); err != nil {
+			if err := validateKeyValueFlags("--unit-label", unitLabels); err != nil {
 				return err
+			}
+			if err := validateSpaceLabelFlags(spaceLabels); err != nil {
+				return err
+			}
+			if err := validateSpaceAnnotationFlags(spaceAnnotations); err != nil {
+				return err
+			}
+			meta := spaceMetaInput{
+				component:      component,
+				layer:          layer,
+				environment:    environment,
+				region:         region,
+				owner:          owner,
+				variant:        variant,
+				labels:         spaceLabels,
+				annotations:    spaceAnnotations,
+				target:         target,
+				componentSet:   cmd.Flags().Changed("component"),
+				layerSet:       cmd.Flags().Changed("layer"),
+				environmentSet: cmd.Flags().Changed("environment"),
+				regionSet:      cmd.Flags().Changed("region"),
+				ownerSet:       cmd.Flags().Changed("owner"),
+				variantSet:     cmd.Flags().Changed("variant"),
+				targetSet:      cmd.Flags().Changed("target"),
 			}
 			absWork, err := filepath.Abs(workDir)
 			if err != nil {
@@ -113,7 +159,7 @@ ConfigHub.`,
 			// this work-dir has already been pushed to ConfigHub once.
 			uploadDocPath := filepath.Join(absWork, "out", "spec", upload.UploadDocFilename)
 			if _, statErr := os.Stat(uploadDocPath); statErr == nil {
-				return runUploadReconcile(ctx, absWork, loaded, target, annotations, labels, yes, changeSetSlug, space, spacePattern)
+				return runUploadReconcile(ctx, absWork, loaded, meta, unitAnnotations, unitLabels, yes, changeSetSlug, space, spacePattern)
 			} else if !os.IsNotExist(statErr) {
 				return statErr
 			}
@@ -180,7 +226,7 @@ ConfigHub.`,
 			}
 
 			for _, pkg := range packages {
-				if err := uploadOnePackage(pkg, target, annotations, labels, retry); err != nil {
+				if err := uploadOnePackage(ctx, pkg, meta, unitAnnotations, unitLabels, retry); err != nil {
 					return err
 				}
 			}
@@ -204,9 +250,17 @@ ConfigHub.`,
 	}
 	cmd.Flags().StringVar(&space, "space", "", "destination ConfigHub Space slug (single-package mode)")
 	cmd.Flags().StringVar(&spacePattern, "space-pattern", "", "Go template for the Space slug per package (vars: .PackageName, .PackageVersion, .Variant). Default: '{{.PackageName}}'.")
-	cmd.Flags().StringVar(&target, "target", "", "target slug; forwarded to cub unit create --target on every rendered Unit (not the installer-record Unit)")
-	cmd.Flags().StringSliceVar(&annotations, "annotation", nil, "annotation key=value to set on every rendered Unit (repeatable)")
-	cmd.Flags().StringSliceVar(&labels, "label", nil, "label key=value to set on every rendered Unit (repeatable)")
+	cmd.Flags().StringVar(&target, "target", "", "target ref (<target-slug>, <space-slug>/<target-slug>, or UUID); forwarded to cub unit create --target on every rendered Unit (not the installer-record Unit). Its resolved TargetID is recorded as the Space's \"TargetID\" annotation; on a later reconcile --target may be omitted and is read back from there.")
+	cmd.Flags().StringSliceVar(&unitAnnotations, "unit-annotation", nil, "annotation key=value to set on every rendered Unit (repeatable)")
+	cmd.Flags().StringSliceVar(&unitLabels, "unit-label", nil, "label key=value to set on every rendered Unit (repeatable)")
+	cmd.Flags().StringSliceVar(&spaceAnnotations, "space-annotation", nil, "annotation key=value to set on the Space(s) (repeatable); \"TargetID\" is reserved (use --target)")
+	cmd.Flags().StringSliceVar(&spaceLabels, "space-label", nil, "label key=value to set on the Space(s) (repeatable); the well-known labels Component/Layer/Environment/Owner/Variant are reserved (use their dedicated flags)")
+	cmd.Flags().StringVar(&component, "component", "", "value for the well-known \"Component\" Space label (default: the package name)")
+	cmd.Flags().StringVar(&layer, "layer", "", "value for the well-known \"Layer\" Space label (e.g. App)")
+	cmd.Flags().StringVar(&environment, "environment", "", "value for the well-known \"Environment\" Space label (e.g. Prod)")
+	cmd.Flags().StringVar(&region, "region", "", "value for the well-known \"Region\" Space label (e.g. us-east1)")
+	cmd.Flags().StringVar(&owner, "owner", "", "value for the well-known \"Owner\" Space label (e.g. Engineering)")
+	cmd.Flags().StringVar(&variant, "variant", "", "value for the well-known \"Variant\" Space label (e.g. Base)")
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory")
 	cmd.Flags().BoolVar(&retry, "retry", false, "first upload only: tolerate Units, Invocations, and Links that already exist so a partially-failed first upload can be retried. Space auto-create is always idempotent — this flag only affects content. Ignored on reconcile (reconcile is always idempotent).")
 	cmd.Flags().BoolVar(&yes, "yes", false, "reconcile only: skip confirmation for deletes (required when stdin is not a TTY and the plan contains deletes)")
@@ -218,7 +272,7 @@ ConfigHub.`,
 // reads upload.yaml, computes a diff against ConfigHub, opens a
 // ChangeSet, and applies. Same semantics as the previous standalone
 // `install update` command.
-func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded, target string, annotations, labels []string, yes bool, changeSetSlug, spaceFlag, spacePatternFlag string) error {
+func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded, meta spaceMetaInput, unitAnnotations, unitLabels []string, yes bool, changeSetSlug, spaceFlag, spacePatternFlag string) error {
 	if spaceFlag != "" || spacePatternFlag != "" {
 		fmt.Fprintln(os.Stderr, "note: --space / --space-pattern are read from upload.yaml on reconcile; flag value ignored")
 	}
@@ -247,6 +301,46 @@ func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded
 		return err
 	}
 
+	// Reconcile Space metadata and resolve the per-Space target up front,
+	// before diffing, so a metadata-only reconcile (no Unit changes) still
+	// updates the Space and so any adds bind to the right target. The
+	// well-known labels / --space-* pairs are applied only when re-passed
+	// ("set once, update if re-passed"); --target, when omitted, is read
+	// back from each Space's recorded TargetID annotation.
+	targets := map[string]string{}
+	for _, pkg := range packages {
+		var targetID, effective string
+		switch {
+		case meta.targetSet && meta.target != "":
+			effective = meta.target
+			id, err := resolveTargetID(ctx, pkg.SpaceSlug, meta.target)
+			if err != nil {
+				return err
+			}
+			targetID = id
+		case !meta.targetSet:
+			// Read the recorded TargetID (a UUID) and resolve it to a
+			// <space>/<slug> reference so adds can bind even when the
+			// Target lives in another Space (a bare UUID --target is
+			// resolved scoped to the Unit's Space and would 404).
+			id, err := readSpaceTargetID(ctx, pkg.SpaceSlug)
+			if err != nil {
+				return err
+			}
+			if id != "" {
+				ref, err := targetRefFromID(ctx, id)
+				if err != nil {
+					return err
+				}
+				effective = ref
+			}
+		}
+		targets[pkg.SpaceSlug] = effective
+		if err := applySpaceMeta(ctx, pkg.SpaceSlug, meta.labelArgs(pkg.Name, false), meta.annotationArgs(targetID)); err != nil {
+			return err
+		}
+	}
+
 	plan, err := diff.Compute(ctx, packages)
 	if err != nil {
 		return err
@@ -264,9 +358,9 @@ func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded
 		Yes:                  yes,
 		ChangeSetSlug:        changeSetSlug,
 		ChangeSetDescription: fmt.Sprintf("install upload (reconcile) from %s@%s", loaded.Package.Metadata.Name, loaded.Package.Metadata.Version),
-		Target:               target,
-		Annotations:          annotations,
-		Labels:               labels,
+		Targets:              targets,
+		Annotations:          unitAnnotations,
+		Labels:               unitLabels,
 		PostSpaceHook:        refreshInstallerRecordHook(packages),
 	})
 	if err != nil {
@@ -302,15 +396,34 @@ func refreshInstallerRecordHook(packages []upload.Package) diff.PackageRefresher
 	}
 }
 
-// uploadOnePackage creates pkg.SpaceSlug if missing, uploads each rendered
-// manifest as a Unit (with --target/--annotation/--label applied), splits
-// AppConfig-annotated ConfigMaps into AppConfig Unit + render-configmap
-// Invocation + placeholder + Upsert link, creates the untargeted
-// installer-record Unit, and runs the intra-Space link inference.
-func uploadOnePackage(pkg upload.Package, target string, annotations, labels []string, retry bool) error {
+// uploadOnePackage creates pkg.SpaceSlug if missing, stamps the Space's
+// well-known labels + operator metadata + TargetID annotation, uploads
+// each rendered manifest as a Unit (with --target/--unit-annotation/
+// --unit-label plus the Package label and PackageVersion annotation),
+// splits AppConfig-annotated ConfigMaps into AppConfig Unit +
+// render-configmap Invocation + placeholder + Upsert link, creates the
+// untargeted installer-record Unit, and runs the intra-Space link
+// inference.
+func uploadOnePackage(ctx context.Context, pkg upload.Package, meta spaceMetaInput, unitAnnotations, unitLabels []string, retry bool) error {
 	fmt.Printf("== %s@%s → Space %s ==\n", pkg.Name, pkg.Version, pkg.SpaceSlug)
 
 	if err := ensureSpace(pkg.SpaceSlug); err != nil {
+		return err
+	}
+
+	// Stamp the Space's well-known labels and operator-supplied metadata.
+	// Component defaults to the package name on a first upload. When
+	// --target is given, record its resolved TargetID so later reconciles
+	// can omit --target and read it back from here.
+	var targetID string
+	if meta.target != "" {
+		id, err := resolveTargetID(ctx, pkg.SpaceSlug, meta.target)
+		if err != nil {
+			return err
+		}
+		targetID = id
+	}
+	if err := applySpaceMeta(ctx, pkg.SpaceSlug, meta.labelArgs(pkg.Name, true), meta.annotationArgs(targetID)); err != nil {
 		return err
 	}
 
@@ -327,7 +440,8 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 	}
 	namespace := inputs.Spec.Namespace
 
-	componentLabel := "Component=" + pkg.Name
+	packageLabel := "Package=" + pkg.Name
+	packageVersionAnnotation := "PackageVersion=" + pkg.Version
 
 	entries, err := os.ReadDir(pkg.ManifestsDir)
 	if err != nil {
@@ -344,7 +458,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 			return err
 		}
 		if appCfg != nil {
-			if err := uploadAppConfigManifest(pkg, appCfg, target, componentLabel, namespace, annotations, labels, retry); err != nil {
+			if err := uploadAppConfigManifest(pkg, appCfg, meta.target, packageLabel, packageVersionAnnotation, namespace, unitAnnotations, unitLabels, retry); err != nil {
 				return err
 			}
 			continue
@@ -354,14 +468,15 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 		if retry {
 			cubArgs = append(cubArgs, "--allow-exists")
 		}
-		cubArgs = append(cubArgs, "--space", pkg.SpaceSlug, "--merge-external-source", e.Name(), "--label", componentLabel)
-		if target != "" {
-			cubArgs = append(cubArgs, "--target", target)
+		cubArgs = append(cubArgs, "--space", pkg.SpaceSlug, "--merge-external-source", e.Name(),
+			"--label", packageLabel, "--annotation", packageVersionAnnotation)
+		if meta.target != "" {
+			cubArgs = append(cubArgs, "--target", meta.target)
 		}
-		for _, a := range annotations {
+		for _, a := range unitAnnotations {
 			cubArgs = append(cubArgs, "--annotation", a)
 		}
-		for _, l := range labels {
+		for _, l := range unitLabels {
 			cubArgs = append(cubArgs, "--label", l)
 		}
 		cubArgs = append(cubArgs, slug, path)
@@ -378,7 +493,7 @@ func uploadOnePackage(pkg upload.Package, target string, annotations, labels []s
 	}
 	renderedSecrets := loadRenderedSecretsFromDir(pkg.SecretsDir)
 	skipUnmatched := skipKeysForRenderedSecrets(renderedSecrets)
-	if err := upload.ReconcileLinks(context.Background(), pkg.SpaceSlug, pkg.Name, skipUnmatched); err != nil {
+	if err := upload.ReconcileLinks(ctx, pkg.SpaceSlug, pkg.Name, skipUnmatched); err != nil {
 		return err
 	}
 	reportSecretsNotUploaded(pkg, renderedSecrets)
@@ -508,7 +623,7 @@ func reportSecretsNotUploaded(pkg upload.Package, secrets []renderedSecret) {
 // Idempotent via --allow-exists on the Invocation, Units, and link;
 // re-running upload after re-rendering refreshes the AppConfig Unit body
 // via the --merge-external-source mechanism the regular path uses.
-func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, target, componentLabel, namespace string, annotations, labels []string, retry bool) error {
+func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifest, target, packageLabel, packageVersionAnnotation, namespace string, unitAnnotations, unitLabels []string, retry bool) error {
 	fmt.Printf("AppConfig: %s (toolchain=%s, mode=%s)\n", appCfg.CarrierName, appCfg.Toolchain, appCfg.Mode)
 
 	// 1. Stage the extracted raw config in a temp file so cub unit
@@ -533,7 +648,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	}
 	invArgs = append(invArgs,
 		"--space", pkg.SpaceSlug,
-		"--label", componentLabel,
+		"--label", packageLabel,
 		appCfg.InvocationSlug(), appCfg.Toolchain,
 		"--", "render-configmap",
 	)
@@ -554,12 +669,13 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		"--space", pkg.SpaceSlug,
 		"--toolchain", appCfg.Toolchain,
 		"--merge-external-source", filepath.Base(appCfg.ManifestPath),
-		"--label", componentLabel,
+		"--label", packageLabel,
+		"--annotation", packageVersionAnnotation,
 	)
-	for _, a := range annotations {
+	for _, a := range unitAnnotations {
 		unitArgs = append(unitArgs, "--annotation", a)
 	}
-	for _, l := range labels {
+	for _, l := range unitLabels {
 		unitArgs = append(unitArgs, "--label", l)
 	}
 	unitArgs = append(unitArgs, appCfg.UnitSlug(), tmp.Name())
@@ -579,15 +695,16 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 	placeholderArgs = append(placeholderArgs,
 		"--space", pkg.SpaceSlug,
 		"--toolchain", "Kubernetes/YAML",
-		"--label", componentLabel,
+		"--label", packageLabel,
+		"--annotation", packageVersionAnnotation,
 	)
 	if target != "" {
 		placeholderArgs = append(placeholderArgs, "--target", target)
 	}
-	for _, a := range annotations {
+	for _, a := range unitAnnotations {
 		placeholderArgs = append(placeholderArgs, "--annotation", a)
 	}
-	for _, l := range labels {
+	for _, l := range unitLabels {
 		placeholderArgs = append(placeholderArgs, "--label", l)
 	}
 	placeholderArgs = append(placeholderArgs, appCfg.PlaceholderSlug())
@@ -612,7 +729,7 @@ func uploadAppConfigManifest(pkg upload.Package, appCfg *upload.AppConfigManifes
 		"--space", pkg.SpaceSlug,
 		"--update-type", "Upsert", "--auto-update",
 		"--transform-invocation", pkg.SpaceSlug+"/"+appCfg.InvocationSlug(),
-		"--label", componentLabel,
+		"--label", packageLabel,
 		"-", appCfg.PlaceholderSlug(), appCfg.UnitSlug(),
 	)
 	lcmd := exec.Command("cub", linkArgs...)
@@ -701,7 +818,8 @@ func createInstallerRecordUnit(pkg upload.Package, retry bool) error {
 		"--space", pkg.SpaceSlug,
 		"--annotation", "installer.confighub.com/role=installer-record",
 		"--annotation", "installer.confighub.com/package="+pkg.Name,
-		"--label", "Component="+pkg.Name,
+		"--annotation", "PackageVersion="+pkg.Version,
+		"--label", "Package="+pkg.Name,
 		upload.InstallerRecordSlug, tmp.Name(),
 	)
 	ccmd := exec.Command("cub", args...)
@@ -722,7 +840,7 @@ func createCrossSpaceLink(l upload.CrossSpaceLink, retry bool) error {
 	}
 	args = append(args,
 		"--space", l.FromSpace, "--quiet",
-		"--label", "Component="+l.Component,
+		"--label", "Package="+l.Package,
 		l.Slug, l.FromUnit, l.ToUnit, l.ToSpace,
 	)
 	ccmd := exec.Command("cub", args...)
@@ -742,4 +860,211 @@ func validateKeyValueFlags(flag string, vals []string) error {
 		}
 	}
 	return nil
+}
+
+// reservedSpaceLabelKeys maps each well-known Space label to the flag
+// that owns it, so --space-label can reject attempts to set them
+// directly.
+var reservedSpaceLabelKeys = map[string]string{
+	"Component":   "--component",
+	"Layer":       "--layer",
+	"Environment": "--environment",
+	"Region":      "--region",
+	"Owner":       "--owner",
+	"Variant":     "--variant",
+}
+
+func validateSpaceLabelFlags(vals []string) error {
+	for _, v := range vals {
+		if !strings.Contains(v, "=") {
+			return fmt.Errorf("--space-label %q must be key=value", v)
+		}
+		key := strings.SplitN(v, "=", 2)[0]
+		if flag, ok := reservedSpaceLabelKeys[key]; ok {
+			return fmt.Errorf("--space-label %q: %q is a reserved well-known label; set it with %s", v, key, flag)
+		}
+	}
+	return nil
+}
+
+func validateSpaceAnnotationFlags(vals []string) error {
+	for _, v := range vals {
+		if !strings.Contains(v, "=") {
+			return fmt.Errorf("--space-annotation %q must be key=value", v)
+		}
+		if key := strings.SplitN(v, "=", 2)[0]; key == "TargetID" {
+			return fmt.Errorf("--space-annotation %q: %q is reserved; set it with --target", v, key)
+		}
+	}
+	return nil
+}
+
+// spaceMetaInput carries the Space-level metadata flags for one upload
+// run: the well-known capitalized labels (Component/Layer/Environment/
+// Owner/Variant), the free-form --space-label / --space-annotation
+// pairs, and the --target whose resolved TargetID is recorded as a Space
+// annotation. None of this is persisted in upload.yaml — ConfigHub is
+// the source of truth for it; the installer only needs enough to find
+// the Space(s) again.
+type spaceMetaInput struct {
+	component   string
+	layer       string
+	environment string
+	region      string
+	owner       string
+	variant     string
+	labels      []string // --space-label key=value pairs
+	annotations []string // --space-annotation key=value pairs
+	target      string   // --target ref (slug, space/slug, or UUID)
+
+	componentSet   bool
+	layerSet       bool
+	environmentSet bool
+	regionSet      bool
+	ownerSet       bool
+	variantSet     bool
+	targetSet      bool
+}
+
+// labelArgs returns the Space label key=value pairs to apply via
+// `cub space update --patch`. On a first upload (firstUpload=true) the
+// Component label is always included, defaulting to the package name
+// when --component was not given. On a reconcile the well-known labels
+// are included only when their flag was explicitly passed this run
+// ("set once, update if re-passed"); --space-label pairs are always
+// applied because their presence means the operator passed them.
+func (m spaceMetaInput) labelArgs(pkgName string, firstUpload bool) []string {
+	var out []string
+	if firstUpload || m.componentSet {
+		comp := m.component
+		if comp == "" {
+			comp = pkgName
+		}
+		out = append(out, "Component="+comp)
+	}
+	if m.layerSet {
+		out = append(out, "Layer="+m.layer)
+	}
+	if m.environmentSet {
+		out = append(out, "Environment="+m.environment)
+	}
+	if m.regionSet {
+		out = append(out, "Region="+m.region)
+	}
+	if m.ownerSet {
+		out = append(out, "Owner="+m.owner)
+	}
+	if m.variantSet {
+		out = append(out, "Variant="+m.variant)
+	}
+	out = append(out, m.labels...)
+	return out
+}
+
+// annotationArgs returns the Space annotation key=value pairs to apply.
+// targetID, when non-empty, is recorded as the well-known "TargetID"
+// annotation; the caller resolves it only when it intends to (re)write
+// it (a first upload with --target, or a reconcile that re-passed
+// --target).
+func (m spaceMetaInput) annotationArgs(targetID string) []string {
+	out := append([]string(nil), m.annotations...)
+	if targetID != "" {
+		out = append(out, "TargetID="+targetID)
+	}
+	return out
+}
+
+// applySpaceMeta patches the Space's labels and annotations in one
+// `cub space update --patch` call. Patch mode merges, so labels and
+// annotations the call does not name are preserved. A no-op when there
+// is nothing to set.
+func applySpaceMeta(ctx context.Context, space string, labelKVs, annotationKVs []string) error {
+	if len(labelKVs) == 0 && len(annotationKVs) == 0 {
+		return nil
+	}
+	args := []string{"space", "update", "--patch", "--quiet"}
+	for _, l := range labelKVs {
+		args = append(args, "--label", l)
+	}
+	for _, a := range annotationKVs {
+		args = append(args, "--annotation", a)
+	}
+	args = append(args, space)
+	ccmd := exec.Command("cub", args...)
+	ccmd.Stderr = os.Stderr
+	if err := ccmd.Run(); err != nil {
+		return fmt.Errorf("cub space update --patch %s: %w", space, err)
+	}
+	return nil
+}
+
+// resolveTargetID resolves a --target ref to its TargetID UUID. The ref
+// is interpreted the way `cub unit create --target` interprets it: a
+// bare slug resolves in the Unit's Space (unitSpace), a
+// <space-slug>/<target-slug> resolves the target in the named Space, and
+// a UUID resolves directly.
+func resolveTargetID(ctx context.Context, unitSpace, targetRef string) (string, error) {
+	lookupSpace, slug := unitSpace, targetRef
+	if i := strings.IndexByte(targetRef, '/'); i >= 0 {
+		lookupSpace, slug = targetRef[:i], targetRef[i+1:]
+	}
+	var stdout, stderr bytes.Buffer
+	ccmd := exec.CommandContext(ctx, "cub", "target", "get",
+		"--space", lookupSpace, "-o", "jq=.Target.TargetID", slug)
+	ccmd.Stdout = &stdout
+	ccmd.Stderr = &stderr
+	if err := ccmd.Run(); err != nil {
+		return "", fmt.Errorf("cub target get %s in %s: %w\n%s", slug, lookupSpace, err, stderr.String())
+	}
+	id := strings.Trim(strings.TrimSpace(stdout.String()), "\"")
+	if id == "" || id == "null" {
+		return "", fmt.Errorf("target %q in space %s has no TargetID", slug, lookupSpace)
+	}
+	return id, nil
+}
+
+// targetRefFromID resolves a TargetID UUID to a
+// "<space-slug>/<target-slug>" reference that `cub unit create --target`
+// can bind. A bare UUID can't be passed straight through: cub resolves a
+// UUID --target scoped to the Unit's Space (parse.go), so a Target living
+// in another Space 404s. The reference form looks the Target up in its
+// own Space. Returns "" (no error) when no Target with that ID exists
+// (e.g. it was deleted since the annotation was written).
+func targetRefFromID(ctx context.Context, targetID string) (string, error) {
+	var stdout, stderr bytes.Buffer
+	ccmd := exec.CommandContext(ctx, "cub", "target", "list",
+		"--space", "*",
+		"--where", fmt.Sprintf("TargetID = '%s'", targetID),
+		"-o", `jq=.[] | .Space.Slug + "/" + .Target.Slug`)
+	ccmd.Stdout = &stdout
+	ccmd.Stderr = &stderr
+	if err := ccmd.Run(); err != nil {
+		return "", fmt.Errorf("cub target list (resolve TargetID %s): %w\n%s", targetID, err, stderr.String())
+	}
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		ref := strings.Trim(strings.TrimSpace(line), "\"")
+		if ref != "" && ref != "/" {
+			return ref, nil
+		}
+	}
+	return "", nil
+}
+
+// readSpaceTargetID reads the "TargetID" annotation a prior upload
+// recorded on the Space. Returns "" (no error) when the Space has no
+// such annotation — e.g. it was uploaded without --target.
+func readSpaceTargetID(ctx context.Context, space string) (string, error) {
+	var stdout, stderr bytes.Buffer
+	ccmd := exec.CommandContext(ctx, "cub", "space", "get",
+		"-o", "jq=.Space.Annotations.TargetID", space)
+	ccmd.Stdout = &stdout
+	ccmd.Stderr = &stderr
+	if err := ccmd.Run(); err != nil {
+		return "", fmt.Errorf("cub space get %s: %w\n%s", space, err, stderr.String())
+	}
+	id := strings.Trim(strings.TrimSpace(stdout.String()), "\"")
+	if id == "null" {
+		return "", nil
+	}
+	return id, nil
 }

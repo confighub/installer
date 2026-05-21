@@ -36,14 +36,21 @@ type ApplyOptions struct {
 	// opened ChangeSet. Defaults to a generic "install update" line
 	// when empty.
 	ChangeSetDescription string
-	// Target is forwarded to `cub unit create --target` for adds. Empty
-	// means no target binding (matching upload's default).
-	Target string
-	// Annotations and Labels are forwarded to `cub unit create` for
-	// adds. They are NOT applied to existing Units on update — that
-	// would clobber user post-install metadata edits, which Principle 1
+	// Targets maps a Space slug to the target ref forwarded to
+	// `cub unit create --target` for adds in that Space. The ref is the
+	// explicit --target (slug, space/slug, or UUID) when the operator
+	// passed one, otherwise the Space's recorded TargetID annotation
+	// (resolved by the CLI before Apply runs). A missing or empty entry
+	// means no target binding.
+	Targets map[string]string
+	// Annotations and Labels are the operator's --unit-annotation /
+	// --unit-label values, forwarded to `cub unit create` for adds. They
+	// are NOT applied to existing Units on update — that would clobber
+	// user post-install metadata edits, which Principle 1
 	// (read-only-to-installer for post-install state in ConfigHub) does
-	// not allow.
+	// not allow. (The PackageVersion annotation is the one exception —
+	// see updateUnit — because it tracks which package version last
+	// touched each Unit, which the installer owns.)
 	Annotations []string
 	Labels      []string
 	// Stdout/Stderr override the I/O streams; nil uses os.Stdout/Stderr.
@@ -122,13 +129,13 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 		}
 
 		for _, a := range sp.Adds {
-			if err := createUnit(ctx, sp.SpaceSlug, sp.Package, a, opts, stdout, stderr); err != nil {
+			if err := createUnit(ctx, sp.SpaceSlug, sp.Package, sp.PackageVersion, opts.Targets[sp.SpaceSlug], a, opts, stdout, stderr); err != nil {
 				return res, err
 			}
 			res.Created++
 		}
 		for _, u := range sp.Updates {
-			if err := updateUnit(ctx, sp.SpaceSlug, u, changeSetSlug, stdout, stderr); err != nil {
+			if err := updateUnit(ctx, sp.SpaceSlug, u, sp.PackageVersion, changeSetSlug, stdout, stderr); err != nil {
 				return res, err
 			}
 			res.Updated++
@@ -176,14 +183,15 @@ func descriptionOrDefault(d, pkg, ver string) string {
 	return fmt.Sprintf("install update from %s", pkg)
 }
 
-func createUnit(ctx context.Context, space, component string, a SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) error {
+func createUnit(ctx context.Context, space, pkg, version, target string, a SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) error {
 	args := []string{"unit", "create",
 		"--space", space,
 		"--merge-external-source", baseName(a.Path),
-		"--label", "Component=" + component,
+		"--label", "Package=" + pkg,
+		"--annotation", "PackageVersion=" + version,
 	}
-	if opts.Target != "" {
-		args = append(args, "--target", opts.Target)
+	if target != "" {
+		args = append(args, "--target", target)
 	}
 	for _, an := range opts.Annotations {
 		args = append(args, "--annotation", an)
@@ -201,7 +209,7 @@ func createUnit(ctx context.Context, space, component string, a SlugDiff, opts A
 	return nil
 }
 
-func updateUnit(ctx context.Context, space string, u SlugDiff, changeSetSlug string, stdout, stderr io.Writer) error {
+func updateUnit(ctx context.Context, space string, u SlugDiff, version, changeSetSlug string, stdout, stderr io.Writer) error {
 	// For AppConfig Units, the local source is the raw env content
 	// (not the rendered ConfigMap manifest). Stage it to a temp file
 	// so cub reads it from disk the same way it reads regular
@@ -240,6 +248,29 @@ func updateUnit(ctx context.Context, space string, u SlugDiff, changeSetSlug str
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("cub unit update %s in %s: %w", u.Slug, space, err)
 	}
+	// Stamp the package version that last touched this Unit. Done as a
+	// separate --patch so it merges into the Unit's annotations without
+	// disturbing the data merge above or any other annotation. This lets
+	// an operator see which Units a given upload changed (e.g. to triage
+	// a partial failure). Unlike --unit-annotation/--unit-label, this is
+	// installer-owned bookkeeping, so refreshing it on update is allowed.
+	// It must ride the same ChangeSet as the data update — while a Unit is
+	// attached to a ChangeSet the server rejects updates that omit it — so
+	// the version stamp reverts cleanly alongside the data change.
+	pvArgs := []string{"unit", "update",
+		"--space", space, "--patch", "--quiet",
+		"--annotation", "PackageVersion=" + version,
+	}
+	if changeSetSlug != "" {
+		pvArgs = append(pvArgs, "--changeset", changeSetSlug)
+	}
+	pvArgs = append(pvArgs, u.Slug)
+	pv := exec.CommandContext(ctx, "cub", pvArgs...)
+	pv.Stdout = stdout
+	pv.Stderr = stderr
+	if err := pv.Run(); err != nil {
+		return fmt.Errorf("cub unit update --patch PackageVersion on %s in %s: %w", u.Slug, space, err)
+	}
 	return nil
 }
 
@@ -264,7 +295,7 @@ func closeChangeSet(ctx context.Context, space string, updates []SlugDiff, stdou
 }
 
 // emptyUnits reconciles Units that exist in ConfigHub (under this
-// package's Component label) but no longer appear in the rendered
+// package's Package label) but no longer appear in the rendered
 // output. It does NOT run `cub unit delete`: upload reconciles Data
 // only, never the deployed live state. Deleting the Unit record would
 // orphan whatever it has deployed (the resources must be destroyed via

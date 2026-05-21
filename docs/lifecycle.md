@@ -437,7 +437,7 @@ base kustomization.yaml has no `images:` block; declare one to use
 - **Reverting an `install upload` reconcile**:
   ```bash
   cub unit update --restore Before:ChangeSet:<slug> \
-      --where "Labels.Component='hello-app'"
+      --where "Labels.Package='hello-app'"
   ```
   Reverts updates only. Creates and deletes from that upload are not
   reverted by ChangeSet restore — to undo a create, delete the Unit; to

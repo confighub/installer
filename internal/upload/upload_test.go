@@ -285,8 +285,8 @@ func TestPlanCrossSpaceLinks(t *testing.T) {
 	if links[0].FromUnit != InstallerRecordSlug || links[0].ToUnit != InstallerRecordSlug {
 		t.Errorf("link[0] units should be the record slug: %+v", links[0])
 	}
-	if links[0].Component != "parent" {
-		t.Errorf("link[0].Component = %q want %q", links[0].Component, "parent")
+	if links[0].Package != "parent" {
+		t.Errorf("link[0].Package = %q want %q", links[0].Package, "parent")
 	}
 }
 
