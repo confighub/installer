@@ -6,8 +6,8 @@ installer.
 ## Upstream
 
 Manifests are vendored from
-[argoproj/argo-cd](https://github.com/argoproj/argo-cd) at tag **v3.3.0**
-(`stable` as of this writing) under `upstream/`:
+[argoproj/argo-cd](https://github.com/argoproj/argo-cd) at tag **v3.4.2**
+under `upstream/`:
 
 | vendored | upstream |
 | --- | --- |
@@ -103,7 +103,7 @@ To pin a different image (e.g. mirror or patch version):
 ```bash
 install setup --pull ~/ConfigHub/installer/packages/argocd \
   --non-interactive --namespace argocd \
-  --set-image quay.io/argoproj/argocd=quay.io/argoproj/argocd:v3.3.0
+  --set-image quay.io/argoproj/argocd=quay.io/argoproj/argocd:v3.4.2
 ```
 
 ## Refresh upstream
@@ -112,7 +112,7 @@ The vendored tree is a straight `cp` from a checkout of the upstream
 repo at the desired tag. To refresh to a new release:
 
 ```bash
-TAG=v3.3.0
+TAG=v3.4.2
 SRC=~/ConfigHub/argo-cd                  # local clone of argoproj/argo-cd
 DST=~/ConfigHub/installer/packages/argocd
 
