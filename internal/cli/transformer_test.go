@@ -68,6 +68,109 @@ functionConfig:
 	}
 }
 
+// TestTransformer_InjectsNamespaceWhenMissing verifies the transform pass
+// adds a Namespace resource (named for spec.namespace) when the input has
+// none, and that the chain's set-namespace then operates on it like any
+// other resource.
+func TestTransformer_InjectsNamespaceWhenMissing(t *testing.T) {
+	input := `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: smoke
+    spec:
+      selector: { matchLabels: { app: smoke } }
+      template:
+        metadata: { labels: { app: smoke } }
+        spec:
+          containers:
+            - name: app
+              image: nginx:1.27
+functionConfig:
+  apiVersion: installer.confighub.com/v1alpha1
+  kind: ConfigHubTransformers
+  metadata:
+    name: chain
+  spec:
+    namespace: demo
+    groups:
+      - toolchain: Kubernetes/YAML
+        invocations:
+          - name: set-namespace
+            args: ["demo"]
+`
+	out, err := runTransformer(context.Background(), []byte(input))
+	if err != nil {
+		t.Fatalf("runTransformer: %v", err)
+	}
+	var got resourceList
+	if err := yaml.Unmarshal(out, &got); err != nil {
+		t.Fatalf("parse output: %v\n----\n%s\n----", err, out)
+	}
+	if len(got.Items) != 2 {
+		t.Fatalf("output items: want 2 (Namespace + Deployment), got %d\n%s", len(got.Items), out)
+	}
+	var nsCount int
+	for i := range got.Items {
+		apiVersion, kind := apiVersionKind(&got.Items[i])
+		if kind == "Namespace" && apiVersion == "v1" {
+			nsCount++
+			var ns struct {
+				Metadata struct {
+					Name string `yaml:"name"`
+				} `yaml:"metadata"`
+			}
+			if err := got.Items[i].Decode(&ns); err != nil {
+				t.Fatalf("decode namespace: %v", err)
+			}
+			if ns.Metadata.Name != "demo" {
+				t.Errorf("injected Namespace name: want demo, got %q", ns.Metadata.Name)
+			}
+		}
+	}
+	if nsCount != 1 {
+		t.Errorf("Namespace count: want 1, got %d\n%s", nsCount, out)
+	}
+}
+
+// TestTransformer_KeepsExistingNamespace verifies the transform pass does not
+// add a second Namespace when the input already contains one.
+func TestTransformer_KeepsExistingNamespace(t *testing.T) {
+	input := `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: authored
+functionConfig:
+  apiVersion: installer.confighub.com/v1alpha1
+  kind: ConfigHubTransformers
+  metadata:
+    name: chain
+  spec:
+    namespace: demo
+    groups:
+      - toolchain: Kubernetes/YAML
+        invocations:
+          - name: set-namespace
+            args: ["demo"]
+`
+	out, err := runTransformer(context.Background(), []byte(input))
+	if err != nil {
+		t.Fatalf("runTransformer: %v", err)
+	}
+	var got resourceList
+	if err := yaml.Unmarshal(out, &got); err != nil {
+		t.Fatalf("parse output: %v\n----\n%s\n----", err, out)
+	}
+	if len(got.Items) != 1 {
+		t.Fatalf("output items: want 1 (no duplicate Namespace), got %d\n%s", len(got.Items), out)
+	}
+}
+
 // TestTransformer_ValidatorsEmitResults runs a ConfigHubValidators against a
 // Deployment that violates vet-merge-keys (two containers named "app"). The
 // items should round-trip unchanged; results should carry severity=error.

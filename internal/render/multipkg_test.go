@@ -149,8 +149,14 @@ func TestRenderDependencies(t *testing.T) {
 	if r.OutDir != wantOut {
 		t.Errorf("outDir = %q want %q", r.OutDir, wantOut)
 	}
-	if len(r.Manifests) != 1 {
-		t.Fatalf("manifests = %d, want 1", len(r.Manifests))
+	// Two manifests: the dep's own ConfigMap plus the Namespace the
+	// transform pass injects (the dep base ships no Namespace and its
+	// lock entry sets namespace=dep-ns).
+	if len(r.Manifests) != 2 {
+		t.Fatalf("manifests = %d, want 2", len(r.Manifests))
+	}
+	if _, err := os.Stat(filepath.Join(wantOut, "manifests", "namespace-dep-ns.yaml")); err != nil {
+		t.Errorf("expected injected Namespace namespace-dep-ns.yaml: %v", err)
 	}
 
 	// The dep's namespace from its lock entry (dep-ns) drove its

@@ -32,10 +32,15 @@ import (
 // compose tree. All paths in Loaded must already be symlink-resolved upstream
 // (Render does this).
 type composeInputs struct {
-	Loaded            *ipkg.Loaded
-	Selection         *api.Selection
-	Chain             *api.FunctionChain // resolved; may have zero groups
-	TransformerBinary string             // absolute path to the installer binary
+	Loaded    *ipkg.Loaded
+	Selection *api.Selection
+	Chain     *api.FunctionChain // resolved; may have zero groups
+	// Namespace is the install namespace (the wizard's --namespace). It is
+	// written into the ConfigHubTransformers functionConfig so the transform
+	// pass can guarantee a Namespace resource exists. Empty disables that
+	// guarantee.
+	Namespace         string
+	TransformerBinary string // absolute path to the installer binary
 }
 
 // composeKustomization writes a synthesized kustomization tree under
@@ -105,9 +110,17 @@ func composeKustomization(in composeInputs, composeDir string) error {
 	// elided so trivial packages don't pay for an exec subprocess they
 	// don't use.
 	needsWrapper := false
-	if in.Chain != nil && len(in.Chain.Spec.Groups) > 0 {
+	var groups []api.FunctionGroup
+	if in.Chain != nil {
+		groups = in.Chain.Spec.Groups
+	}
+	// Wire the transform pass when the package has function groups OR when an
+	// install namespace is set — in the latter case the pass runs even with
+	// zero author groups, solely to guarantee a Namespace resource exists in
+	// the rendered output (see ensureNamespace in the transformer).
+	if len(groups) > 0 || in.Namespace != "" {
 		if err := writeKRMFunctionConfig(composeDir, "transformers.yaml", kindConfigHubTransformers,
-			pkg.Metadata.Name+"-transformers", in.Chain.Spec.Groups); err != nil {
+			pkg.Metadata.Name+"-transformers", in.Namespace, groups); err != nil {
 			return err
 		}
 		composed.Transformers = append(composed.Transformers, "transformers.yaml")
@@ -158,7 +171,8 @@ type krmFunctionConfig struct {
 	Kind       string                `yaml:"kind"`
 	Metadata   krmFunctionConfigMeta `yaml:"metadata"`
 	Spec       struct {
-		Groups []api.FunctionGroup `yaml:"groups"`
+		Namespace string              `yaml:"namespace,omitempty"`
+		Groups    []api.FunctionGroup `yaml:"groups,omitempty"`
 	} `yaml:"spec"`
 }
 
@@ -176,7 +190,7 @@ type krmFunctionConfigMeta struct {
 // config into the synthesized kustomization.
 const kindConfigHubTransformers = "ConfigHubTransformers"
 
-func writeKRMFunctionConfig(composeDir, filename, kind, name string, groups []api.FunctionGroup) error {
+func writeKRMFunctionConfig(composeDir, filename, kind, name, namespace string, groups []api.FunctionGroup) error {
 	cfg := krmFunctionConfig{
 		APIVersion: api.APIVersion,
 		Kind:       kind,
@@ -187,6 +201,7 @@ func writeKRMFunctionConfig(composeDir, filename, kind, name string, groups []ap
 			},
 		},
 	}
+	cfg.Spec.Namespace = namespace
 	cfg.Spec.Groups = groups
 	body, err := yaml.Marshal(cfg)
 	if err != nil {
