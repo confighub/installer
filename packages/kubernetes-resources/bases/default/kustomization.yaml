@@ -1,9 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# All 11 example resources, derived from
-# confighub-skills/skills/skill-examples-bootstrap/examples/. Each
-# file may declare one or more resources; render's per-resource
-# split lands one Unit per top-level resource.
+# Canonical example resources. The first 11 are derived from
+# confighub-skills/skills/skill-examples-bootstrap/examples/; the
+# trailing three are common CRD shapes (cert-manager Certificate,
+# Traefik IngressRoute, External Secrets ExternalSecret). Each file
+# may declare one or more resources; render's per-resource split
+# lands one Unit per top-level resource.
 #
 # `install new` (in the installer CLI) looks these up by their
 # rendered Unit slugs and pulls each as a starting template for
@@ -20,3 +22,6 @@ resources:
   - hello-rbac.yaml
   - hello-hpa.yaml
   - hello-pdb.yaml
+  - hello-certificate.yaml
+  - hello-ingressroute.yaml
+  - hello-externalsecret.yaml

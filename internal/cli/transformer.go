@@ -67,6 +67,12 @@ type functionConfigHeader struct {
 	} `yaml:"metadata"`
 	Spec struct {
 		Groups []api.FunctionGroup `yaml:"groups"`
+		// Namespace is the install namespace (the wizard's --namespace).
+		// compose threads it in so the transform pass can guarantee a
+		// Namespace resource exists before the function groups run — some
+		// upstreams (Argo CD, plain kustomize bases) ship no Namespace and
+		// rely on `kubectl apply -n`. Empty disables the guarantee.
+		Namespace string `yaml:"namespace,omitempty"`
 	} `yaml:"spec"`
 }
 
@@ -146,6 +152,12 @@ func runTransformer(ctx context.Context, in []byte) ([]byte, error) {
 
 	switch header.Kind {
 	case kindConfigHubTransformers:
+		// Guarantee a Namespace resource exists before the function groups
+		// run, so chain functions (set-namespace, set-pod-security-defaults)
+		// operate on it. No-op when the rendered set already has one.
+		if err := ensureNamespace(&list, header.Spec.Namespace); err != nil {
+			return nil, err
+		}
 		if err := runChainTransform(ctx, &list, header); err != nil {
 			return nil, err
 		}
@@ -212,6 +224,63 @@ func runChainTransform(ctx context.Context, list *resourceList, header functionC
 		list.Items = items
 	}
 	return nil
+}
+
+// ensureNamespace prepends a v1/Namespace named ns to list.Items when no
+// Namespace resource is already present. It runs before the function chain,
+// so the injected resource is mutated by the same chain as everything else
+// (e.g. set-namespace renames it to the canonical name — a no-op here since
+// it already carries ns — and set-pod-security-defaults stamps PSA labels).
+//
+// ns is the install namespace (compose threads it in from --namespace). When
+// empty the guarantee is disabled and this is a no-op: there's no name to
+// give the Namespace, and a package that declares no namespace input has
+// opted out.
+func ensureNamespace(list *resourceList, ns string) error {
+	if ns == "" {
+		return nil
+	}
+	for i := range list.Items {
+		apiVersion, kind := apiVersionKind(&list.Items[i])
+		if kind == "Namespace" && apiVersion == "v1" {
+			return nil // already have one — leave the author's in place
+		}
+	}
+	var nsNode yaml.Node
+	doc := fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", ns)
+	if err := yaml.Unmarshal([]byte(doc), &nsNode); err != nil {
+		return fmt.Errorf("build Namespace resource: %w", err)
+	}
+	// yaml.Unmarshal wraps the mapping in a DocumentNode; items hold the
+	// bare mapping node.
+	item := nsNode
+	if nsNode.Kind == yaml.DocumentNode && len(nsNode.Content) > 0 {
+		item = *nsNode.Content[0]
+	}
+	// Prepend so the Namespace sorts ahead of the resources it scopes; the
+	// per-resource split re-sorts by slug anyway, so this is cosmetic.
+	list.Items = append([]yaml.Node{item}, list.Items...)
+	return nil
+}
+
+// apiVersionKind reads the apiVersion and kind scalars off a resource node.
+func apiVersionKind(node *yaml.Node) (apiVersion, kind string) {
+	n := node
+	if n.Kind == yaml.DocumentNode && len(n.Content) > 0 {
+		n = n.Content[0]
+	}
+	if n.Kind != yaml.MappingNode {
+		return "", ""
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		switch n.Content[i].Value {
+		case "apiVersion":
+			apiVersion = n.Content[i+1].Value
+		case "kind":
+			kind = n.Content[i+1].Value
+		}
+	}
+	return apiVersion, kind
 }
 
 func runValidatorTransform(ctx context.Context, list *resourceList, header functionConfigHeader) error {

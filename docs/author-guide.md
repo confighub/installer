@@ -391,6 +391,36 @@ patches). The function chain handles install-time mutations driven by
 operator answers. Image overrides for occasional patch-level bumps
 are a special case — see "Image overrides" below.
 
+### Namespace guarantee
+
+The rendered output is **guaranteed to contain a `Namespace` resource**
+when an install namespace is set (the wizard's `--namespace`). If your
+package's manifests already declare a `Namespace` (e.g. you vendored one,
+or your base ships it), that one is used as-is. If they don't — many
+upstreams (Argo CD's `install.yaml`, bare kustomize bases) omit it and
+rely on `kubectl apply -n` — the transform pass injects a minimal
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: <install-namespace>
+```
+
+**before your function chain runs**, so it's mutated by the same chain as
+everything else: `set-namespace` finds it (a no-op rename, since it
+already carries the install namespace), and a `set-pod-security-defaults`
+group will stamp PSA labels onto it. You therefore don't need to author a
+placeholder `Namespace` just so `set-namespace` has something to rename,
+and you don't need to tell operators to `kubectl create namespace` first.
+
+The check is "is there already a `v1/Namespace`?" — exactly one Namespace
+ends up in the output either way; the injector never adds a duplicate. The
+guarantee is disabled only when no install namespace is supplied (a
+package with no namespace input has opted out). Cluster-scoped-only
+packages (CRDs, ClusterRoles) that legitimately install nothing namespaced
+should leave `--namespace` unset.
+
 ### `spec.externalRequires`
 
 Cluster preconditions your package needs but does not provide. The

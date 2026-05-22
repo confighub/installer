@@ -2,7 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: argocd
-  version: 3.3.0
+  version: 3.4.2
   kubeVersion: ">= 1.28"
 spec:
   bases:

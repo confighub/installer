@@ -103,6 +103,7 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		Loaded:            opts.Loaded,
 		Selection:         opts.Selection,
 		Chain:             chain,
+		Namespace:         opts.Inputs.Spec.Namespace,
 		TransformerBinary: transformerBin,
 	}, composeDir); err != nil {
 		return nil, err

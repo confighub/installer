@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hello-app
+  namespace: confighubplaceholder
+  annotations:
+    # external-dns publishes a DNS record pointing at this target. Left as a
+    # placeholder so a per-env PostClone trigger substitutes the load-balancer
+    # hostname.
+    external-dns.alpha.kubernetes.io/target: confighubplaceholder
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`confighubplaceholder`)
+      services:
+        - name: hello-app
+          port: 80
+  tls:
+    secretName: hello-app-tls
