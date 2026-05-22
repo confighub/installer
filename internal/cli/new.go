@@ -57,6 +57,9 @@ var kindToExample = map[string]canonicalExample{
 	"pdb":                     {kind: "poddisruptionbudget", origName: "hello-app"},
 	"networkpolicy":           {kind: "networkpolicy", origName: "default-deny-all"},
 	"namespace":               {kind: "namespace", origName: ""},
+	"certificate":             {kind: "certificate", origName: "hello-app"},
+	"ingressroute":            {kind: "ingressroute", origName: "hello-app"},
+	"externalsecret":          {kind: "externalsecret", origName: "hello-app"},
 }
 
 func sortedKindNames() []string {
