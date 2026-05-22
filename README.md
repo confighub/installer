@@ -25,6 +25,13 @@ by storing the configuration data rather than re-rendering from scratch. That de
 [configuration editing](https://itnext.io/configuration-editing-is-imperative-fa9db379fbe4).
 Changes [can be merged](https://docs.confighub.com/guide/variants/#merging-external-sources-into-confighub).
 
+This enables customizations that would need to all be combined a single generator in configuration
+as code to be decoupled. For example, configuration can be initially [authored](https://docs.confighub.com/guide/authoring-config/)
+using whatever tools are most effective. Subsequently, installation can customize the configuration.
+Then additional changes can be made post-installation, during and after [variant creation](https://docs.confighub.com/guide/variants/),
+and then operationally. Changes made at a later stage can be preserved while merging updates from
+upstream sources. Edits can be automated with tools, as well.
+
 More explanation of the tool's approach can be found in [Design principles](docs/principles.md).
 
 With the configuration-as-data approach, code that operates on configuration is separate from
@@ -45,8 +52,14 @@ and general-purpose editing functions, such as `yq-i`, `set-string-path`, `delet
 Why not just [kustomize](https://kustomize.io), or [kpt](https://kpt.dev)? Neither tool
 was really designed to be a full-blown installer, and package management was explicitly
 [out of scope](https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/scope.md)
-for kustomize and kubectl. A lot was learned from kustomize and kpt, but starting afresh made it
-easier to experiment with different design choices.
+for kustomize and kubectl. As shown in the [kpt guide](./docs/kpt-guide.md), together they
+can enable simplifying the installation process, and ConfigHub's function suite provides more capabilities
+out than [kustomize's built-in transformers](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/#kustomize-feature-list)
+and [kpt's function catalog](https://catalog.kpt.dev/).
+
+Additionally, a lot was learned from kustomize and kpt, but starting afresh made it
+easier to experiment with different design choices, such as pushing packages to OCI,
+storing rendered configuration somewhere other than git, and so on.
 
 ## Status
 
