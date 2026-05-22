@@ -11,9 +11,12 @@ This installer aims to present only the minimal number of high-level decisions, 
 which components to install and where to install them. It is recommended to set reasonable
 defaults as much as possible.
 
-For cases where installation decisions depend on hardware, operating system, networking,
-or other details of the deployment Target, we plan to add a mechanism for retrieving discovered
-Target facts. Currently there's a local fact collection extension point.
+There's a local "fact collection" extension point. This can be used to collect details about
+the workload being deployed, verify existence of dependencies, and/or to retrieve or generate
+secrets and convert them to Kubernetes secrets. For cases where installation decisions depend
+on hardware, operating system, networking, or other details of the target cluster, Target Facts
+can be used, and can also be collected (assuming permission and access to the cluster) using
+`cub k8s collect <target>`.
 
 As with installer wizards for systems other than Kubernetes, changes to detailed default
 settings are deferred until after installation. Configuration as data makes this possible
