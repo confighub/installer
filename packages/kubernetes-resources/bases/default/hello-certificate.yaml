@@ -11,4 +11,7 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  secretName: hello-app-tls
+  # The Secret cert-manager produces. Left as a placeholder so ConfigHub
+  # Links resolve it to a Secret Unit's slug when one is created; without a
+  # Link, edit it to the desired Secret name.
+  secretName: confighubplaceholder
