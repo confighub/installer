@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -19,7 +22,7 @@ tags are convention-only — installer treats them as mutable aliases that
 authors maintain.
 
 Example:
-  install tag oci://ghcr.io/confighubai/foo:0.3.2 stable`,
+  installer tag oci://ghcr.io/confighubai/foo:0.3.2 stable`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

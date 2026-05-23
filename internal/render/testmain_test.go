@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render_test
 
 import (
@@ -11,7 +14,7 @@ import (
 // installerBin is the path to a freshly-built installer binary, set by
 // TestMain and consumed by Render-driven tests via Options.TransformerBinary.
 // We can't use the go-test binary directly because it doesn't implement the
-// `install transformer` subcommand kustomize invokes through the wrapper
+// `installer transformer` subcommand kustomize invokes through the wrapper
 // script in out/compose/.
 var installerBin string
 

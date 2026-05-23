@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -25,10 +28,10 @@ Requires the cosign binary on PATH (override via INSTALLER_COSIGN_BIN).
 
 Examples:
   # Keyless (interactive OIDC flow):
-  install sign oci://ghcr.io/me/pkg:0.1.0 --yes
+  installer sign oci://ghcr.io/me/pkg:0.1.0 --yes
 
   # Keyed:
-  install sign oci://ghcr.io/me/pkg:0.1.0 --key cosign.key`,
+  installer sign oci://ghcr.io/me/pkg:0.1.0 --key cosign.key`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

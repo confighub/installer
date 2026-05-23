@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package version exposes the installer build version. The default is "dev";
 // release builds set it via -ldflags:
 //

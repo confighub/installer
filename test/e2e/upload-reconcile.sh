@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# upload-reconcile.sh — end-to-end smoke for `install upload` against a
+# upload-reconcile.sh — end-to-end smoke for `installer upload` against a
 # live ConfigHub server, driven by the worker package so the test
 # exercises BOTH the standard Unit pathway and the AppConfig pathway
 # (render-configmap Invocation + AppConfig Unit + placeholder + Upsert
@@ -10,7 +10,7 @@
 #
 #   setup --pull   — pulls worker, runs collector (writes facts), renders
 #   pin image      — edits facts.yaml to a known release tag, re-renders
-#                    via `install render` (bypasses setup's collector,
+#                    via `installer render` (bypasses setup's collector,
 #                    which would overwrite facts back to :latest)
 #   make Target    — creates a Target in its own Space so the upload can
 #                    bind Units to it via cross-Space <space>/<target>
@@ -48,7 +48,7 @@
 #
 # (Never deletes the `default` Space.)
 #
-# Full output of every `install` and `cub` invocation is written to a
+# Full output of every `installer` and `cub` invocation is written to a
 # per-step log file under the work-dir so debugging a failure does not
 # require re-running the (slow) flow.
 #
@@ -165,9 +165,9 @@ if cub space list 2>/dev/null | awk '{print $1}' | grep -qx "$SPACE"; then
 fi
 
 # 2. Build.
-log "build install"
-( cd "$REPO_ROOT" && go build -o bin/install ./cmd/installer )
-BIN="$REPO_ROOT/bin/install"
+log "build installer"
+( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
+BIN="$REPO_ROOT/bin/installer"
 
 # 3. Pre-create the destination Space so the worker collector can
 #    create the BridgeWorker entity in it (--input space=$SPACE).
@@ -198,12 +198,12 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
 [[ -d "$WORK_TMP/out/secrets" ]] || fail "expected $WORK_TMP/out/secrets/ (rendered Secret routed off the upload path)"
 
 # 5. Pin the image to a known release tag by editing facts.yaml and
-#    re-rendering via `install render` (NOT setup, which would re-run
+#    re-rendering via `installer render` (NOT setup, which would re-run
 #    the collector and revert image back to whatever the server
 #    reports — :latest, locally). This both demonstrates that .Facts
 #    is a supported override point and gives us a stable image string
 #    to assert against downstream.
-log "pin worker image to $PINNED_IMAGE (edit facts.yaml + install render)"
+log "pin worker image to $PINNED_IMAGE (edit facts.yaml + installer render)"
 note "collector-reported image was:"
 grep -E '^[[:space:]]+image:' "$WORK_TMP/out/spec/facts.yaml" | sed 's/^/      /'
 # Use python for a safe in-place YAML update — preserves other fact keys.
@@ -264,7 +264,7 @@ note "Target $TARGET_SPACE/$TARGET_SLUG → TargetID $TARGET_ID"
 #    free-form --space-label / --space-annotation pairs, the --unit-label
 #    / --unit-annotation pairs on every Unit, and binding Units to the
 #    cross-Space Target (whose TargetID is recorded as a Space annotation).
-log "install upload --space $SPACE (first upload — exercises AppConfig pathway + Space/Unit metadata + cross-Space --target)"
+log "installer upload --space $SPACE (first upload — exercises AppConfig pathway + Space/Unit metadata + cross-Space --target)"
 run upload-first "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" \
   --component my-component \
   --layer App \
@@ -346,14 +346,14 @@ appcfg_tid=$(unit_jq confighub-worker-env .Unit.TargetID)
 note "AppConfig Unit confighub-worker-env has no Target (pure data source)"
 
 # 7. plan against unchanged work-dir → No changes.
-log "install plan (clean) — expect No changes"
+log "installer plan (clean) — expect No changes"
 run plan-clean "$BIN" plan --work-dir "$WORK_TMP" || fail "plan failed (see $WORK_TMP/plan-clean.log)"
 grep -q "^No changes\\.$" "$WORK_TMP/plan-clean.log" \
   || fail "plan against just-uploaded work-dir should report No changes (see $WORK_TMP/plan-clean.log)"
 
 # 8. AppConfig round-trip FIRST (before the Deployment-edit step):
 #    change a real value in the env carrier locally, re-render via
-#    install render (NOT setup — which would re-run the collector and
+#    installer render (NOT setup — which would re-run the collector and
 #    revert the pinned image), then reconcile via upload. Proves the
 #    AppConfig pathway picks up source-format changes AND that the
 #    diff's AppConfig-aware path (UnitSlug detection + raw-content
@@ -396,7 +396,7 @@ grep -q "^CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093$" "$WORK_TMP/confighub-worker-e
 note "AppConfig Unit body now has CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093"
 
 # 9. Second upload — converges, no ChangeSet opened.
-log "install upload (no changes after AppConfig edit) — re-run is a no-op"
+log "installer upload (no changes after AppConfig edit) — re-run is a no-op"
 run upload-converge-1 "$BIN" upload --work-dir "$WORK_TMP" || fail "converge upload failed (see $WORK_TMP/upload-converge-1.log)"
 grep -q "^No changes\\.$" "$WORK_TMP/upload-converge-1.log" \
   || fail "upload on the same work-dir after AppConfig reconcile should be No changes (see $WORK_TMP/upload-converge-1.log)"
@@ -441,7 +441,7 @@ note "set-once verified: Environment→Staging; Component/Layer/Region + TargetI
 # 10. Edit a rendered Kubernetes manifest (the Deployment) → plan
 #     surfaces the diff. This exercises the standard (non-AppConfig)
 #     update path. The marker is injected into out/manifests/ AFTER
-#     render, so a subsequent install render would strip it — but we
+#     render, so a subsequent installer render would strip it — but we
 #     don't re-render here, so the marker stays for the reconcile
 #     dry-run.
 log "edit rendered Deployment, plan surfaces diff"
@@ -469,7 +469,7 @@ grep -q "~ $EDIT_SLUG" "$WORK_TMP/plan-edited.log" \
   || fail "plan after edit should name the edited slug ($EDIT_SLUG) (see $WORK_TMP/plan-edited.log)"
 
 # 11. upload reconcile — applies the diff inside a ChangeSet.
-log "install upload (reconcile Deployment marker) — applies 1 change"
+log "installer upload (reconcile Deployment marker) — applies 1 change"
 run upload-reconcile "$BIN" upload --work-dir "$WORK_TMP" --yes || fail "upload reconcile failed (see $WORK_TMP/upload-reconcile.log)"
 grep -q "^Applied: 0 created, 1 updated, 0 emptied\\.$" "$WORK_TMP/upload-reconcile.log" \
   || fail "upload reconcile should apply 1 change (see $WORK_TMP/upload-reconcile.log)"
@@ -489,7 +489,7 @@ grep -q "installer-test-marker: 'true'" "$WORK_TMP/deployment.after.txt" \
 note "Deployment Unit body now has the installer-test-marker label"
 
 # 12. Second upload — converges, no ChangeSet opened.
-log "install upload (no changes after Deployment edit) — re-run is a no-op"
+log "installer upload (no changes after Deployment edit) — re-run is a no-op"
 run upload-converge-2 "$BIN" upload --work-dir "$WORK_TMP" || fail "converge upload failed (see $WORK_TMP/upload-converge-2.log)"
 grep -q "^No changes\\.$" "$WORK_TMP/upload-converge-2.log" \
   || fail "upload on the same work-dir after Deployment reconcile should be No changes (see $WORK_TMP/upload-converge-2.log)"

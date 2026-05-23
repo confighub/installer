@@ -2,7 +2,7 @@
 #
 # ConfigHub worker installer — fact collector.
 #
-# Invoked by `install wizard` with the package working copy as cwd. The
+# Invoked by `installer wizard` with the package working copy as cwd. The
 # installer passes:
 #
 #   INSTALLER_PACKAGE_DIR          absolute path to this package on disk

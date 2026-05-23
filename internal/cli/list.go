@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -17,7 +20,7 @@ func newListCmd() *cobra.Command {
 the tags.
 
 Example:
-  install list oci://ghcr.io/confighubai/gateway-api`,
+  installer list oci://ghcr.io/confighubai/gateway-api`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()

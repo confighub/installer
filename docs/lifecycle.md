@@ -35,7 +35,7 @@ the user do X," that doc says why.
 
 ## Non-goals
 
-- **Cluster drift detection.** `install plan` diffs the new render
+- **Cluster drift detection.** `installer plan` diffs the new render
   against ConfigHub state; it does not look at the live cluster. Cluster
   reconciliation is `cub-apply` / `verify-apply` / `drift-reconcile`.
 - **Bidirectional sync.** ConfigHub state is the source of truth for
@@ -67,15 +67,15 @@ working-dir argument anywhere. A typical session is:
 
 ```bash
 mkdir my-install && cd my-install
-install setup --pull oci://ghcr.io/foo/bar:1.0 --namespace foo
-install upload --space foo-prod
+installer setup --pull oci://ghcr.io/foo/bar:1.0 --namespace foo
+installer upload --space foo-prod
 ```
 
 Or for advanced use with an explicit work-dir:
 
 ```bash
-install setup --pull oci://… --work-dir /tmp/foo --namespace foo
-install upload --work-dir /tmp/foo --space foo-prod
+installer setup --pull oci://… --work-dir /tmp/foo --namespace foo
+installer upload --work-dir /tmp/foo --space foo-prod
 ```
 
 The layout under `<work-dir>` is:
@@ -106,20 +106,20 @@ prior `package/` in an indeterminate state. There is no durable
 `.upgrade/` staging area; if you want a record of the prior package
 source, commit `<work-dir>/package/` to git before re-pulling.
 
-### `install setup`
+### `installer setup`
 
 One-shot install + upgrade. Combines `pull` (optional) + `wizard` +
 `render` into a single command:
 
 ```bash
-install setup [--pull <ref>] [--work-dir <dir>] [wizard flags] [render flags]
+installer setup [--pull <ref>] [--work-dir <dir>] [wizard flags] [render flags]
 ```
 
 - `--pull <ref>` is optional. When present, fetches the package and
   replaces `<work-dir>/package/`. When absent, assumes the package is
   already pulled (use this form to re-render after editing
   `out/spec/inputs.yaml`, or after the package was pulled via a
-  separate `install pull` invocation).
+  separate `installer pull` invocation).
 - Supports every flag the granular `wizard` and `render` commands
   accept: `--namespace`, `--select`, `--input`, `--non-interactive`,
   `--components`, `--set-image`, `--reuse`, `--base`, `--clean`.
@@ -134,7 +134,7 @@ install setup [--pull <ref>] [--work-dir <dir>] [wizard flags] [render flags]
   carries forward values that still apply, adopts new defaults, drops
   removed inputs, prompts (interactive) or fails fast (non-interactive)
   for newly-required inputs without defaults. Same machinery used by
-  the old `install upgrade` command, now applied uniformly to every
+  the old `installer upgrade` command, now applied uniformly to every
   re-run.
 - Even when `--pull <same-version>` is passed (no version change),
   setup still goes through the upgrade flow — re-runs the collector,
@@ -147,37 +147,37 @@ The end-to-end one-time install:
 
 ```bash
 mkdir my-install && cd my-install
-install setup --pull oci://ghcr.io/foo/bar:1.0 --namespace foo \
+installer setup --pull oci://ghcr.io/foo/bar:1.0 --namespace foo \
     --input replicas=3
-install upload --space foo-prod
+installer upload --space foo-prod
 ```
 
 The upgrade (same command, different version):
 
 ```bash
-install setup --pull oci://ghcr.io/foo/bar:2.0
-install upload
+installer setup --pull oci://ghcr.io/foo/bar:2.0
+installer upload
 ```
 
 Re-render after editing inputs:
 
 ```bash
 $EDITOR out/spec/inputs.yaml
-install setup            # no --pull → reuses package, re-renders
-install upload
+installer setup            # no --pull → reuses package, re-renders
+installer upload
 ```
 
 Image-only bump:
 
 ```bash
-install setup --set-image foo=foo:v2
-install upload
+installer setup --set-image foo=foo:v2
+installer upload
 ```
 
-### `install pull`
+### `installer pull`
 
 ```bash
-install pull <ref> [--work-dir <dir>]
+installer pull <ref> [--work-dir <dir>]
 ```
 
 Fetches a package reference and writes it to `<work-dir>/package/`. The
@@ -188,10 +188,10 @@ success; any prior `<work-dir>/package/` is replaced.
 This is the granular form. Most operators don't need it — `setup
 --pull <ref>` runs pull as its first step.
 
-### `install wizard`
+### `installer wizard`
 
 ```bash
-install wizard <ref> [--work-dir <dir>] [--render=false]
+installer wizard <ref> [--work-dir <dir>] [--render=false]
 ```
 
 Pulls the package (same as `pull`) and runs the interactive (or
@@ -206,20 +206,20 @@ positional) and is more explicit about its Q&A role — useful when
 the operator wants the wizard to walk through prompts explicitly
 rather than carry forward silently.
 
-### `install render`
+### `installer render`
 
 ```bash
-install render [--work-dir <dir>] [--clean]
+installer render [--work-dir <dir>] [--clean]
 ```
 
 Reads `<work-dir>/package/` + `<work-dir>/out/spec/` and produces
 `<work-dir>/out/manifests/`. Deterministic — same package + same spec
 + same collector output = byte-identical rendered Units.
 
-### `install upload`
+### `installer upload`
 
 ```bash
-install upload [--work-dir <dir>] [--space <slug> | --space-pattern <tmpl>]
+installer upload [--work-dir <dir>] [--space <slug> | --space-pattern <tmpl>]
                  [--target <slug>] [--annotation k=v] [--label k=v]
                  [--retry] [--yes] [--changeset <slug>]
 ```
@@ -237,7 +237,7 @@ work-dir has been uploaded before:
   intra-Space NeedsProvides link inference. Writes
   `out/spec/upload.yaml` at the end.
 - **Reconcile** — `out/spec/upload.yaml` exists. Re-computes the same
-  plan `install plan` would produce, opens one ChangeSet per Space,
+  plan `installer plan` would produce, opens one ChangeSet per Space,
   runs `cub unit update --merge-external-source --changeset <slug>` for
   updates, `cub unit create` for adds, and for Units that dropped out of
   the rendered output, `cub unit update --merge-external-source` with
@@ -280,10 +280,10 @@ splitting "create" and "reconcile") follows the
 `kubectl apply` model — the operator says "make ConfigHub match this
 work-dir" and the command figures out what that means.
 
-### `install plan`
+### `installer plan`
 
 ```bash
-install plan [--work-dir <dir>]
+installer plan [--work-dir <dir>]
 ```
 
 Read-only diff vs ConfigHub. Same code path as `upload` reconcile, but
@@ -335,7 +335,7 @@ spec:
   organizationID: org_01JDQP70M348Z3M2FK7ZKS9Q1A
 ```
 
-`install upload` writes this file at the end of a successful first
+`installer upload` writes this file at the end of a successful first
 upload, and rewrites it on each successful reconcile (timestamp +
 member list refresh). All subsequent commands read it on entry to
 locate the current Spaces. It is also embedded in the
@@ -360,7 +360,7 @@ install answered. The schema-diff machinery handles the cases:
 - **New input with default**: silently adopted. Logged.
 - **New required input without default**: prompted in interactive
   mode; non-interactive mode fails fast naming each missing input and
-  pointing at running setup interactively (or `install wizard
+  pointing at running setup interactively (or `installer wizard
   <ref>`).
 - **Removed input**: silently dropped from the new `inputs.yaml`.
 - **Type-changed input**: errors with a re-run-interactively hint.
@@ -384,7 +384,7 @@ the recommended path depends on how often the override is expected:
 - **Occasional override (mirror, patch bump)** — package author
   declares a kustomize `images:` transformer in the chosen base.
   Operator passes `--set-image name=ref` (repeatable) to `installer
-  setup` or `install wizard`; the installer runs `kustomize edit set
+  setup` or `installer wizard`; the installer runs `kustomize edit set
   image` against the package's working copy before render. The
   `--set-image` value is recorded in `out/spec/inputs.yaml` under
   `spec.imageOverrides` so the next setup carries it forward without
@@ -394,14 +394,14 @@ the recommended path depends on how often the override is expected:
   Operator answers the input through the wizard.
 - **Post-install one-off** — operator runs `cub function do
   set-container-image` on the uploaded Unit. Survives re-render
-  because `install upload` uses `--merge-external-source`.
+  because `installer upload` uses `--merge-external-source`.
 
-`install plan` and `install upload` print a per-Space `Images:`
+`installer plan` and `installer upload` print a per-Space `Images:`
 footer built from `cub function do --space <slug> get-container-image '*'`
 against the new render (locally, before any update), so the operator
 can see the eventual image set without applying anything.
 
-`install setup --set-image` against a package whose base has no
+`installer setup --set-image` against a package whose base has no
 `images:` transformer fails fast with a useful message: "package's
 base kustomization.yaml has no `images:` block; declare one to use
 --set-image, or use a `spec.transformers` input."
@@ -410,31 +410,31 @@ base kustomization.yaml has no `images:` block; declare one to use
 
 - **Image tag bump** — the day-2 case:
   ```bash
-  install setup --set-image hello=hello:v2
-  install upload
+  installer setup --set-image hello=hello:v2
+  installer upload
   ```
   Plan shows a one-line image change.
 - **Adding a component**:
   ```bash
   $EDITOR out/spec/selection.yaml
-  install setup --non-interactive   # re-renders against edited selection
-  install plan                       # preview
-  install upload                     # materialize
+  installer setup --non-interactive   # re-renders against edited selection
+  installer plan                       # preview
+  installer upload                     # materialize
   ```
 - **Package version bump with new required input**:
   ```bash
-  install setup --pull oci://reg/hello-app:0.2.0
+  installer setup --pull oci://reg/hello-app:0.2.0
   ```
   In interactive mode, prompts for the new required input. In
   non-interactive mode, fails fast with a hint to re-run
   interactively.
 - **Cluster state changed (collector picks up new fact)**:
   ```bash
-  install setup --pull oci://reg/hello-app:<same-version>
-  install upload
+  installer setup --pull oci://reg/hello-app:<same-version>
+  installer upload
   ```
   Re-runs the collector, re-renders, upload reconciles.
-- **Reverting an `install upload` reconcile**:
+- **Reverting an `installer upload` reconcile**:
   ```bash
   cub unit update --restore Before:ChangeSet:<slug> \
       --where "Labels.Package='hello-app'"
@@ -482,7 +482,7 @@ The current shape removes friction:
 ## Open questions
 
 - Should `setup` print the eventual plan it would write to ConfigHub
-  before exiting? Today the operator runs `install plan` separately;
+  before exiting? Today the operator runs `installer plan` separately;
   we could chain the plan readout into setup the way `upgrade` used to
   print plan. Current decision: keep them separate so setup is
   ConfigHub-free (no `cub` call on the local-only path).

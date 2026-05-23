@@ -2,6 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: confighub-worker
+installerMetadata:
   version: 0.1.0
 spec:
   bases:
@@ -49,7 +50,7 @@ spec:
         cub space that holds the BridgeWorker entity. When empty (the
         default), the collector relies on the active context's default
         space. This is independent of the destination space passed to
-        `install upload --space`; the two may differ when the worker
+        `installer upload --space`; the two may differ when the worker
         lives in a platform space but applies Units in env-specific spaces.
 
   validation:

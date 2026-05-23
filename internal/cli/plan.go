@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -21,7 +24,7 @@ func newPlanCmd() *cobra.Command {
 	var workDir string
 	cmd := &cobra.Command{
 		Use:   "plan",
-		Short: "Show what install upload would change in ConfigHub",
+		Short: "Show what installer upload would change in ConfigHub",
 		Long: `Plan diffs the work-dir's rendered output against the corresponding
 ConfigHub Spaces and prints a terraform-style summary of adds, updates,
 and deletes per Space, plus the post-render image set per Space.
@@ -30,7 +33,7 @@ Plan is read-only — it does not mutate ConfigHub. Use 'installer
 upload' to execute the plan.
 
 Plan reads <work-dir>/out/spec/upload.yaml to locate the Spaces; if
-upload.yaml is missing, run 'install upload --space <slug>' first.
+upload.yaml is missing, run 'installer upload --space <slug>' first.
 The active cub organization and server are sanity-checked against the
 recorded values; mismatch fails fast.
 

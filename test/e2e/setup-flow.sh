@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# setup-flow.sh — end-to-end smoke for the consolidated `install setup`
+# setup-flow.sh — end-to-end smoke for the consolidated `installer setup`
 # command. Exercises the local pipeline (no ConfigHub required):
 #
 #   first install via setup --pull
@@ -43,9 +43,9 @@ cleanup() {
 trap cleanup EXIT
 
 # 1. Build.
-log "build install"
-( cd "$REPO_ROOT" && go build -o bin/install ./cmd/installer )
-BIN="$REPO_ROOT/bin/install"
+log "build installer"
+( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
+BIN="$REPO_ROOT/bin/installer"
 
 # 2. Stage two versions of hello-app to drive an upgrade flow against
 #    local paths (no OCI registry needed). v2 adds a new input with a
@@ -146,18 +146,18 @@ log "setup --pull (no --set-image) — override carries forward"
 grep -q 'plain-text-v2' "$WORK_TMP/out/manifests"/*.yaml \
   || fail "image override should still be in the rendered manifest after re-pull"
 
-# 9. install pull --work-dir into a fresh dir.
+# 9. installer pull --work-dir into a fresh dir.
 PULL_WD=$(mktemp -d -t setup-flow-pull.XXXXXX)
-log "install pull --work-dir writes to <work-dir>/package/"
+log "installer pull --work-dir writes to <work-dir>/package/"
 "$BIN" pull "$PKG_V1" --work-dir "$PULL_WD" >/dev/null
 [[ -f "$PULL_WD/package/installer.yaml" ]] \
-  || fail "install pull should produce $PULL_WD/package/installer.yaml"
+  || fail "installer pull should produce $PULL_WD/package/installer.yaml"
 [[ ! -d "$PULL_WD/.tmp-pull-"* ]] \
-  || fail "install pull should not leave .tmp-pull-* staging behind on success"
+  || fail "installer pull should not leave .tmp-pull-* staging behind on success"
 
-# 10. install pull --work-dir on an existing dir replaces the package
+# 10. installer pull --work-dir on an existing dir replaces the package
 #     atomically.
-log "install pull --work-dir replaces existing package/ atomically"
+log "installer pull --work-dir replaces existing package/ atomically"
 sentinel="$PULL_WD/package/installer.yaml.sentinel"
 touch "$sentinel"
 "$BIN" pull "$PKG_V2" --work-dir "$PULL_WD" >/dev/null

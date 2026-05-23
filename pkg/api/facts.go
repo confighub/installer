@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Facts holds the values produced by the package's Collector script — install-
@@ -13,14 +16,22 @@ package api
 // by a kustomize secretGenerator, and the rendered Secret is routed to
 // out/secrets/ (never uploaded as a Unit).
 type Facts struct {
-	APIVersion string    `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string    `yaml:"kind" json:"kind"`
-	Metadata   Metadata  `yaml:"metadata" json:"metadata"`
-	Spec       FactsSpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "Facts".
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the doc's ObjectMeta-shaped metadata block.
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	// Spec carries the collected fact values.
+	Spec FactsSpec `yaml:"spec" json:"spec"`
 }
 
 type FactsSpec struct {
-	Package        string         `yaml:"package" json:"package"`
-	PackageVersion string         `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
-	Values         map[string]any `yaml:"values" json:"values"`
+	// Package is the source package name the facts were collected for.
+	Package string `yaml:"package" json:"package"`
+	// PackageVersion is the source package's SemVer at collection time.
+	PackageVersion string `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
+	// Values is the YAML map the collector wrote to stdout. Each key is
+	// referenced from function-chain templates as `{{ .Facts.<name> }}`.
+	Values map[string]any `yaml:"values" json:"values"`
 }

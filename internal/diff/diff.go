@@ -1,6 +1,9 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package diff computes and renders the diff between a work-dir's
 // rendered manifests and the corresponding ConfigHub Units. Used by
-// `install plan` (read-only) and `install update` (executes the
+// `installer plan` (read-only) and `installer update` (executes the
 // plan).
 //
 // The Package label written by upload (Package=<pkg.Name>) is what
@@ -306,7 +309,7 @@ func listCurrentSlugs(ctx context.Context, space, pkg string) ([]string, error) 
 // Mutations whose only content is ConfigHub bookkeeping (the
 // confighub.com/ResourceMergeID annotation injected by every
 // merge-external-source apply) are dropped — without this filter
-// `install update` does not converge on its second run, because the
+// `installer update` does not converge on its second run, because the
 // new file body lacks the annotation that cub injected on the prior
 // merge.
 func dryRunMutations(ctx context.Context, space, slug, sourceName, path string) (string, error) {

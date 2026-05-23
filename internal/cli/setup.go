@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -39,7 +42,7 @@ type flowOptions struct {
 	clean     bool
 }
 
-// runFlow is the shared body of `install setup` and `install wizard`.
+// runFlow is the shared body of `installer setup` and `installer wizard`.
 // It pulls (if pullRef is set), loads prior state, builds answers,
 // runs the wizard, optionally re-resolves deps, and optionally renders.
 func runFlow(ctx context.Context, opts flowOptions) error {
@@ -403,7 +406,7 @@ func unwrapErr(err error) error {
 
 // newSetupCmd is the all-in-one consumer entry point: optional pull,
 // wizard (smart re-entry with schema-diff when prior state exists),
-// render. Does not upload — `install upload` is the next step.
+// render. Does not upload — `installer upload` is the next step.
 func newSetupCmd() *cobra.Command {
 	var opts flowOptions
 	opts.runRender = true
@@ -425,7 +428,7 @@ Pull:
                      replaces <work-dir>/package/ atomically (failed
                      pulls leave the prior tree intact). When absent,
                      the work-dir must already contain a package/ tree
-                     (run setup with --pull first, or install pull
+                     (run setup with --pull first, or installer pull
                      <ref> --work-dir <dir>).
 
 Auto-detection:
@@ -440,10 +443,10 @@ against the (possibly newer) package's input + component schema:
 silently carries forward values that still apply, adopts new defaults,
 drops removed inputs, prompts (interactive) or fails fast
 (non-interactive) for newly-required inputs without defaults. Same
-machinery as the prior install upgrade command, applied uniformly
+machinery as the prior installer upgrade command, applied uniformly
 to every re-entry.
 
-Setup does NOT upload. Run install upload to push to ConfigHub.`,
+Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

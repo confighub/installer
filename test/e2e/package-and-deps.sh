@@ -58,8 +58,8 @@ trap cleanup EXIT
 
 # 1. Build.
 log "build installer"
-( cd "$REPO_ROOT" && go build -o bin/install ./cmd/installer )
-BIN="$REPO_ROOT/bin/install"
+( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
+BIN="$REPO_ROOT/bin/installer"
 
 # 2. Registry.
 log "start registry:2 on :$REGISTRY_PORT"
@@ -96,11 +96,18 @@ lock="$WORK_TMP/out/spec/lock.yaml"
 [[ -d "$WORK_TMP/package" ]] || fail "setup --pull should produce $WORK_TMP/package/"
 [[ ! -d "$WORK_TMP/.upgrade" ]] || fail "setup should NOT create .upgrade/ (atomic pull replaces package/)"
 
-# Parent should render exactly the Deployment.
+# Parent should render the Deployment plus the auto-injected Namespace
+# (example-stack does not declare a Namespace of its own, so the
+# render-time namespace guarantee adds one).
 parent_count=$(find "$parent_manifests" -type f -name '*.yaml' | wc -l | tr -d ' ')
-[[ "$parent_count" = "1" ]] || fail "parent has $parent_count manifests, want 1"
-grep -q 'kind: Deployment' "$parent_manifests"/*.yaml || fail "parent manifest is not a Deployment"
-grep -q '^  namespace: e2e-ns' "$parent_manifests"/*.yaml || fail "parent Deployment missing namespace: e2e-ns"
+[[ "$parent_count" = "2" ]] || fail "parent has $parent_count manifests, want 2 (Deployment + injected Namespace)"
+parent_dep="$parent_manifests/deployment-e2e-ns-example-stack.yaml"
+parent_ns="$parent_manifests/namespace-e2e-ns.yaml"
+[[ -f "$parent_dep" ]] || fail "missing $parent_dep"
+[[ -f "$parent_ns"  ]] || fail "missing $parent_ns (namespace-guarantee should inject one)"
+grep -q 'kind: Deployment' "$parent_dep" || fail "parent deployment manifest is not a Deployment"
+grep -q '^  namespace: e2e-ns' "$parent_dep" || fail "parent Deployment missing namespace: e2e-ns"
+grep -q '^  name: e2e-ns$' "$parent_ns" || fail "parent Namespace not named e2e-ns"
 
 # Dep should render exactly Namespace + ConfigMap, both in e2e-ns.
 dep_count=$(find "$dep_manifests" -type f -name '*.yaml' | wc -l | tr -d ' ')
@@ -115,7 +122,7 @@ grep -q '^  name: e2e-ns$' "$ns_file" || fail "Namespace not renamed to e2e-ns"
 grep -q 'name: base' "$lock" || fail "lock missing dep entry"
 grep -q '^      digest: sha256:' "$lock" || fail "lock missing pinned digest"
 
-echo "render assertions passed: parent=1 manifest, dep=2 manifests, lock has pinned digest"
+echo "render assertions passed: parent=2 manifests (Deployment + injected Namespace), dep=2 manifests, lock has pinned digest"
 
 # 6. Determinism: re-run setup --pull into a fresh dir and confirm
 #    every output file's sha256 matches.

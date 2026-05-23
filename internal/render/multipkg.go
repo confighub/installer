@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render
 
 import (
@@ -159,7 +162,7 @@ func buildDepWizardAnswers(pkg *api.Package, d api.LockedDependency, parent *api
 	// Carry the locked dep's identity onto Selection so re-render is keyed
 	// to the right package.
 	sel.Spec.Package = pkg.Metadata.Name
-	sel.Spec.PackageVersion = pkg.Metadata.Version
+	sel.Spec.PackageVersion = pkg.InstallerMetadata.Version
 
 	namespace := parent.Spec.Namespace
 	values := map[string]any{}
@@ -189,7 +192,7 @@ func buildDepWizardAnswers(pkg *api.Package, d api.LockedDependency, parent *api
 		Metadata:   api.Metadata{Name: pkg.Metadata.Name + "-inputs"},
 		Spec: api.InputsSpec{
 			Package:        pkg.Metadata.Name,
-			PackageVersion: pkg.Metadata.Version,
+			PackageVersion: pkg.InstallerMetadata.Version,
 			Namespace:      namespace,
 			Values:         values,
 		},

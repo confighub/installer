@@ -7,7 +7,7 @@ kind: Kustomization
 # may declare one or more resources; render's per-resource split
 # lands one Unit per top-level resource.
 #
-# `install new` (in the installer CLI) looks these up by their
+# `installer new` (in the installer CLI) looks these up by their
 # rendered Unit slugs and pulls each as a starting template for
 # operator-authored resources.
 resources:

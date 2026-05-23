@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package diff
 
 import (
@@ -253,8 +256,8 @@ func TestDescriptionOrDefault(t *testing.T) {
 	cases := []struct {
 		d, pkg, ver, want string
 	}{
-		{"", "hello", "0.1.0", "install update from hello@0.1.0"},
-		{"", "hello", "", "install update from hello"},
+		{"", "hello", "0.1.0", "installer update from hello@0.1.0"},
+		{"", "hello", "", "installer update from hello"},
 		{"manual desc", "hello", "0.1.0", "manual desc"},
 	}
 	for _, tc := range cases {

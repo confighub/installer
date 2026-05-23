@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package deps
 
 import (
@@ -60,11 +63,11 @@ func Resolve(ctx context.Context, pkg *api.Package, src Source, opts Options) (*
 	lock := &api.Lock{
 		APIVersion: api.APIVersion,
 		Kind:       api.KindLock,
-		Metadata:   api.Metadata{Name: pkg.Metadata.Name, Version: pkg.Metadata.Version},
+		Metadata:   api.Metadata{Name: pkg.Metadata.Name},
 		Spec: api.LockSpec{
 			Package: api.LockedPackage{
 				Name:    pkg.Metadata.Name,
-				Version: pkg.Metadata.Version,
+				Version: pkg.InstallerMetadata.Version,
 			},
 			Resolved: r.flatten(),
 		},

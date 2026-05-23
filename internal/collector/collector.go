@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package collector runs a package's bundled fact-collection script during
 // the wizard step. The script discovers install-time facts that depend on
 // runtime state — e.g., the active cub context's server URL, a freshly
@@ -34,7 +37,7 @@ type Inputs struct {
 	// WorkDir is the absolute path to the parent working directory
 	// (PackageDir's parent).
 	WorkDir string
-	// Namespace is the value of `install wizard --namespace`.
+	// Namespace is the value of `installer wizard --namespace`.
 	Namespace string
 	// Base is the selected base name.
 	Base string

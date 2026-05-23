@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package selection resolves a user's raw component picks against the package
 // manifest: closes the set under Requires, rejects Conflicts, validates
 // against the chosen Base via ValidForBases, and picks a Base when the user
@@ -88,7 +91,7 @@ func Resolve(pkg *api.Package, baseName string, picks []string) (*api.Selection,
 		},
 		Spec: api.SelectionSpec{
 			Package:        pkg.Metadata.Name,
-			PackageVersion: pkg.Metadata.Version,
+			PackageVersion: pkg.InstallerMetadata.Version,
 			Base:           base,
 			Components:     out,
 		},

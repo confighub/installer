@@ -2,6 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: gaie
+installerMetadata:
   version: 1.5.0
 spec:
   bases:

@@ -4,7 +4,7 @@ Kubernetes off-the-shelf component installer using
 [configuration as data](https://docs.confighub.com/background/config-as-data/).
 
 This tool is intended to play the role of an
-[install wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
+[installer wizard](https://www.revenera.com/install/products/installshield/installshield-tips-tricks/what-is-an-installation-wizard)
 and a [package dependency manager](https://medium.com/@sdboyer/so-you-want-to-write-a-package-manager-4ae9c17d9527).
 
 This installer aims to present only the minimal number of high-level decisions, such as
@@ -43,7 +43,7 @@ a sequence of ConfigHub functions executed at install (render) time locally via 
 
 Output from the rendering process goes to plain YAML files that can be uploaded to ConfigHub for delivery
 via ArgoCD or Flux, or could be committed to git to be deployed by ArgoCD, Flux, or other Kubernetes
-deployment tool.
+applier or deployment tool.
 
 For post-installation customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions) includes functions for changing commonly changed Kubernetes resource properties,
 such as `set-container-image`, `set-container-resources`, `set-replicas`, `set-env`, and `set-hostname`,
@@ -65,7 +65,7 @@ storing rendered configuration somewhere other than git, and so on.
 
 Working:
 
-- **Package authoring + distribution.** `install package` (deterministic
+- **Package authoring + distribution.** `installer package` (deterministic
   bundle), `push` / `pull` / `inspect` / `list` / `tag` /
   `login` / `logout` (OCI artifacts), `sign` / `verify` (cosign keyed +
   keyless) with a `~/.config/installer/policy.yaml` trust policy that
@@ -73,39 +73,39 @@ Working:
 - **Dependencies.** SemVer resolver + lock (`deps update`, `deps tree`),
   multi-package render into per-dep subtrees, upload into per-dep Spaces
   with cross-Space Links.
-- **Install lifecycle.** `install setup` (the one-shot consumer entry
+- **Install lifecycle.** `installer setup` (the one-shot consumer entry
   point: optional pull, wizard with high-level component presets
   `minimal` / `default` / `all` / `selected`, render). Interactive +
   non-interactive. Prior-state re-entry from ConfigHub (via the
   persisted `installer-record` Unit) or local `out/spec/`,
   organization + server sanity-check against the active cub context.
-- **Day-2 lifecycle.** `install setup` and `install upload`
+- **Day-2 lifecycle.** `installer setup` and `installer upload`
   auto-detect first-install vs upgrade vs reconcile via the presence
   of prior spec files / `out/spec/upload.yaml`. Re-running `setup`
   with `--pull <new-ref>` runs the schema-diff machinery (carry
   forward existing values, adopt new defaults, prompt for new
   required-without-default). Re-running `upload` against an already-
   uploaded work-dir opens a ChangeSet and reconciles updates / adds /
-  deletes. `install plan` previews the reconcile diff read-only.
+  deletes. `installer plan` previews the reconcile diff read-only.
   `--merge-external-source` is the change predicate, so post-install
   ConfigHub edits survive re-render.
-- **Image overrides.** `install setup --set-image` applies
+- **Image overrides.** `installer setup --set-image` applies
   `kustomize edit set image` before render. Overrides round-trip via
   `Inputs.Spec.ImageOverrides` and carry forward across re-renders /
   upgrades. The chosen base must declare an `images:` block; render
   fails fast otherwise.
 
-Stubbed: `install preflight` — cluster-side constraint checks.
+Stubbed: `installer preflight` — cluster-side constraint checks.
 
 ## Build
 
 ```bash
-make build       # writes bin/install
+make build       # writes bin/installer
 ```
 
-The binary is named `install` so the cub plugin protocol exposes it as
-`cub install ...` (cub names plugins after the entrypoint basename in
-`cub-plugin.yaml`). `install` shells out to `kustomize` for
+The binary is named `installer` so the cub plugin protocol exposes it as
+`cub installer ...` (cub names plugins after the entrypoint basename in
+`cub-plugin.yaml`). `installer` shells out to `kustomize` for
 `kustomize build`. Install it from
 [kubernetes-sigs/kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/)
 or `brew install kustomize`.
@@ -116,12 +116,12 @@ End to end against the included example, no ConfigHub server required:
 
 ```bash
 # 1. Inspect what's in the package.
-bin/install doc ./examples/hello-app
+bin/installer doc ./examples/hello-app
 
 # 2. Setup: pull (here: a local dir), pick base + components, supply
 #    inputs, and render. One command replaces pull + wizard + render.
 mkdir -p /tmp/hello && cd /tmp/hello
-bin/install setup \
+bin/installer setup \
   --pull ./examples/hello-app \
   --non-interactive \
   --select monitoring --select ingress \
@@ -130,17 +130,17 @@ bin/install setup \
 # 3. Upload to ConfigHub. Records the destination Space(s) in
 #    out/spec/upload.yaml so subsequent commands re-enter the same
 #    Space without re-typing.
-bin/install upload --space my-greeter
+bin/installer upload --space my-greeter
 
 # 4. Day-2: edit a rendered file, see what upload would do, apply.
 $EDITOR out/manifests/deployment-demo-hello-app.yaml
-bin/install plan                       # read-only diff vs ConfigHub
-bin/install upload --yes               # reconcile (ChangeSet-wrapped)
+bin/installer plan                       # read-only diff vs ConfigHub
+bin/installer upload --yes               # reconcile (ChangeSet-wrapped)
 
 # 5. Upgrade: re-pull (atomic), re-render via setup, then upload.
-bin/install setup --pull ./examples/hello-app \
+bin/installer setup --pull ./examples/hello-app \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
-bin/install upload --yes
+bin/installer upload --yes
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -189,7 +189,7 @@ kustomize build --enable-exec --enable-alpha-plugins .` to reproduce
 the render byte-for-byte outside the installer.
 
 The two spec docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
-to re-render: edit them, re-run `install render`, get a deterministic new set
+to re-render: edit them, re-run `installer render`, get a deterministic new set
 of manifests.
 
 ## Package format
@@ -201,6 +201,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: my-package
+installerMetadata:
   version: 0.1.0
 spec:
   bases: # alternative top-level kustomize trees
@@ -236,7 +237,7 @@ The `transformers:` list is resolved with Go `text/template` syntax —
 `{{ .Namespace }}`, `{{ .Inputs.* }}`, `{{ .Selection.* }}`,
 `{{ .Facts.* }}`, `{{ .Package.* }}` — then emitted as a
 `ConfigHubTransformers` KRM function config that kustomize invokes
-through the `install transformer` exec plugin. Each group's
+through the `installer transformer` exec plugin. Each group's
 `toolchain` and `whereResource` are applied per-group, so a single
 chain can mutate raw Kubernetes manifests with `Kubernetes/YAML` and
 AppConfig-carried files (`AppConfig/Properties`, `AppConfig/Env`, …)
@@ -247,14 +248,14 @@ when the component is selected.
 ## Plugin install
 
 The binary doubles as a `cub` plugin. After publishing a release that includes
-a platform binary at the path `bin/install`, install with:
+a platform binary at the path `bin/installer`, install with:
 
 ```bash
 cub plugin install confighub/installer
 ```
 
 The `cub-plugin.yaml` at the repo root tells cub the entry point. Once
-installed, the same commands work via `cub install ...`.
+installed, the same commands work via `cub installer ...`.
 
 ## Layout
 
@@ -264,7 +265,7 @@ installed, the same commands work via `cub install ...`.
 ├── internal/
 │   ├── cli/                    # cobra subcommands
 │   ├── pkg/                    # package load + OCI pull (oras-go)
-│   ├── bundle/                 # deterministic tarball for `install package`
+│   ├── bundle/                 # deterministic tarball for `installer package`
 │   ├── selection/              # required-deps closure + conflict detection
 │   ├── wizard/                 # interactive + non-interactive answer collection,
 │   │                           # prior-state load, schema diff for upgrades
@@ -283,7 +284,7 @@ installed, the same commands work via `cub install ...`.
 │                               # Lock, Upload schemas
 ├── packages/                   # "published" packages bundled in this repo
 │   ├── kubernetes-resources/   # 11 canonical resource templates with
-│   │                           # per-type defaults (used by `install new`)
+│   │                           # per-type defaults (used by `installer new`)
 │   └── worker/                 # ConfigHub bridge worker
 ├── examples/                   # test fixtures for the e2e + unit tests
 │   ├── hello-app/              # single-package end-to-end test package
@@ -336,7 +337,7 @@ authoring packages, the user docs above are what you want.
     vs ConfigHub, ChangeSet-wrapped update, staged upgrade with
     schema-diff, and `--set-image` overrides. Phases A–E shipped.
 - [Kustomize transformer plugin and AppConfig support](docs/transformer.md)
-  — design for the `install transformer` exec plugin (folds the
+  — design for the `installer transformer` exec plugin (folds the
   function chain into kustomize), durable `out/compose/`,
   component-scoped function-chain mixins, and AppConfig support via
   `configMapGenerator` round-trip. Not yet implemented.
@@ -362,13 +363,9 @@ upgrade --set-image preflight rejection`. Spaces created with the
 
 ## Roadmap
 
-- Better Secrets support (currently we generate secrets during fact collection).
-- `install preflight` — evaluate `externalRequires` against a live cluster.
-- Automatic apply ordering (CRDs before custom resources, Namespace before
-  namespaced resources, etc.) inferred from resource kind plus the existing
-  link graph — no per-package phase declarations.
-- Real packages: ArgoCD, Flux, llm-d, KServe, vLLM production stack
+- Better Secrets support. Currently we generate secrets during fact collection.
+  Explicit support for ESO and CSI, and possibly "drop" and "stub" options.
+- `installer preflight` — evaluate `externalRequires` against a live cluster.
+- More packages: Flux, llm-d, KServe, vLLM production stack
   (KubeRay and Gateway API Inference Extension shipped — see `examples/`).
-- TBD: Hooks, in-cluster and local.
-- TBD: variant creation and promotion.
-- TBD: support deploying via ArgoCD and Flux directly.
+- TBD: More comprehensive hooks, in-cluster and local.

@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package wizard collects user answers (currently non-interactive only),
 // validates them against the package's Inputs schema, runs the package's
 // optional Collector to discover install-time facts, and emits Selection +
@@ -79,7 +82,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 		},
 		Spec: api.InputsSpec{
 			Package:        pkg.Metadata.Name,
-			PackageVersion: pkg.Metadata.Version,
+			PackageVersion: pkg.InstallerMetadata.Version,
 			Namespace:      raw.Namespace,
 			Values:         values,
 			ImageOverrides: mergeImageOverrides(raw.PriorImageOverrides, raw.ImageOverrides),
@@ -109,7 +112,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 			},
 			Spec: api.FactsSpec{
 				Package:        pkg.Metadata.Name,
-				PackageVersion: pkg.Metadata.Version,
+				PackageVersion: pkg.InstallerMetadata.Version,
 				Values:         factsValues,
 			},
 		}

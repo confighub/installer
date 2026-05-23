@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package cubctx reads the active cub CLI context (organization ID,
 // server URL) and offers a sanity-check helper that compares the live
 // context against values recorded in a work-dir's upload.yaml.

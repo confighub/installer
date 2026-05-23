@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // SigningPolicy declares which signatures the installer trusts when
@@ -7,10 +10,14 @@ package api
 // When Enforce is true and a ref's signature does not satisfy at least one
 // entry in TrustedKeys or TrustedKeyless, the operation fails.
 type SigningPolicy struct {
-	APIVersion string            `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string            `yaml:"kind" json:"kind"`
-	Metadata   Metadata          `yaml:"metadata,omitempty" json:"metadata,omitempty"`
-	Spec       SigningPolicySpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "SigningPolicy".
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the doc's ObjectMeta-shaped metadata block.
+	Metadata Metadata `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+	// Spec carries the enforce flag and the trusted-signer lists.
+	Spec SigningPolicySpec `yaml:"spec" json:"spec"`
 }
 
 const KindSigningPolicy = "SigningPolicy"

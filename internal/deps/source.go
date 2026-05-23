@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package deps walks a Package's Dependencies, picks a version per child
 // package satisfying every constraint, and writes a Lock pinning each pick
 // to a manifest digest.

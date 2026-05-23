@@ -1,9 +1,9 @@
 # Author Tutorial: Build a Package From Scratch
 
-Walks you through authoring a small install package — a status
+Walks you through authoring a small installer package — a status
 page service called `statusboard` — from an empty directory to a
 signed OCI artifact. Takes ~20 minutes. Built from the new author
-shortcuts (`install init` / `new` / `edit` / `vet`) so you author
+shortcuts (`installer init` / `new` / `edit` / `vet`) so you author
 ~50 lines of YAML by the end instead of ~150.
 
 By the end you'll have:
@@ -20,7 +20,7 @@ For the doctrine the installer is anchored to, see
 
 ## Prerequisites
 
-- `install` binary on PATH (or invoke `bin/install` from a clone).
+- `installer` binary on PATH (or invoke `bin/installer` from a clone).
 - `kustomize` on PATH.
 - `cub` on PATH and signed in (`cub auth login`).
 - The `kubernetes-resources` package bootstrapped in your
@@ -30,27 +30,27 @@ For the doctrine the installer is anchored to, see
 
 ### One-time: bootstrap kubernetes-resources
 
-`install new` clones canonical resource templates from the
+`installer new` clones canonical resource templates from the
 `kubernetes-resources` package in ConfigHub. Install it once per
 organization:
 
 ```bash
 cd <path-to-installer-repo>
-install setup --pull ./packages/kubernetes-resources \
+installer setup --pull ./packages/kubernetes-resources \
     --work-dir /tmp/k8s-res \
     --non-interactive --namespace kubernetes-resources
-install upload --work-dir /tmp/k8s-res --space kubernetes-resources
+installer upload --work-dir /tmp/k8s-res --space kubernetes-resources
 # Recorded kubernetes-resources install in ~/.confighub/installer/state.yaml
 ```
 
-After this, `install new` knows where to find templates without
+After this, `installer new` knows where to find templates without
 asking. The bootstrap is per-organization; if you switch ConfigHub
 contexts, re-bootstrap there.
 
 ## Step 1: scaffold the package
 
 ```bash
-install init .
+installer init .
 # Initialized package "statusboard-pkg" at /Users/.../statusboard-pkg
 #   - installer.yaml
 #   - bases/default/
@@ -58,7 +58,7 @@ install init .
 #   - validation/
 ```
 
-`install init` writes the manifest with one default base, a
+`installer init` writes the manifest with one default base, a
 `set-namespace` group under `spec.transformers`, and the recommended
 validator chain (`vet-schemas`, `vet-merge-keys`, `vet-format`).
 We'll fix the package name in a moment. Have a look at what was
@@ -70,6 +70,7 @@ cat installer.yaml
 # kind: Package
 # metadata:
 #   name: statusboard-pkg
+# installerMetadata:
 #   version: 0.1.0
 # spec:
 #   bases:
@@ -93,18 +94,18 @@ Rename the package and let `init` re-write the manifest with
 `--force`:
 
 ```bash
-install init . --name statusboard --force > /dev/null
+installer init . --name statusboard --force > /dev/null
 ```
 
 Now scaffold the resources. We want a Namespace, a Deployment, and
-a Service. `install new` clones each from the
+a Service. `installer new` clones each from the
 `kubernetes-resources` package with operator customizations
 applied:
 
 ```bash
-install new namespace statusboard
-install new deployment statusboard --image nginxdemos/hello:plain-text --port 80 --replicas 1
-install new service statusboard --port 80
+installer new namespace statusboard
+installer new deployment statusboard --image nginxdemos/hello:plain-text --port 80 --replicas 1
+installer new service statusboard --port 80
 ```
 
 Each writes a file under `bases/default/` and updates
@@ -127,7 +128,7 @@ cat bases/default/kustomization.yaml
 Render and verify:
 
 ```bash
-install setup --pull ./. --work-dir /tmp/statusboard \
+installer setup --pull ./. --work-dir /tmp/statusboard \
     --non-interactive --namespace demo
 ls /tmp/statusboard/out/manifests/
 # deployment-demo-statusboard.yaml
@@ -152,18 +153,18 @@ Two things to notice:
 ## Step 2: a wizard input
 
 Add a `replicas` input so operators can size the deployment without
-editing the package. Use `install edit add input`:
+editing the package. Use `installer edit add input`:
 
 ```bash
-install edit add input replicas \
+installer edit add input replicas \
     --type int --default 1 \
     --prompt "Number of replicas" \
     --description "How many statusboard pods to run."
 ```
 
 Wire it into `spec.transformers`. The chain already has
-`set-namespace` from `install init`; we want to add `set-replicas`
-after it. There's no `install edit` for transformer entries yet,
+`set-namespace` from `installer init`; we want to add `set-replicas`
+after it. There's no `installer edit` for transformer entries yet,
 so hand-edit `installer.yaml`:
 
 ```yaml
@@ -180,7 +181,7 @@ Re-render with a non-default value:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard \
+installer setup --pull ./. --work-dir /tmp/statusboard \
     --non-interactive --namespace demo --input replicas=3
 grep replicas /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 #  replicas: 3
@@ -190,7 +191,7 @@ And confirm the default takes when `--input replicas=…` is absent:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard \
+installer setup --pull ./. --work-dir /tmp/statusboard \
     --non-interactive --namespace demo
 grep replicas /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 #  replicas: 1
@@ -206,10 +207,10 @@ grep replicas /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 Operators frequently want to pin a specific image tag, mirror to an
 internal registry, or bump a patch version — without hand-editing
 your source. Declare a kustomize `images:` block in your base, and
-they get `install setup --set-image` for free.
+they get `installer setup --set-image` for free.
 
 Edit `bases/default/kustomization.yaml` to add an `images:` block.
-`install init` already left a comment showing the shape; add:
+`installer init` already left a comment showing the shape; add:
 
 ```yaml
 images:
@@ -228,7 +229,7 @@ Test with an override:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. \
+installer setup --pull ./. \
   --work-dir /tmp/statusboard \
   --non-interactive --namespace demo \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
@@ -279,10 +280,10 @@ resources:
 YAML
 ```
 
-Register it via `install edit add component`:
+Register it via `installer edit add component`:
 
 ```bash
-install edit add component monitoring \
+installer edit add component monitoring \
     --path components/monitoring --default \
     --description "Adds a ServiceMonitor for Prometheus scraping."
 ```
@@ -295,14 +296,14 @@ Two things to notice:
 - For the `externalRequires` declaration ("cluster needs the
   ServiceMonitor CRD before this component can apply") hand-edit
   `installer.yaml` and append it to the `monitoring` component
-  entry — `install edit` doesn't model nested
+  entry — `installer edit` doesn't model nested
   externalRequires today.
 
 Test:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
+installer setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
   --namespace demo --select monitoring
 ls /tmp/statusboard/out/manifests/
 # adds: servicemonitor-demo-statusboard.yaml
@@ -312,7 +313,7 @@ Or via the `default` preset:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
+installer setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
   --namespace demo --components default
 ls /tmp/statusboard/out/manifests/
 # also adds servicemonitor-demo-statusboard.yaml
@@ -374,14 +375,14 @@ patches:
 YAML
 ```
 
-Register both via `install edit add component`:
+Register both via `installer edit add component`:
 
 ```bash
-install edit add component ingress \
+installer edit add component ingress \
     --path components/ingress \
     --description "Expose the service via an Ingress."
 
-install edit add component ingress-tls \
+installer edit add component ingress-tls \
     --path components/ingress-tls \
     --description "Annotate the Ingress to request a cert from cert-manager." \
     --requires ingress
@@ -396,7 +397,7 @@ errors on conflicts. Test:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
+installer setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
   --namespace demo --select ingress-tls
 cat /tmp/statusboard/out/spec/selection.yaml
 #   components: [ingress, ingress-tls]   # both selected
@@ -407,10 +408,10 @@ cat /tmp/statusboard/out/spec/selection.yaml
 The default validator chain (`vet-schemas`, `vet-merge-keys`,
 `vet-format`) ran during render in steps 1–5. To re-run validators
 against the existing render — without re-running kustomize — use
-`install vet`:
+`installer vet`:
 
 ```bash
-install vet --work-dir /tmp/statusboard
+installer vet --work-dir /tmp/statusboard
 # Vetting N resource(s) under /tmp/statusboard/out/manifests against 1 validator group(s)...
 # All validators passed.
 ```
@@ -435,7 +436,7 @@ flags). Try it interactively to see what an operator sees:
 
 ```bash
 rm -rf /tmp/statusboard
-install setup --pull ./. --work-dir /tmp/statusboard
+installer setup --pull ./. --work-dir /tmp/statusboard
 # Prompts:
 #   Components: [minimal/default/all/selected]
 #   Kubernetes namespace: <text>
@@ -452,7 +453,7 @@ ask one or two questions and ship.
 Build a deterministic tarball:
 
 ```bash
-install package ./. -o statusboard-0.1.0.tgz
+installer package ./. -o statusboard-0.1.0.tgz
 # Wrote statusboard-0.1.0.tgz (sha256:bc4e...)
 ```
 
@@ -460,30 +461,30 @@ Two builds on two machines from the same source produce the same
 sha256. Publish to a registry:
 
 ```bash
-install push statusboard-0.1.0.tgz oci://ghcr.io/myorg/statusboard:0.1.0
+installer push statusboard-0.1.0.tgz oci://ghcr.io/myorg/statusboard:0.1.0
 ```
 
 Operators can now:
 
 ```bash
-install inspect oci://ghcr.io/myorg/statusboard:0.1.0
-install pull oci://ghcr.io/myorg/statusboard:0.1.0 ./statusboard-pulled
+installer inspect oci://ghcr.io/myorg/statusboard:0.1.0
+installer pull oci://ghcr.io/myorg/statusboard:0.1.0 ./statusboard-pulled
 ```
 
-For production releases, sign with `install sign` after push.
+For production releases, sign with `installer sign` after push.
 Keyless (Sigstore Fulcio + Rekor) is the default — an interactive
 OIDC flow opens a browser; `--yes` skips cosign's TTY confirmation
 prompt for CI:
 
 ```bash
-install sign oci://ghcr.io/myorg/statusboard:0.1.0 --yes
+installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --yes
 ```
 
 Or keyed:
 
 ```bash
 cosign generate-key-pair
-install sign oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.key
+installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.key
 ```
 
 Requires the `cosign` binary on PATH (override via
@@ -498,9 +499,9 @@ re-package, re-push. Operators upgrade by re-running setup with
 `--pull` pointed at the new ref:
 
 ```bash
-install setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 \
     --work-dir <work-dir>
-install upload --work-dir <work-dir> --yes
+installer upload --work-dir <work-dir> --yes
 ```
 
 Setup's schema-diff machinery diffs your old vs new schema:

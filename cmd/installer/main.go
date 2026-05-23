@@ -1,6 +1,9 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Command installer renders config-as-data Kubernetes packages into per-
 // resource YAML files for upload to ConfigHub. It can be invoked standalone
-// or as a `cub` plugin (cub install ...).
+// or as a `cub` plugin (cub installer ...).
 package main
 
 import (

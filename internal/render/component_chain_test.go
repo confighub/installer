@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render_test
 
 import (
@@ -82,7 +85,8 @@ func writeMixinPackage(t *testing.T) string {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "installer.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: mixin, version: 0.1.0}
+metadata: {name: mixin}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}

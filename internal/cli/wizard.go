@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -70,7 +73,7 @@ Pass --non-interactive to script the wizard with --base, --components,
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
 	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); applied via `kustomize edit set image` against the chosen base before render. The base's kustomization.yaml must declare an `images:` block.")
-	cmd.Flags().BoolVar(&opts.runRender, "render", true, "render after the wizard writes spec docs; pass --render=false to skip and run install render later")
+	cmd.Flags().BoolVar(&opts.runRender, "render", true, "render after the wizard writes spec docs; pass --render=false to skip and run installer render later")
 	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }

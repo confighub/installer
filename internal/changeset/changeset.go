@@ -1,12 +1,15 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package changeset wraps the cub changeset CLI for installer use:
-// per-Space ChangeSets opened by `install update` so the resulting
+// per-Space ChangeSets opened by `installer update` so the resulting
 // updates can be reverted as a unit.
 //
 // Note on revert scope (per docs/lifecycle.md): only update mutations
 // recorded against the ChangeSet are revertable via `cub unit update
 // --restore Before:ChangeSet:<slug>`. Creates and deletes are not
 // reverted by ChangeSet restore — to undo a create, delete the Unit;
-// to undo a delete, re-render and re-run `install update`.
+// to undo a delete, re-render and re-run `installer update`.
 package changeset
 
 import (
@@ -18,7 +21,7 @@ import (
 	"time"
 )
 
-// DefaultSlug returns the conventional slug for an install update
+// DefaultSlug returns the conventional slug for an installer update
 // ChangeSet at the given time. Stable input → stable output (no
 // nondeterminism); callers wanting the live timestamp pass time.Now().
 //

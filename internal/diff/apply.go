@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package diff
 
 import (
@@ -33,7 +36,7 @@ type ApplyOptions struct {
 	// changeset.DefaultSlug(time.Now()) when empty.
 	ChangeSetSlug string
 	// ChangeSetDescription is the human-readable description on the
-	// opened ChangeSet. Defaults to a generic "install update" line
+	// opened ChangeSet. Defaults to a generic "installer update" line
 	// when empty.
 	ChangeSetDescription string
 	// Targets maps a Space slug to the target ref forwarded to
@@ -142,7 +145,7 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 		}
 		// Close the ChangeSet by detaching the updated units. The
 		// ChangeSet itself is preserved (for revert); the units are
-		// freed so the next `install update` can open a new
+		// freed so the next `installer update` can open a new
 		// ChangeSet on them. Without this step ConfigHub rejects all
 		// subsequent updates against these units (the ChangeSet acts
 		// as a lock per docs/guide/change-apply.md).
@@ -159,7 +162,7 @@ func Apply(ctx context.Context, plan Plan, opts ApplyOptions) (ApplyResult, erro
 			res.Deleted += deleted
 		}
 		// Re-run link inference now that the Unit set has changed.
-		// No skip set here — `install update` doesn't have the
+		// No skip set here — `installer update` doesn't have the
 		// installer's rendered out/secrets/ context in hand.
 		if err := upload.ReconcileLinks(ctx, sp.SpaceSlug, sp.Package, nil); err != nil {
 			return res, err
@@ -178,9 +181,9 @@ func descriptionOrDefault(d, pkg, ver string) string {
 		return d
 	}
 	if ver != "" {
-		return fmt.Sprintf("install update from %s@%s", pkg, ver)
+		return fmt.Sprintf("installer update from %s@%s", pkg, ver)
 	}
-	return fmt.Sprintf("install update from %s", pkg)
+	return fmt.Sprintf("installer update from %s", pkg)
 }
 
 func createUnit(ctx context.Context, space, pkg, version, target string, a SlugDiff, opts ApplyOptions, stdout, stderr io.Writer) error {
@@ -365,7 +368,7 @@ func emptyUnits(ctx context.Context, space string, deletes []SlugDiff, opts Appl
 		cmd := exec.CommandContext(ctx, "cub", "unit", "update",
 			"--space", space, "--quiet",
 			"--merge-external-source", d.Slug,
-			"--change-desc", fmt.Sprintf("install upload: emptied %s (no longer in rendered output)", d.Slug),
+			"--change-desc", fmt.Sprintf("installer upload: emptied %s (no longer in rendered output)", d.Slug),
 			d.Slug, empty.Name())
 		var combined bytes.Buffer
 		cmd.Stdout = &combined

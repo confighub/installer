@@ -21,7 +21,7 @@ under `upstream/`:
 upstream trees the same way upstream's own `cluster-install/`,
 `namespace-install/`, `ha/cluster-install/`, `ha/namespace-install/`
 kustomizations do, but they also declare the version-pinned `images:`
-block so `install setup --set-image` works. Resource counts match
+block so `installer setup --set-image` works. Resource counts match
 upstream's pre-rendered `install.yaml` / `namespace-install.yaml` /
 `ha/install.yaml` / `ha/namespace-install.yaml` byte-for-byte (modulo
 namespace and image).
@@ -36,8 +36,8 @@ everything else is post-install ConfigHub mutation (`set-replicas`,
 | --- | --- |
 | install scope (cluster-admin vs namespace-only) | base selection: `cluster-install` vs `namespace-install` |
 | HA or single-replica | base selection: `ha-cluster-install` / `ha-namespace-install` vs the non-HA pair |
-| target namespace | `install setup --namespace <name>` (defaults to `argocd` per upstream convention) |
-| image / version override | `install setup --set-image quay.io/argoproj/argocd=<ref>` |
+| target namespace | `installer setup --namespace <name>` (defaults to `argocd` per upstream convention) |
+| image / version override | `installer setup --set-image quay.io/argoproj/argocd=<ref>` |
 | include CRDs | implicit in base choice — the `cluster-install` bases include them, the `namespace-install` bases don't |
 
 Decisions explicitly deferred to post-install:
@@ -66,11 +66,11 @@ The HA bases bundle [DandyDeveloper/charts redis-ha](https://github.com/DandyDev
 
 | name | default | notes |
 | --- | --- | --- |
-| (namespace) | `argocd` | passed via `install setup --namespace argocd` |
+| (namespace) | `argocd` | passed via `installer setup --namespace argocd` |
 
 No declared inputs — namespace + the four-base choice + the optional
 `--set-image` flag cover the install-time decisions. Operators who
-want to tune anything else should `install upload` first and then
+want to tune anything else should `installer upload` first and then
 edit the resulting ConfigHub Units.
 
 ## Quick start
@@ -78,7 +78,7 @@ edit the resulting ConfigHub Units.
 ```bash
 # Render against the default cluster-install base.
 mkdir -p /tmp/argocd && cd /tmp/argocd
-install setup \
+installer setup \
   --pull ~/ConfigHub/installer/packages/argocd \
   --non-interactive \
   --namespace argocd
@@ -94,14 +94,14 @@ kubectl -n argocd get pods -w
 For HA on a multi-node cluster:
 
 ```bash
-install setup --pull ~/ConfigHub/installer/packages/argocd \
+installer setup --pull ~/ConfigHub/installer/packages/argocd \
   --base ha-cluster-install --namespace argocd --non-interactive
 ```
 
 To pin a different image (e.g. mirror or patch version):
 
 ```bash
-install setup --pull ~/ConfigHub/installer/packages/argocd \
+installer setup --pull ~/ConfigHub/installer/packages/argocd \
   --non-interactive --namespace argocd \
   --set-image quay.io/argoproj/argocd=quay.io/argoproj/argocd:v3.4.2
 ```

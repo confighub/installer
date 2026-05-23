@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package bundle
 
 import (
@@ -19,6 +22,7 @@ const installerYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: test
+installerMetadata:
   version: 0.0.1
 spec:
   bases:

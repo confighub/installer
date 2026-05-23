@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package deps
 
 import (
@@ -72,9 +75,10 @@ func hash32(s string) uint32 {
 // pkgWith builds a minimal Package with the supplied name/version/deps.
 func pkgWith(name, version string, deps ...api.Dependency) *api.Package {
 	return &api.Package{
-		APIVersion: api.APIVersion,
-		Kind:       api.KindPackage,
-		Metadata:   api.Metadata{Name: name, Version: version},
+		APIVersion:        api.APIVersion,
+		Kind:              api.KindPackage,
+		Metadata:          api.Metadata{Name: name},
+		InstallerMetadata: api.InstallerMetadata{Version: version},
 		Spec: api.PackageSpec{
 			Bases:        []api.Base{{Name: "default", Path: "bases/default", Default: true}},
 			Dependencies: deps,

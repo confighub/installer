@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package pkg
 
 import (
@@ -123,7 +126,7 @@ func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target) (*PushR
 			ocispec.AnnotationCreated:      "1970-01-01T00:00:00Z",
 			ocispec.AnnotationTitle:        loaded.Package.Metadata.Name,
 			api.AnnotationName:             loaded.Package.Metadata.Name,
-			api.AnnotationVersion:          loaded.Package.Metadata.Version,
+			api.AnnotationVersion:          loaded.Package.InstallerMetadata.Version,
 			api.AnnotationInstallerVersion: version.Version,
 		},
 	})

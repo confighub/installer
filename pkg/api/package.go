@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Package is the installer.yaml document a package author writes by hand.
@@ -5,10 +8,21 @@ package api
 // should ask for, what external preconditions the package needs, and what the
 // function chain template looks like.
 type Package struct {
-	APIVersion string      `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string      `yaml:"kind" json:"kind"`
-	Metadata   Metadata    `yaml:"metadata" json:"metadata"`
-	Spec       PackageSpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version
+	// ("installer.confighub.com/v1alpha1"). Required.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "Package". Required.
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the Kubernetes-style ObjectMeta block. Only Name is
+	// required.
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	// InstallerMetadata carries the package's SemVer (version) plus the
+	// optional KubeVersion / InstallerVersion ranges. Hand-authored at
+	// the top level of installer.yaml alongside metadata.
+	InstallerMetadata InstallerMetadata `yaml:"installerMetadata,omitempty" json:"installerMetadata,omitempty"`
+	// Spec carries the package's authored declarations: bases, components,
+	// inputs, dependencies, transformers, etc.
+	Spec PackageSpec `yaml:"spec" json:"spec"`
 }
 
 type PackageSpec struct {
@@ -177,8 +191,11 @@ const (
 )
 
 type ExternalRequire struct {
+	// Kind is the precondition category (see ExternalRequireKind constants).
 	Kind ExternalRequireKind `yaml:"kind" json:"kind"`
-	Name string              `yaml:"name,omitempty" json:"name,omitempty"`
+	// Name optionally pins the requirement to a specific instance (e.g.,
+	// a particular CRD or operator name). Empty matches any instance of Kind.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 	// Version is a constraint expression (e.g., ">= v0.4.0").
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	// Capability is used with GatewayClass to require a specific feature
@@ -206,12 +223,17 @@ const (
 )
 
 type Provide struct {
+	// Kind is the provided-resource category (see ProvideKind constants).
 	Kind ProvideKind `yaml:"kind" json:"kind"`
-	Name string      `yaml:"name" json:"name"`
+	// Name identifies the specific resource provided (e.g., a CRD name).
+	Name string `yaml:"name" json:"name"`
 }
 
 type SingletonClaim struct {
-	Lease     string `yaml:"lease" json:"lease"`
+	// Lease is the leader-election lease name this package claims.
+	Lease string `yaml:"lease" json:"lease"`
+	// Namespace scopes the lease to a specific namespace; empty means
+	// cluster-scoped.
 	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
@@ -252,6 +274,8 @@ type Input struct {
 }
 
 type Phase struct {
+	// Name is the phase label written onto each rendered Unit that
+	// matches WhereResource.
 	Name string `yaml:"name" json:"name"`
 	// WhereResource is a ConfigHub function-executor filter expression. The
 	// first phase whose filter matches is assigned to a resource. The last
@@ -277,8 +301,14 @@ type FunctionGroup struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
+// FunctionInvocation is one call within a FunctionGroup.
 type FunctionInvocation struct {
-	Name string   `yaml:"name" json:"name"`
+	// Name is the function name (matches the ConfigHub function registry,
+	// e.g., "set-namespace", "set-container-image", "vet-schemas").
+	Name string `yaml:"name" json:"name"`
+	// Args is the positional argument list passed to the function. Values
+	// may contain Go-template expressions resolved at render time
+	// ({{ .Namespace }}, {{ .Inputs.* }}, {{ .Facts.* }}, ...).
 	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
 }
 

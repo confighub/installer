@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -16,7 +19,7 @@ import (
 func newDepsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deps",
-		Short: "Manage install package dependencies",
+		Short: "Manage installer package dependencies",
 		Long: `Deps resolves the dependency DAG declared in installer.yaml against an OCI
 registry, writes <work-dir>/out/spec/lock.yaml, and optionally vendors
 locked dependencies for offline render.`,

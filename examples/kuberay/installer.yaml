@@ -2,6 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: kuberay
+installerMetadata:
   version: 1.6.1
 spec:
   bases:

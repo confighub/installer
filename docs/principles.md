@@ -20,7 +20,7 @@ channels:
 update`, ApplyGate-mediated approvals).
 
 Why: a consumer-edited package tree is silently overwritten on the next
-`install setup --pull` (or `install pull`). Worse, the edits are invisible
+`installer setup --pull` (or `installer pull`). Worse, the edits are invisible
 to anyone reading the package source. Routing every override through one
 of the two supported channels keeps changes discoverable and survivable.
 
@@ -51,7 +51,7 @@ plus the package.
 
 - **Install-time** changes are made in spec files and re-render. They
   affect what the installer materializes. They are versioned with the
-  installer's working directory; they survive an `install setup
+  installer's working directory; they survive an `installer setup
   --pull <new-ref>` upgrade (carried forward by the schema-diff
   machinery).
 - **Post-install** changes are made in ConfigHub on the materialized
@@ -109,7 +109,7 @@ recommended pattern, in order of decreasing user friction:
 
 1. **Package author declares a kustomize `images:` transformer** in the
    chosen base's `kustomization.yaml`. Operators override at install or
-   upgrade time with `install setup --set-image name=ref` (which
+   upgrade time with `installer setup --set-image name=ref` (which
    runs `kustomize edit set image` against the package's working copy
    before render). Operators override post-install with `cub function
 do set-container-image` on the uploaded Unit. This is the default
@@ -124,7 +124,7 @@ do set-container-image` on the uploaded Unit. This is the default
    `set-image-reference-by-uri`, `set-image-registry-by-registry` — for
    ad hoc changes that do not warrant re-render.
 
-`install plan` and `install upload` print a per-Space `Images:`
+`installer plan` and `installer upload` print a per-Space `Images:`
 footer (built from `cub function do get-container-image '*'`) so the
 operator can see the eventual image set without applying anything.
 
@@ -138,7 +138,7 @@ time and (3) for post-install one-offs; only edit spec/inputs.yaml for
 The installer materializes Units. Everything downstream — apply,
 ApplyGates, validation Triggers, drift reconciliation, ChangeSets,
 promotion, rollback — is ConfigHub's job. The installer creates a
-ChangeSet for `install upload` reconciles so updates are revertable,
+ChangeSet for `installer upload` reconciles so updates are revertable,
 but it does not run apply, does not author Triggers, and does not
 reconcile cluster drift.
 
