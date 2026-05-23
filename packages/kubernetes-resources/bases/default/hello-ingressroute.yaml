@@ -15,7 +15,11 @@ spec:
     - kind: Rule
       match: Host(`confighubplaceholder`)
       services:
-        - name: hello-app
+        # Service this route forwards to. Placeholder so a ConfigHub Link
+        # resolves it to a Service Unit in the same Space.
+        - name: confighubplaceholder
           port: 80
   tls:
-    secretName: hello-app-tls
+    # The Secret holding the TLS cert (typically produced by a cert-manager
+    # Certificate). Placeholder so a ConfigHub Link resolves it.
+    secretName: confighubplaceholder
