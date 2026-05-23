@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api_test
 
 import (
@@ -113,6 +116,7 @@ const validPackageWithDeps = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: stack
+installerMetadata:
   version: 0.3.0
   kubeVersion: ">= 1.28"
   installerVersion: ">= 0.2.0"
@@ -156,11 +160,14 @@ func TestParsePackageWithDeps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParsePackage: %v", err)
 	}
-	if p.Metadata.KubeVersion != ">= 1.28" {
-		t.Errorf("kubeVersion = %q", p.Metadata.KubeVersion)
+	if p.InstallerMetadata.Version != "0.3.0" {
+		t.Errorf("version = %q", p.InstallerMetadata.Version)
 	}
-	if p.Metadata.InstallerVersion != ">= 0.2.0" {
-		t.Errorf("installerVersion = %q", p.Metadata.InstallerVersion)
+	if p.InstallerMetadata.KubeVersion != ">= 1.28" {
+		t.Errorf("kubeVersion = %q", p.InstallerMetadata.KubeVersion)
+	}
+	if p.InstallerMetadata.InstallerVersion != ">= 0.2.0" {
+		t.Errorf("installerVersion = %q", p.InstallerMetadata.InstallerVersion)
 	}
 	if len(p.Spec.Dependencies) != 2 {
 		t.Fatalf("dependencies = %d, want 2", len(p.Spec.Dependencies))

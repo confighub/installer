@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render_test
 
 import (
@@ -16,7 +19,8 @@ import (
 
 const depPackageYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: dep, version: 0.1.0}
+metadata: {name: dep}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}
@@ -39,7 +43,8 @@ metadata:
 
 const parentPackageYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: parent, version: 0.1.0}
+metadata: {name: parent}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}

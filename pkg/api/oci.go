@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // OCI media types and annotation keys for native installer artifacts.

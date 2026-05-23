@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -34,7 +37,7 @@ prior <work-dir>/package/ intact.`,
 			}
 			fmt.Printf("Pulled %s@%s to %s\n",
 				loaded.Package.Metadata.Name,
-				loaded.Package.Metadata.Version,
+				loaded.Package.InstallerMetadata.Version,
 				loaded.Root)
 			return nil
 		},

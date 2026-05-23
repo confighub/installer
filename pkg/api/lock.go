@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Lock pins every dependency of a package to a specific OCI digest. The
@@ -9,10 +12,14 @@ package api
 // metadata to reproduce its own render — without keeping a separate file
 // under version control.
 type Lock struct {
-	APIVersion string   `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string   `yaml:"kind" json:"kind"`
-	Metadata   Metadata `yaml:"metadata" json:"metadata"`
-	Spec       LockSpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "Lock".
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the doc's ObjectMeta-shaped metadata block.
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	// Spec carries the resolved dependency DAG.
+	Spec LockSpec `yaml:"spec" json:"spec"`
 }
 
 type LockSpec struct {
@@ -26,7 +33,9 @@ type LockSpec struct {
 
 // LockedPackage describes the root package the lock was computed against.
 type LockedPackage struct {
-	Name    string `yaml:"name" json:"name"`
+	// Name is the root package's metadata.name.
+	Name string `yaml:"name" json:"name"`
+	// Version is the root package's installerMetadata.version.
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	// Digest is the OCI manifest digest of the root package, if it was
 	// pulled from a registry. Empty for in-tree (un-published) root

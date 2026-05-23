@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package sign_test
 
 import (
@@ -177,7 +180,8 @@ func writeMinimalPackage(t *testing.T) string {
 	}
 	must("installer.yaml", `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: signtest, version: 0.1.0}
+metadata: {name: signtest}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}

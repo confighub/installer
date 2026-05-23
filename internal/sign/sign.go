@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package sign shells out to the cosign binary to sign and verify installer
 // OCI artifacts. Cosign's Go SDK is large and pulls a lot of sigstore
 // dependencies; for v1 we keep the installer binary small by invoking
@@ -73,7 +76,7 @@ func Sign(ctx context.Context, ref string, opts SignOptions) error {
 }
 
 // VerifyOptions tune one Verify call. Caller usually loads a Policy and
-// passes the matching entries; for ad-hoc `install verify`, a single
+// passes the matching entries; for ad-hoc `installer verify`, a single
 // TrustedKey or TrustedKeyless is constructed from CLI flags.
 type VerifyOptions struct {
 	// TrustedKey forces a keyed verification against this public key.

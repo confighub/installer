@@ -1,18 +1,26 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Inputs holds the user's wizard answers, persisted as a Unit alongside the
 // rendered output so re-render is reproducible. The wizard authors this from
 // CLI flags (--input k=v); the user may also hand-edit before re-render.
 type Inputs struct {
-	APIVersion string     `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string     `yaml:"kind" json:"kind"`
-	Metadata   Metadata   `yaml:"metadata" json:"metadata"`
-	Spec       InputsSpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "Inputs".
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the doc's ObjectMeta-shaped metadata block.
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	// Spec carries the wizard answers.
+	Spec InputsSpec `yaml:"spec" json:"spec"`
 }
 
 type InputsSpec struct {
 	// Package identifies the source package (name@version) these inputs answer.
-	Package        string `yaml:"package" json:"package"`
+	Package string `yaml:"package" json:"package"`
+	// PackageVersion is the source package's SemVer at wizard time.
 	PackageVersion string `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
 	// Namespace is the Kubernetes namespace into which the package will install.
 	// Captured at wizard time via --namespace so that every package does not

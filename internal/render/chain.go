@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render
 
 import (
@@ -83,7 +86,7 @@ func templateFuncs(packageRoot string) template.FuncMap {
 //
 // Template context:
 //
-//	{{ .Namespace }}      — value of `install wizard --namespace`
+//	{{ .Namespace }}      — value of `installer wizard --namespace`
 //	{{ .Inputs.<name> }}  — value from inputs.yaml
 //	{{ .Facts.<name> }}   — value from facts.yaml (nil if no collector ran)
 //	{{ .Selection.* }}    — chosen base + components
@@ -102,7 +105,7 @@ func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selecti
 			Metadata:   api.Metadata{Name: pkg.Metadata.Name + "-function-chain"},
 			Spec: api.FunctionChainSpec{
 				Package:        pkg.Metadata.Name,
-				PackageVersion: pkg.Metadata.Version,
+				PackageVersion: pkg.InstallerMetadata.Version,
 			},
 		}, nil
 	}
@@ -149,7 +152,7 @@ func resolveChainTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Selecti
 		},
 		Spec: api.FunctionChainSpec{
 			Package:        pkg.Metadata.Name,
-			PackageVersion: pkg.Metadata.Version,
+			PackageVersion: pkg.InstallerMetadata.Version,
 			Groups:         resolved,
 		},
 	}, nil
@@ -218,7 +221,7 @@ func resolveValidatorTemplate(pkg *api.Package, inputs *api.Inputs, sel *api.Sel
 	return resolved, nil
 }
 
-// RunValidators is the public entry point used by `install vet`. Resolves
+// RunValidators is the public entry point used by `installer vet`. Resolves
 // the package's spec.validators template against inputs + selection + facts
 // and runs each group against data (the concatenated rendered manifests).
 // packageRoot is the directory loadJSON/other template helpers anchor

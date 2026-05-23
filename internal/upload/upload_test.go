@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package upload
 
 import (
@@ -303,7 +306,8 @@ func TestPlanCrossSpaceLinksEmpty(t *testing.T) {
 
 const minimalParentYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: parent, version: 0.1.0}
+metadata: {name: parent}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}
@@ -311,7 +315,8 @@ spec:
 
 const parentWithDepYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: parent, version: 0.1.0}
+metadata: {name: parent}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}
@@ -323,7 +328,8 @@ spec:
 
 const depPackageYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: dep-pkg, version: 0.2.0}
+metadata: {name: dep-pkg}
+installerMetadata: {version: 0.2.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}

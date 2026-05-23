@@ -40,12 +40,12 @@ push to Docker Hub). Fork the package to point at a private mirror.
 ## Quick start
 
 ```bash
-bin/install wizard ./examples/kuberay \
+bin/installer wizard ./examples/kuberay \
   --work-dir /tmp/kuberay \
   --non-interactive \
   --input namespace=kuberay-system
 
-bin/install render /tmp/kuberay
+bin/installer render /tmp/kuberay
 ls /tmp/kuberay/out/manifests/
 ```
 

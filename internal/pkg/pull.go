@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package pkg
 
 import (
@@ -129,7 +132,7 @@ func pullLocal(src, dest string) (string, error) {
 	}
 	if info.IsDir() {
 		// For local directories, prefer in-place use unless an explicit dest
-		// is requested. This keeps `install wizard ./examples/hello-app`
+		// is requested. This keeps `installer wizard ./examples/hello-app`
 		// fast and avoids copying.
 		if dest == "" {
 			return abs, nil

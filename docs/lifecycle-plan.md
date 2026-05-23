@@ -59,13 +59,13 @@ working interactive flow built on `survey/v2`.
     feeding scripted input, asserting the resulting `Result`.
   - `internal/wizard/prior_test.go` — local-only prior state load;
     ConfigHub fetch is exercised in the e2e script.
-- Acceptance: `install wizard ./examples/hello-app` (no flags) walks
+- Acceptance: `installer wizard ./examples/hello-app` (no flags) walks
   through prompts and emits the same files the non-interactive path
   produces. Re-running it offers "Re-use last choices?" and renders an
   unchanged spec. Re-running it after `cub context set` to a different
   org fails fast naming both org IDs.
 
-## Phase B — `install plan`
+## Phase B — `installer plan`
 
 Goal: read-only diff of `<work-dir>/out` against ConfigHub.
 
@@ -85,7 +85,7 @@ Goal: read-only diff of `<work-dir>/out` against ConfigHub.
   - Per-Space `Images:` footer from
     `cub function do --space <slug> get-container-image '*'` against the
     just-rendered manifests (not against ConfigHub).
-- New: `internal/cli/plan.go` — `install plan <work-dir>`. Reuses
+- New: `internal/cli/plan.go` — `installer plan <work-dir>`. Reuses
   `upload.Discover` to walk packages.
 - New: `internal/cli/plan_test.go` (table tests for print rendering).
 - Add to existing e2e: after `upload`, edit one rendered file, re-render,
@@ -93,7 +93,7 @@ Goal: read-only diff of `<work-dir>/out` against ConfigHub.
 - Acceptance: plan against an unchanged work-dir prints
   "No changes." Hand-edit one resource, re-render, plan shows the diff.
 
-## Phase C — `install update`
+## Phase C — `installer update`
 
 Goal: execute the Phase B plan inside a ChangeSet.
 
@@ -115,7 +115,7 @@ Goal: execute the Phase B plan inside a ChangeSet.
     Gated on `opts.Yes` or interactive confirm-each, and refused for
     Units carrying a DestroyGate. Stale links are auto-removed by
     ConfigHub when the Data no longer references them.
-- New: `internal/cli/update.go` — `install update <work-dir> [--yes]
+- New: `internal/cli/update.go` — `installer update <work-dir> [--yes]
   [--changeset <slug>]`. Default ChangeSet slug:
   `installer-update-<RFC3339-timestamp>`. Plan output names the
   ChangeSet that will be opened and prints the revert command.
@@ -131,7 +131,7 @@ Goal: execute the Phase B plan inside a ChangeSet.
   - Restoring `Before:ChangeSet:<slug>` reverts the updates from that
     invocation.
 
-## Phase D — `install upgrade` and `install upgrade-apply`
+## Phase D — `installer upgrade` and `installer upgrade-apply`
 
 Goal: split the upgrade flow into "stage" (pull, re-wizard non-
 interactively, re-collect facts, re-render, plan) and "promote"
@@ -147,21 +147,21 @@ interactively, re-collect facts, re-render, plan) and "promote"
   - Mirror helpers for components: `DiffComponents(oldPkg, newPkg,
     priorSelection)` honoring the prior preset (recorded in
     `selection.yaml`) for `default: true` adoption.
-- New: `internal/cli/upgrade.go` — `install upgrade <work-dir> <ref>
+- New: `internal/cli/upgrade.go` — `installer upgrade <work-dir> <ref>
   [--set-image …] [--apply]`.
   - Pulls into `<work-dir>/.upgrade/package`.
   - Runs `schemadiff.DiffInputs` and `DiffComponents`. Interactive
     mode prompts for new required inputs; non-interactive mode fails
-    with the missing input names and the `install wizard <work-dir>`
+    with the missing input names and the `installer wizard <work-dir>`
     hint.
   - Builds `RawAnswers` from carry + answers + prior selection.
   - Runs the collector against the new package.
   - Calls `render.Render` with `<work-dir>/.upgrade` as the work-dir.
   - Calls `diff.Compute` against current ConfigHub state and prints.
-  - `--apply` is sugar for `install upgrade-apply <work-dir>`
+  - `--apply` is sugar for `installer upgrade-apply <work-dir>`
     invoked immediately on success — does not change the staging
     contract.
-- New: `internal/cli/upgrade_apply.go` — `install upgrade-apply
+- New: `internal/cli/upgrade_apply.go` — `installer upgrade-apply
   <work-dir> [--yes]`.
   - Refuses if `.upgrade/` is missing or if the staged spec has
     unsatisfied required inputs (records this in
@@ -169,14 +169,14 @@ interactively, re-collect facts, re-render, plan) and "promote"
   - Atomic rename: archives the current `package/` and `out/` to
     `.upgrade-prev/`, then renames `.upgrade/package` → `package` and
     `.upgrade/out` → `out`.
-  - Invokes `install update <work-dir>` with a ChangeSet slug
+  - Invokes `installer update <work-dir>` with a ChangeSet slug
     `installer-upgrade-<from>-to-<to>-<timestamp>`.
 - Acceptance:
   - Starting from an installed `examples/hello-app`, `installer
     upgrade <work-dir> ./examples/hello-app` produces a `.upgrade/`
     tree and a "no changes" plan.
   - Editing `examples/hello-app/bases/default/...` and re-running
-    `install upgrade` surfaces the change in plan; `installer
+    `installer upgrade` surfaces the change in plan; `installer
     upgrade-apply <work-dir>` materializes it.
   - Adding a new required input to the package and running `installer
     upgrade` non-interactively fails fast with the new input named.
@@ -216,15 +216,15 @@ to [Principle 5](./principles.md#5-image-management-declare-a-kustomize-transfor
   - Unit: image overrides round-trip — `inputs.yaml` written by an
     upgrade-with-`--set-image` carries forward to a subsequent
     upgrade without `--set-image`.
-- Acceptance: `install upgrade <work-dir> <same-ref> --set-image
-  hello=hello:v2 && install upgrade-apply <work-dir>` produces a
+- Acceptance: `installer upgrade <work-dir> <same-ref> --set-image
+  hello=hello:v2 && installer upgrade-apply <work-dir>` produces a
   plan whose only diff is the image change.
 
 ## Cross-cutting
 
 ### Auth context check
 
-`install wizard`'s ConfigHub fetch and `installer
+`installer wizard`'s ConfigHub fetch and `installer
 plan/update/upgrade/upgrade-apply` all inherit the user's `cub` auth
 context. Each command starts by calling
 `cubctx.CheckOrganization(ctx, upload.Spec.OrganizationID)` (Phase A
@@ -246,7 +246,7 @@ to re-upload, but it is not required for the new commands to work.)
 ### Roadmap entries to update
 
 - README "Roadmap" section — replace the stub line about "interactive
-  wizard (e.g., `survey`)" and the "`install plan`" stub with phase
+  wizard (e.g., `survey`)" and the "`installer plan`" stub with phase
   pointers.
 - README "Status" section — same.
 - README "Design docs" section — link `principles.md` and
@@ -279,7 +279,7 @@ is the implementation plan.
 
 `internal/cli/setup.go`:
 
-- Flags: `--pull <ref>` (optional, replaces `install pull
+- Flags: `--pull <ref>` (optional, replaces `installer pull
   <ref> --work-dir`), plus every flag the existing `wizard` and
   `render` commands accept (`--namespace`, `--select`, `--input`,
   `--non-interactive`, `--components`, `--set-image`, `--reuse`,
@@ -383,12 +383,12 @@ behavior matches today's `wizard`. The render path is the same code
 
 ### Acceptance
 
-- `bin/install setup --pull oci://… --work-dir /tmp/foo
+- `bin/installer setup --pull oci://… --work-dir /tmp/foo
   --non-interactive --namespace foo` produces a render in
   `/tmp/foo/out/manifests/` and `/tmp/foo/package/` exists. Re-running
   the same command (no `--pull`) re-renders without re-pulling.
-- `bin/install upload --work-dir /tmp/foo --space foo-test` creates
-  Units; a second `bin/install upload --work-dir /tmp/foo` (no
+- `bin/installer upload --work-dir /tmp/foo --space foo-test` creates
+  Units; a second `bin/installer upload --work-dir /tmp/foo` (no
   `--space`) is a no-op on an unchanged work-dir.
 - Editing a rendered manifest and re-running `upload` opens a
   ChangeSet, applies the diff.
@@ -400,5 +400,5 @@ behavior matches today's `wizard`. The render path is the same code
   across subsequent setup invocations.
 - No `.upgrade/` or `.upgrade-prev/` directories are created at any
   point.
-- `install help` no longer lists `update`, `upgrade`, or
+- `installer help` no longer lists `update`, `upgrade`, or
   `upgrade-apply`.

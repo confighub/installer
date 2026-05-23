@@ -2,6 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: example-stack
+installerMetadata:
   version: 0.1.0
 spec:
   bases:

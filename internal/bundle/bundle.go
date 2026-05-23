@@ -1,5 +1,8 @@
-// Package bundle produces deterministic, distribution-ready install package
-// tarballs. The output is the input to `install push` and is what an OCI
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
+// Package bundle produces deterministic, distribution-ready installer package
+// tarballs. The output is the input to `installer push` and is what an OCI
 // registry stores as a single layer of a native installer artifact.
 //
 // Determinism: same source tree → byte-identical .tgz, regardless of mtimes,

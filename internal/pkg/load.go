@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package pkg loads installer packages — kustomize trees containing an
 // installer.yaml manifest, distributed as local directories, .tgz archives,
 // or Helm OCI artifacts.

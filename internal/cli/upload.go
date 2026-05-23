@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -59,7 +62,7 @@ First upload (no upload.yaml):
   per Space at the end. Writes upload.yaml on success.
 
 Reconcile (upload.yaml exists):
-  Re-computes the same plan install plan would produce. Opens one
+  Re-computes the same plan installer plan would produce. Opens one
   ChangeSet per Space, runs cub unit update --merge-external-source
   --changeset for updates, cub unit create for adds (with --label
   Package=<pkg>), cub unit update with no data for deletes (gated on --yes
@@ -217,7 +220,7 @@ passed again.`,
 
 			// Persist where this work-dir is being uploaded before any
 			// cub calls so the upload.yaml is included in each parent's
-			// installer-record body. Subsequent `install wizard /
+			// installer-record body. Subsequent `installer wizard /
 			// plan / update / upgrade` invocations read it to re-enter
 			// from ConfigHub and to sanity-check the active cub
 			// context.
@@ -239,7 +242,7 @@ passed again.`,
 
 			// Record the parent package's install in the per-user
 			// state file (~/.confighub/installer/state.yaml). Other
-			// commands (notably `install new`) read this to find
+			// commands (notably `installer new`) read this to find
 			// kubernetes-resources without re-asking the operator.
 			// Best-effort: failure here should NOT fail the upload.
 			if err := recordUploadInUserState(cmd.Context(), packages); err != nil {
@@ -271,7 +274,7 @@ passed again.`,
 // runUploadReconcile is the second-and-subsequent-upload code path:
 // reads upload.yaml, computes a diff against ConfigHub, opens a
 // ChangeSet, and applies. Same semantics as the previous standalone
-// `install update` command.
+// `installer update` command.
 func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded, meta spaceMetaInput, unitAnnotations, unitLabels []string, yes bool, changeSetSlug, spaceFlag, spacePatternFlag string) error {
 	if spaceFlag != "" || spacePatternFlag != "" {
 		fmt.Fprintln(os.Stderr, "note: --space / --space-pattern are read from upload.yaml on reconcile; flag value ignored")
@@ -357,7 +360,7 @@ func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded
 	res, err := diff.Apply(ctx, plan, diff.ApplyOptions{
 		Yes:                  yes,
 		ChangeSetSlug:        changeSetSlug,
-		ChangeSetDescription: fmt.Sprintf("install upload (reconcile) from %s@%s", loaded.Package.Metadata.Name, loaded.Package.Metadata.Version),
+		ChangeSetDescription: fmt.Sprintf("installer upload (reconcile) from %s@%s", loaded.Package.Metadata.Name, loaded.Package.InstallerMetadata.Version),
 		Targets:              targets,
 		Annotations:          unitAnnotations,
 		Labels:               unitLabels,

@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -68,14 +71,14 @@ Package references:
 
 func printPackageDoc(p *api.Package) {
 	fmt.Printf("Package: %s\n", p.Metadata.Name)
-	if p.Metadata.Version != "" {
-		fmt.Printf("Version: %s\n", p.Metadata.Version)
+	if p.InstallerMetadata.Version != "" {
+		fmt.Printf("Version: %s\n", p.InstallerMetadata.Version)
 	}
-	if p.Metadata.KubeVersion != "" {
-		fmt.Printf("Kubernetes: %s\n", p.Metadata.KubeVersion)
+	if p.InstallerMetadata.KubeVersion != "" {
+		fmt.Printf("Kubernetes: %s\n", p.InstallerMetadata.KubeVersion)
 	}
-	if p.Metadata.InstallerVersion != "" {
-		fmt.Printf("Installer:  %s\n", p.Metadata.InstallerVersion)
+	if p.InstallerMetadata.InstallerVersion != "" {
+		fmt.Printf("Installer:  %s\n", p.InstallerMetadata.InstallerVersion)
 	}
 	fmt.Println()
 

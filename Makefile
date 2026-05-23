@@ -1,14 +1,14 @@
 # Makefile for the installer CLI.
 #
-# The output binary is `bin/install` because the cub plugin protocol
+# The output binary is `bin/installer` because the cub plugin protocol
 # names the plugin after its entrypoint basename: invoking it via cub
-# reads as `cub install ...`, matching the standalone form.
+# reads as `cub installer ...`, matching the standalone form.
 
 GO     ?= go
-BIN    ?= bin/install
+BIN    ?= bin/installer
 PKG    ?= ./cmd/installer
 
-.PHONY: all build install test vet fmt clean
+.PHONY: all build test vet fmt clean
 
 all: build
 
@@ -16,10 +16,6 @@ build: $(BIN)
 
 $(BIN): $(shell find . -name '*.go' -not -path './bin/*')
 	$(GO) build -o $(BIN) $(PKG)
-
-# Alias: `make install` builds the binary (it does NOT install it on
-# PATH — name matches the binary, not the verb).
-install: build
 
 test:
 	$(GO) test ./...

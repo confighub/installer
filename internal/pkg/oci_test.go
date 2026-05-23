@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package pkg
 
 import (
@@ -18,6 +21,7 @@ const testInstallerYAML = `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: ocitest
+installerMetadata:
   version: 1.2.3
 spec:
   bases:
@@ -79,7 +83,7 @@ func TestStageAndInspectRoundTrip(t *testing.T) {
 		t.Fatalf("manifest digest mismatch: inspect=%s pushed=%s", got.ManifestDigest, pushed.ManifestDigest)
 	}
 	cb := got.Config
-	if cb.Manifest.Metadata.Name != "ocitest" || cb.Manifest.Metadata.Version != "1.2.3" {
+	if cb.Manifest.Metadata.Name != "ocitest" || cb.Manifest.InstallerMetadata.Version != "1.2.3" {
 		t.Fatalf("manifest metadata wrong: %+v", cb.Manifest.Metadata)
 	}
 	if cb.Bundle.LayerDigest != pushed.LayerDigest {

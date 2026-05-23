@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package upload
 
 import (
@@ -100,7 +103,7 @@ func DetectAppConfigManifest(path string) (*AppConfigManifest, error) {
 	}
 	mode := shape.Metadata.Annotations[annoMode]
 	if mode == "" {
-		return nil, fmt.Errorf("%s: %s missing — the transformer should have injected it during render; re-run `install render`",
+		return nil, fmt.Errorf("%s: %s missing — the transformer should have injected it during render; re-run `installer render`",
 			path, annoMode)
 	}
 	sourceKey := shape.Metadata.Annotations[annoSourceKey]

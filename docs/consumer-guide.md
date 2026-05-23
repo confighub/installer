@@ -26,12 +26,12 @@ installer is anchored to lives in [principles.md](./principles.md).
 
 Day-2 commands operate on the same work-dir:
 
-- `install setup` — re-runs wizard + render against the existing
+- `installer setup` — re-runs wizard + render against the existing
   package, picking up edits to `out/spec/inputs.yaml` or a different
   pulled package version.
-- `install plan` — show what's different between the work-dir and
+- `installer plan` — show what's different between the work-dir and
   ConfigHub.
-- `install upload` — reconcile the work-dir with ConfigHub. First
+- `installer upload` — reconcile the work-dir with ConfigHub. First
   upload creates Units; subsequent uploads open a ChangeSet and
   update/add/delete.
 
@@ -47,7 +47,7 @@ packages under `packages/` as starting points:
 
 - `packages/kubernetes-resources/` — eleven canonical Kubernetes
   resource templates with best-practice defaults pre-applied. Used
-  by `install new` to scaffold resources into your own packages
+  by `installer new` to scaffold resources into your own packages
   (see [author guide](./author-guide.md#kubernetes-resources-package)).
 - `packages/worker/` — the ConfigHub bridge worker.
 
@@ -57,16 +57,16 @@ you have a candidate ref:
 ```bash
 # What's in this artifact? Reads only the manifest + config blob,
 # does not pull the layer.
-install inspect oci://ghcr.io/myorg/statusboard:0.1.0
+installer inspect oci://ghcr.io/myorg/statusboard:0.1.0
 
 # What versions are available?
-install list oci://ghcr.io/myorg/statusboard
+installer list oci://ghcr.io/myorg/statusboard
 ```
 
 For private registries, log in first:
 
 ```bash
-install login ghcr.io
+installer login ghcr.io
 # uses ~/.docker/config.json; same auth as docker / podman
 ```
 
@@ -79,7 +79,7 @@ is the only command that talks to ConfigHub.
 mkdir my-statusboard && cd my-statusboard
 
 # 1. Pull the package, answer the wizard, and render.
-install setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
     --namespace statusboard
 
 # Interactive prompts (skip with --non-interactive + flags):
@@ -93,7 +93,7 @@ output to `./out/spec/`, then renders manifests to `./out/manifests/`.
 If you prefer to script the wizard:
 
 ```bash
-install setup \
+installer setup \
     --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
     --non-interactive \
     --namespace statusboard \
@@ -105,7 +105,7 @@ The working directory defaults to `.`. To work in an explicit dir
 instead, pass `--work-dir <dir>` (no `cd`-into-it needed):
 
 ```bash
-install setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
     --work-dir /tmp/statusboard --namespace statusboard
 ```
 
@@ -121,17 +121,17 @@ ls out/manifests/
 You can edit these files directly — the next `plan` / `upload` will
 diff your edits against ConfigHub. But editing rendered output is
 usually the wrong layer; prefer editing `out/spec/inputs.yaml` and
-re-running `install setup`. See "Where to make changes" below.
+re-running `installer setup`. See "Where to make changes" below.
 
 Finally, upload to ConfigHub:
 
 ```bash
 # 2. Upload: one Unit per file, plus an installer-record Unit
 #    holding installer.yaml + spec/ docs.
-install upload --space statusboard-prod
+installer upload --space statusboard-prod
 ```
 
-`install upload` records the destination Space (and your active
+`installer upload` records the destination Space (and your active
 cub organization + server) into `./out/spec/upload.yaml` so all
 subsequent commands re-enter without you re-typing.
 
@@ -139,13 +139,13 @@ For multi-package installs (a parent that declares dependencies),
 use `--space-pattern` instead of `--space`:
 
 ```bash
-install upload --space-pattern '{{.PackageName}}-prod'
+installer upload --space-pattern '{{.PackageName}}-prod'
 # Each package — parent + each locked dep — gets its own Space.
 ```
 
 If the package ships application-config files (a `configMapGenerator`
 tagged with `installer.confighub.com/toolchain`, e.g.
-`AppConfig/Properties` or `AppConfig/Env`), `install upload` also
+`AppConfig/Properties` or `AppConfig/Env`), `installer upload` also
 creates a separate AppConfig Unit holding the raw config body, a
 `render-configmap` Invocation, and a placeholder Kubernetes/YAML Unit
 wired by an Upsert link that renders the ConfigMap into the
@@ -169,15 +169,15 @@ interactively to walk every prompt with prior values pre-filled):
 # Re-run setup. If a prior install is recorded, it loads those values
 # and offers "Re-use last choices?" — answer no to walk every prompt
 # with the prior values pre-filled.
-install setup
+installer setup
 
 # Or hand-edit and re-render via setup --non-interactive:
 $EDITOR out/spec/inputs.yaml
-install setup --non-interactive
+installer setup --non-interactive
 ```
 
-Then `install plan` to see what the change would do, and
-`install upload --yes` to apply it.
+Then `installer plan` to see what the change would do, and
+`installer upload --yes` to apply it.
 
 ### 2. `--set-image` overrides (install-time, image-only)
 
@@ -187,8 +187,8 @@ chosen base, you can override at setup time without editing the
 package source:
 
 ```bash
-install setup --set-image myorg/statusboard=myorg/statusboard:1.2.4
-install upload
+installer setup --set-image myorg/statusboard=myorg/statusboard:1.2.4
+installer upload
 ```
 
 The override is recorded in `out/spec/inputs.yaml` under
@@ -206,7 +206,7 @@ cub function do --space statusboard-prod set-container-image \
     deployment-statusboard-statusboard app myorg/statusboard:1.2.5
 ```
 
-These edits survive re-render: `install upload` uses
+These edits survive re-render: `installer upload` uses
 `--merge-external-source`, which only writes paths that changed in
 the new render. Your post-install ConfigHub edits are preserved.
 
@@ -217,14 +217,14 @@ change tracked in cub's revision history rather than your work-dir.
 Post-install mutations can also be made with [kpt](https://kpt.dev)
 instead of ConfigHub — a git-based configuration-as-data tool whose
 package merge preserves your edits across re-renders the same way
-`--merge-external-source` does. This is an alternative to `install
+`--merge-external-source` does. This is an alternative to `installer
 upload` + `cub unit apply` for kpt users, or for trying post-install
 changes without ConfigHub first. See the [kpt guide](./kpt-guide.md).
 
 ### What NOT to do
 
 - **Don't edit the package source tree** (`./package/`). The next
-  `install setup --pull` overwrites it. If you find yourself
+  `installer setup --pull` overwrites it. If you find yourself
   running `kustomize edit` against `./package/...`, stop —
   use `--set-image` or post-install mutations instead. (See
   [Principle 1](./principles.md#1-package-files-are-read-only-to-consumers).)
@@ -233,7 +233,7 @@ changes without ConfigHub first. See the [kpt guide](./kpt-guide.md).
 
 ### Plan
 
-`install plan` is read-only. It shows three things per Space:
+`installer plan` is read-only. It shows three things per Space:
 
 ```
 Plan: 1 to add, 2 to change, 0 to delete.
@@ -262,12 +262,12 @@ of whether plan shows other changes.
 
 ### Upload reconcile
 
-`install upload` on an already-uploaded work-dir reconciles the
+`installer upload` on an already-uploaded work-dir reconciles the
 local render with ConfigHub. It re-runs the same plan and executes
 it inside a ChangeSet:
 
 ```bash
-install upload --yes
+installer upload --yes
 # == Space statusboard-prod (statusboard@0.1.0) ==
 # ChangeSet: statusboard-prod/installer-update-20260514-…
 # Successfully updated unit deployment-statusboard-statusboard …
@@ -295,7 +295,7 @@ clear the gate first if you really intend to tear them down.
 A re-run on a converged work-dir is a no-op (no ChangeSet opened):
 
 ```bash
-install upload
+installer upload
 # No changes.
 ```
 
@@ -311,7 +311,7 @@ To revert a reconcile upload, run the printed `cub unit update --patch
 - **Empties** from that upload (Units that dropped out of the render)
   are not part of the ChangeSet, but the prior Data is preserved in the
   Unit's revision history — restore it with `cub unit update --restore`
-  against the pre-empty revision, or re-render and re-run `install
+  against the pre-empty revision, or re-render and re-run `installer
   upload` to repopulate it.
 
 If you need to roll back a multi-Unit change, this is where having
@@ -336,16 +336,16 @@ default, etc.).
 ### Routine upgrade
 
 ```bash
-install setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
 # Loaded prior install state from confighub.
 # Adopted new default for input "metrics_port": 9090
 # Adopted new default-flagged component(s): metrics-collector
 # Wizard wrote out/spec/{selection,inputs}.yaml
 # Rendered 4 manifest(s) to out/manifests/
-# Next: install upload --work-dir … --space <slug>
+# Next: installer upload --work-dir … --space <slug>
 
-install plan                         # preview
-install upload --yes                 # apply
+installer plan                         # preview
+installer upload --yes                 # apply
 ```
 
 The pull is atomic — it stages into a sibling temp dir and renames
@@ -356,8 +356,8 @@ intact. If you want a record of the prior package source, commit
 For a one-shot upgrade + execute, chain:
 
 ```bash
-install setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 && \
-    install upload --yes
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 && \
+    installer upload --yes
 ```
 
 ### Image-only upgrade
@@ -366,8 +366,8 @@ A common case is "same package version, new image tag" — e.g., a
 patch-level container bump:
 
 ```bash
-install setup --set-image myorg/statusboard=myorg/statusboard:0.2.1
-install upload --yes
+installer setup --set-image myorg/statusboard=myorg/statusboard:0.2.1
+installer upload --yes
 ```
 
 (`--pull` is optional here — if you've already got the version
@@ -402,7 +402,7 @@ changed in a way the collector picks up (a worker was rotated, the
 cub server moved, etc.):
 
 ```bash
-install setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
 # even if 0.2.0 is what you already have — re-runs the collector.
 ```
 
@@ -411,13 +411,13 @@ install setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
 Most operators only need `setup` and `upload`. The granular commands
 are available for step-by-step debugging or advanced workflows:
 
-- `install pull <ref> --work-dir <dir>` — fetch only, no wizard.
+- `installer pull <ref> --work-dir <dir>` — fetch only, no wizard.
   Writes to `<work-dir>/package/`.
-- `install wizard <ref> --work-dir <dir> [--render=false]` — pull
+- `installer wizard <ref> --work-dir <dir> [--render=false]` — pull
   + Q&A. Renders by default; pass `--render=false` to skip.
-- `install render --work-dir <dir>` — render only; reads existing
+- `installer render --work-dir <dir>` — render only; reads existing
   `<work-dir>/package/` + `<work-dir>/out/spec/`.
-- `install deps update --work-dir <dir>` — multi-package only:
+- `installer deps update --work-dir <dir>` — multi-package only:
   resolve the dependency DAG and write `out/spec/lock.yaml`. (`setup`
   runs this automatically before render.)
 
@@ -434,17 +434,17 @@ pull. Two ways:
 ### One-off verification
 
 ```bash
-install verify oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.pub
+installer verify oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.pub
 # or for keyless (Sigstore Fulcio + OIDC):
-install verify oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer verify oci://ghcr.io/myorg/statusboard:0.1.0 \
     --identity author@myorg.com --issuer https://accounts.google.com
 ```
 
 ### Enforced policy
 
 Configure `~/.config/installer/policy.yaml` to require signatures on
-every fetch. When the file exists, `install pull`, `installer
-setup --pull`, and `install deps update` enforce verification
+every fetch. When the file exists, `installer pull`, `installer
+setup --pull`, and `installer deps update` enforce verification
 automatically.
 
 ```yaml
@@ -481,25 +481,25 @@ Space:
 ```bash
 WD=stack-install
 mkdir $WD && cd $WD
-install setup --pull oci://ghcr.io/myorg/stack:1.0.0 --namespace stack
+installer setup --pull oci://ghcr.io/myorg/stack:1.0.0 --namespace stack
 
 ls out/manifests/                # parent's manifests
 ls out/<dep-name>/manifests/     # each dep's manifests
 
 # Upload one Space per package.
-install upload --space-pattern '{{.PackageName}}-prod'
+installer upload --space-pattern '{{.PackageName}}-prod'
 ```
 
 Plan / upload work the same way — each operates across all locked
 packages, opens one ChangeSet per Space when there are updates, and
 prints a per-Space revert command.
 
-`install deps tree` shows the resolved DAG if you want to audit
+`installer deps tree` shows the resolved DAG if you want to audit
 who depends on what.
 
 ## Re-entering an install from a fresh machine
 
-The `out/spec/upload.yaml` file written by `install upload` is
+The `out/spec/upload.yaml` file written by `installer upload` is
 what bootstraps everything. From a fresh clone of the work-dir, all
 day-2 commands work because they read `upload.yaml` to find the
 Spaces.
@@ -512,7 +512,7 @@ package's `installer-record` Unit on ConfigHub holds the full spec
 mkdir recovered && cd recovered
 
 # Pull the package source.
-install pull oci://ghcr.io/myorg/statusboard:0.1.0
+installer pull oci://ghcr.io/myorg/statusboard:0.1.0
 
 # Pull the installer-record Unit body and split it into spec docs.
 mkdir -p out/spec
@@ -522,8 +522,8 @@ cub unit data --space statusboard-prod installer-record \
 # / upload.yaml is a manual step today; an `installer recover`
 # command will automate this.)
 
-install render
-install plan       # should be No changes if cub is in sync
+installer render
+installer plan       # should be No changes if cub is in sync
 ```
 
 ## Common errors
@@ -543,20 +543,20 @@ the one the install was uploaded to. Switch with `cub context set
 
 ### `no package found in <work-dir>/package/ — pass --pull <ref> to fetch one`
 
-You ran `install setup` (without `--pull`) in a work-dir that has
+You ran `installer setup` (without `--pull`) in a work-dir that has
 never been populated. Pass `--pull <ref>` to fetch the package, or
-run `install pull <ref> --work-dir <dir>` first.
+run `installer pull <ref> --work-dir <dir>` first.
 
 ### `package declares dependencies but … lock.yaml does not exist`
 
-You ran a granular command (`install render` / `install upload`)
-before `install deps update` on a multi-package install. Run
-`install deps update` first. `install setup` runs this
+You ran a granular command (`installer render` / `installer upload`)
+before `installer deps update` on a multi-package install. Run
+`installer deps update` first. `installer setup` runs this
 automatically.
 
 ### `the new package adds N required input(s) that the prior install did not answer`
 
-A non-interactive `install setup --pull <new-ref>` ran against a
+A non-interactive `installer setup --pull <new-ref>` ran against a
 package version that adds new required inputs. Re-run setup
 interactively to answer them.
 
@@ -572,26 +572,26 @@ re-run.
 The installer-record Unit was deleted from cub, or the recorded
 Space slug in `upload.yaml` is stale. Setup's prior-state load falls
 back to local `out/spec/*.yaml` automatically with a warning. If you
-want to refresh ConfigHub from local state, re-run `install upload
+want to refresh ConfigHub from local state, re-run `installer upload
 --space <slug>` against the same Space.
 
 ## Quick reference
 
 | Task | Command |
 |---|---|
-| Discover what's in a registry | `install inspect <ref>` / `install list <repo>` |
-| Pull a package locally | `install pull <ref> [--work-dir <dir>]` |
-| Read the package's surface | `install doc <dir>` |
-| Install (interactive) | `install setup --pull <ref> --namespace <ns>` |
-| Install (scripted) | `install setup --pull <ref> --non-interactive --namespace <ns> --components default` |
-| Re-render after editing inputs | `install setup --non-interactive` |
-| Push to ConfigHub | `install upload --space <slug>` |
-| Preview cub-side changes | `install plan` |
-| Apply cub-side changes | `install upload --yes` |
-| Bump an image | `install setup --set-image NAME=REF && install upload --yes` |
-| Upgrade to a new version | `install setup --pull <new-ref> && install upload --yes` |
-| Resolve deps (advanced) | `install deps update` (multi-package only; setup does this automatically) |
-| Verify a signature | `install verify <ref> --key cosign.pub` |
+| Discover what's in a registry | `installer inspect <ref>` / `installer list <repo>` |
+| Pull a package locally | `installer pull <ref> [--work-dir <dir>]` |
+| Read the package's surface | `installer doc <dir>` |
+| Install (interactive) | `installer setup --pull <ref> --namespace <ns>` |
+| Install (scripted) | `installer setup --pull <ref> --non-interactive --namespace <ns> --components default` |
+| Re-render after editing inputs | `installer setup --non-interactive` |
+| Push to ConfigHub | `installer upload --space <slug>` |
+| Preview cub-side changes | `installer plan` |
+| Apply cub-side changes | `installer upload --yes` |
+| Bump an image | `installer setup --set-image NAME=REF && installer upload --yes` |
+| Upgrade to a new version | `installer setup --pull <new-ref> && installer upload --yes` |
+| Resolve deps (advanced) | `installer deps update` (multi-package only; setup does this automatically) |
+| Verify a signature | `installer verify <ref> --key cosign.pub` |
 | Make signature mandatory | edit `~/.config/installer/policy.yaml` |
 
 ## Where to go next

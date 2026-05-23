@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Dependency declares another installer package this package composes with.
@@ -49,7 +52,10 @@ type Dependency struct {
 // the resolver fills in (package name, version), so DependencySelection
 // keeps the authored surface small.
 type DependencySelection struct {
-	Base       string   `yaml:"base,omitempty" json:"base,omitempty"`
+	// Base is the dep's Base.Name the parent pre-picks.
+	Base string `yaml:"base,omitempty" json:"base,omitempty"`
+	// Components is the dep's Component names the parent pre-picks. Closure
+	// under Requires is computed by the dep's solver at render time.
 	Components []string `yaml:"components,omitempty" json:"components,omitempty"`
 }
 
@@ -69,6 +75,9 @@ type ConflictRef struct {
 // treats a dependency on the named package matching the version range as
 // satisfied by the package declaring the replacement.
 type ReplaceRef struct {
+	// Package is the OCI ref (oci://host/repo) of the superseded package.
 	Package string `yaml:"package" json:"package"`
+	// Version is a SemVer range; empty or "*" matches any version of the
+	// superseded package.
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 }

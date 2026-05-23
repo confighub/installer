@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -53,11 +56,11 @@ wizard' first).`,
 			specDir := filepath.Join(workDir, "out", "spec")
 			sel, err := readSelection(filepath.Join(specDir, "selection.yaml"))
 			if err != nil {
-				return fmt.Errorf("read selection.yaml: %w (run `install wizard` first)", err)
+				return fmt.Errorf("read selection.yaml: %w (run `installer wizard` first)", err)
 			}
 			inputs, err := readInputs(filepath.Join(specDir, "inputs.yaml"))
 			if err != nil {
-				return fmt.Errorf("read inputs.yaml: %w (run `install wizard` first)", err)
+				return fmt.Errorf("read inputs.yaml: %w (run `installer wizard` first)", err)
 			}
 			facts, err := readFactsOptional(filepath.Join(specDir, "facts.yaml"))
 			if err != nil {
@@ -75,7 +78,7 @@ wizard' first).`,
 				return err
 			}
 			if len(body) == 0 {
-				return fmt.Errorf("no manifests found in %s — run `install render` first", manifestsDir)
+				return fmt.Errorf("no manifests found in %s — run `installer render` first", manifestsDir)
 			}
 
 			fmt.Printf("Vetting %d resource(s) under %s against %d validator group(s)...\n",

@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -17,7 +20,7 @@ func newPackageCmd() *cobra.Command {
 		Short: "Bundle a package source tree into a deterministic .tgz",
 		Long: `Package bundles a package source tree (the directory containing installer.yaml,
 bases/, components/, validation/, and an optional collector) into a
-byte-deterministic .tgz suitable for install push.
+byte-deterministic .tgz suitable for installer push.
 
 Refuses to bundle: *.env.secret files, anything under out/, anything matched
 by .installerignore (gitignore syntax). The package is NOT rendered —
@@ -42,7 +45,7 @@ See docs/package-management-plan.md (Phase 1).`,
 			dst := outFile
 			if dst == "" {
 				name := loaded.Package.Metadata.Name
-				ver := loaded.Package.Metadata.Version
+				ver := loaded.Package.InstallerMetadata.Version
 				if name == "" {
 					return fmt.Errorf("installer.yaml is missing metadata.name; pass --out to override")
 				}
@@ -56,7 +59,7 @@ See docs/package-management-plan.md (Phase 1).`,
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Bundled %s@%s\n", loaded.Package.Metadata.Name, loaded.Package.Metadata.Version)
+			fmt.Printf("Bundled %s@%s\n", loaded.Package.Metadata.Name, loaded.Package.InstallerMetadata.Version)
 			fmt.Printf("  output: %s\n", dst)
 			fmt.Printf("  files:  %d\n", len(res.Files))
 			fmt.Printf("  size:   %d bytes\n", res.Size)

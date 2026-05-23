@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package api
 
 // Upload records where a work-dir's spec was last uploaded so the wizard
@@ -7,10 +10,14 @@ package api
 // installer-record Unit body so a freshly cloned work-dir can be
 // recovered from ConfigHub alone.
 type Upload struct {
-	APIVersion string     `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string     `yaml:"kind" json:"kind"`
-	Metadata   Metadata   `yaml:"metadata" json:"metadata"`
-	Spec       UploadSpec `yaml:"spec" json:"spec"`
+	// APIVersion is the installer API group/version.
+	APIVersion string `yaml:"apiVersion" json:"apiVersion"`
+	// Kind is "Upload".
+	Kind string `yaml:"kind" json:"kind"`
+	// Metadata is the doc's ObjectMeta-shaped metadata block.
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	// Spec carries the destination Space(s) and the cub context used.
+	Spec UploadSpec `yaml:"spec" json:"spec"`
 }
 
 type UploadSpec struct {
@@ -36,9 +43,16 @@ type UploadSpec struct {
 	OrganizationID string `yaml:"organizationID,omitempty" json:"organizationID,omitempty"`
 }
 
+// UploadedSpace records one (package, resolved Space slug) pair from an
+// upload. Each parent or locked dependency uploads into its own Space.
 type UploadedSpace struct {
-	Package  string `yaml:"package" json:"package"`
-	Version  string `yaml:"version,omitempty" json:"version,omitempty"`
-	Slug     string `yaml:"slug" json:"slug"`
-	IsParent bool   `yaml:"isParent,omitempty" json:"isParent,omitempty"`
+	// Package is the package's metadata.name.
+	Package string `yaml:"package" json:"package"`
+	// Version is the package's installerMetadata.version at upload time.
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	// Slug is the resolved ConfigHub Space slug (from SpacePattern).
+	Slug string `yaml:"slug" json:"slug"`
+	// IsParent flags the entry for the parent (root) package as opposed to
+	// a locked dependency.
+	IsParent bool `yaml:"isParent,omitempty" json:"isParent,omitempty"`
 }

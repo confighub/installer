@@ -2,7 +2,7 @@
 
 The installer renders fully-materialized Kubernetes manifests to
 `out/manifests/`. The recommended day-2 path is to upload them to
-ConfigHub and reconcile with `install upload` + `cub unit apply`:
+ConfigHub and reconcile with `installer upload` + `cub unit apply`:
 ConfigHub's `--merge-external-source` preserves your post-install edits
 across re-renders (see [Post-install ConfigHub
 mutations](./consumer-guide.md#3-post-install-confighub-mutations)).
@@ -12,7 +12,7 @@ using git instead of ConfigHub. This guide is for two audiences:
 
 - you already use kpt and want to manage the rendered output with it;
 - you want to make post-install changes **without** standing up
-  ConfigHub first — an alternative to `install upload` and `cub unit
+  ConfigHub first — an alternative to `installer upload` and `cub unit
   apply`.
 
 ## What kpt gives you
@@ -37,7 +37,7 @@ See the kpt package operations reference:
 Three pieces, all in one git repo (your work-dir):
 
 - **Base package** — `out/manifests/`, turned into a kpt package with a
-  `Kptfile`. Every `install render` rewrites it. This is the upstream.
+  `Kptfile`. Every `installer render` rewrites it. This is the upstream.
 - **Post-install clone** — `out/post-install/manifests/`, a kpt clone of
   the base. **You make your edits here**, never in the base.
 - **Upgrade** — re-render the base, commit, then `kpt pkg update` in the
@@ -110,8 +110,8 @@ the inventory it won't prune deleted resources.) See
 # 1. Re-render the base (new package version, new inputs, image bump…).
 #    --clean prunes resources dropped by the upgrade while PRESERVING the
 #    base package's Kptfile, so out/manifests stays a valid kpt package.
-install setup --pull <new-ref> --work-dir my-workdir --clean
-#    (or, to re-render in place without re-pulling: install render --clean)
+installer setup --pull <new-ref> --work-dir my-workdir --clean
+#    (or, to re-render in place without re-pulling: installer render --clean)
 git add . && git commit -m "render <pkg>@<new-version>"
 
 # 2. Merge the new render into your post-install clone.

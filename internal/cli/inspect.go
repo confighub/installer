@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -35,7 +38,7 @@ package layer when only metadata is needed.`,
 				return enc.Encode(res)
 			}
 			cb := res.Config
-			fmt.Printf("Package:  %s@%s\n", cb.Manifest.Metadata.Name, cb.Manifest.Metadata.Version)
+			fmt.Printf("Package:  %s@%s\n", cb.Manifest.Metadata.Name, cb.Manifest.InstallerMetadata.Version)
 			fmt.Printf("Manifest: %s\n", res.ManifestDigest)
 			if cb.Bundle.InstallerVersion != "" {
 				fmt.Printf("Built with installer %s\n", cb.Bundle.InstallerVersion)

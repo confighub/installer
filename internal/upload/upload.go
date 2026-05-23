@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package upload turns a rendered work-dir into the inputs the cub CLI
 // needs to materialize ConfigHub Spaces, Units, and Links — without itself
 // shelling out. The CLI layer in internal/cli/upload.go orchestrates the
@@ -119,14 +122,14 @@ func Discover(in DiscoverInput) ([]Package, error) {
 
 	parentSlug, err := RenderSpaceSlug(pattern, Vars{
 		PackageName:    in.ParentPackage.Metadata.Name,
-		PackageVersion: in.ParentPackage.Metadata.Version,
+		PackageVersion: in.ParentPackage.InstallerMetadata.Version,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parent space slug: %w", err)
 	}
 	out = append(out, Package{
 		Name:         in.ParentPackage.Metadata.Name,
-		Version:      in.ParentPackage.Metadata.Version,
+		Version:      in.ParentPackage.InstallerMetadata.Version,
 		PackageDir:   filepath.Join(in.WorkDir, "package"),
 		ManifestsDir: filepath.Join(in.WorkDir, "out", "manifests"),
 		SpecDir:      filepath.Join(in.WorkDir, "out", "spec"),
@@ -141,7 +144,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 	for _, d := range in.Lock.Spec.Resolved {
 		vendor := filepath.Join(in.WorkDir, "out", "vendor", vendorSlug(d.Name, d.Version), "package")
 		if _, err := os.Stat(filepath.Join(vendor, "installer.yaml")); err != nil {
-			return nil, fmt.Errorf("dep %s vendor missing — run `install render %s` first: %w", d.Name, in.WorkDir, err)
+			return nil, fmt.Errorf("dep %s vendor missing — run `installer render %s` first: %w", d.Name, in.WorkDir, err)
 		}
 		// Read just enough metadata. We pulled this dep ourselves, so the
 		// lock's Name/Version are authoritative; we still re-read
@@ -157,14 +160,14 @@ func Discover(in DiscoverInput) ([]Package, error) {
 		}
 		slug, err := RenderSpaceSlug(pattern, Vars{
 			PackageName:    depPkg.Metadata.Name,
-			PackageVersion: depPkg.Metadata.Version,
+			PackageVersion: depPkg.InstallerMetadata.Version,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("dep %s space slug: %w", d.Name, err)
 		}
 		out = append(out, Package{
 			Name:         depPkg.Metadata.Name,
-			Version:      depPkg.Metadata.Version,
+			Version:      depPkg.InstallerMetadata.Version,
 			LocalHandle:  d.Name,
 			PackageDir:   vendor,
 			ManifestsDir: filepath.Join(in.WorkDir, "out", d.Name, "manifests"),
@@ -335,7 +338,7 @@ func setMappingScalar(m *yaml.Node, key, value string) {
 
 // RefreshInstallerRecord rebuilds the installer-record Unit body from
 // pkg's local files and uploads it to ConfigHub. Used after
-// `install update` / `install upgrade-apply` mutates the local
+// `installer update` / `installer upgrade-apply` mutates the local
 // spec so the cub-side record stays in sync — without this refresh,
 // a subsequent upgrade reads stale inputs (notably ImageOverrides)
 // from ConfigHub via wizard.LoadPriorState.
@@ -446,7 +449,7 @@ func SplitInstallerRecord(body []byte) (*RecordContents, error) {
 // discovered package set. Reads the active cub context to record the
 // organization ID and server URL alongside the resolved Space slugs.
 //
-// Called by the CLI at the end of a successful `install upload`. Safe
+// Called by the CLI at the end of a successful `installer upload`. Safe
 // to call when packages contains only the parent (no deps).
 func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages []Package) error {
 	if len(packages) == 0 || !packages[0].IsParent {

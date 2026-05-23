@@ -2,6 +2,7 @@ apiVersion: installer.confighub.com/v1alpha1
 kind: Package
 metadata:
   name: kubernetes-resources
+installerMetadata:
   version: 0.1.0
 spec:
   bases:
@@ -14,7 +15,7 @@ spec:
         DaemonSet, Job, CronJob, Ingress, NetworkPolicy pair, RBAC
         bundle, HPA, PDB. Each is rendered with the recommended
         defaults applied via per-type ConfigHub function groups.
-        `install new <kind> <name>` pulls these as starting
+        `installer new <kind> <name>` pulls these as starting
         templates so operators don't author Kubernetes YAML from
         scratch.
 

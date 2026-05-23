@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package wizard
 
 import (
@@ -45,7 +48,8 @@ spec:
 `)
 	mustWrite(t, filepath.Join(pkgDir, "installer.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Package
-metadata: {name: hello, version: 0.1.0}
+metadata: {name: hello}
+installerMetadata: {version: 0.1.0}
 spec:
   bases:
     - {name: default, path: bases/default, default: true}

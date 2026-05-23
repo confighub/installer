@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package render
 
 import (
@@ -17,7 +20,7 @@ import (
 // applyImageOverrides runs `kustomize edit set image <name>=<ref>` for
 // each entry in overrides against the chosen base's
 // kustomization.yaml. Mutates the package working copy in place; the
-// next `install pull` / `install upgrade` re-fetches and starts
+// next `installer pull` / `installer upgrade` re-fetches and starts
 // clean, so the mutation is non-persistent at the package source
 // level. Allowed by Principle 1's carve-out for the installer's own
 // `--set-image` mutations.

@@ -1,3 +1,6 @@
+// Copyright (C) ConfigHub, Inc.
+// SPDX-License-Identifier: MIT
+
 package wizard
 
 import (
@@ -410,13 +413,13 @@ func ask(p survey.Prompt, response any, opts AskOptions, extra ...survey.AskOpt)
 }
 
 // StringifyAny is the exported wrapper around stringifyAny — used by
-// `install upgrade` to round-trip prior typed values back through
+// `installer upgrade` to round-trip prior typed values back through
 // RawAnswers.
 func StringifyAny(v any) string { return stringifyAny(v) }
 
 // AskOneInput prompts interactively for a single input declaration
 // using the same widget the wizard uses inline (text / select / bool).
-// Used by `install upgrade` to ask for new required inputs that the
+// Used by `installer upgrade` to ask for new required inputs that the
 // prior install did not answer.
 func AskOneInput(in api.Input) (string, error) {
 	out := RawAnswers{Inputs: map[string]string{}}
