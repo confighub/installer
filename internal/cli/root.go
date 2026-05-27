@@ -79,6 +79,8 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		newVerifyCmd(),
 		// Kustomize integration
 		newTransformerCmd(),
+		// Plugin self-description
+		newVersionCmd(),
 	)
 	return root
 }
