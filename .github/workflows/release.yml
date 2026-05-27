@@ -44,14 +44,10 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
         run: |
           version="${GITHUB_REF_NAME#v}"
-          ldflags="-s -w \
-            -X github.com/confighub/installer/internal/version.Version=${version}"
-          out="installer-${GOOS}-${GOARCH}"
-          go build -trimpath -ldflags "$ldflags" -o "$out" ./cmd/installer
-          echo "ASSET=$out" >> "$GITHUB_ENV"
+          make release-build VERSION="$version"
+          echo "ASSET=installer-${GOOS}-${GOARCH}" >> "$GITHUB_ENV"
       - name: Checksum
         run: shasum -a 256 "$ASSET" > "$ASSET.sha256"
       - uses: actions/upload-artifact@v4
