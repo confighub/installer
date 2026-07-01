@@ -1,0 +1,37 @@
+# default-deny-all isolates every pod for both ingress and egress. The
+# allow-dns-egress policy re-permits cluster DNS so the deny doesn't break
+# name resolution (NetworkPolicy is additive-OR: the two policies combine).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: confighubplaceholder
+  labels:
+    app.kubernetes.io/managed-by: confighub-namespace-manager
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: confighubplaceholder
+  labels:
+    app.kubernetes.io/managed-by: confighub-namespace-manager
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
