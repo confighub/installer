@@ -1,0 +1,51 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: namespace-envelope
+installerMetadata:
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        The namespace policy envelope — a v1/Namespace, a default-deny
+        NetworkPolicy pair (deny-all ingress+egress plus an allow for
+        cluster DNS egress), and baseline RBAC (ServiceAccount + Role +
+        RoleBinding). The cloneable foundation a Namespace Manager stamps
+        out per component, then carries across every variant
+        (environment / region / cluster). Rendered with the namespace
+        set from `{{ .Namespace }}` and pod-security labels applied.
+
+  transformers:
+    # 1. Set the namespace on every namespaced resource. set-namespace
+    #    also renames the v1/Namespace object and rewrites RBAC
+    #    subjects[*].namespace for ServiceAccount subjects, so the whole
+    #    envelope is re-homed by this one invocation. The base ships
+    #    `confighubplaceholder` everywhere a namespace appears; this
+    #    replaces it (and vet-placeholders below guards an unrendered base).
+    - toolchain: Kubernetes/YAML
+      description: Set the namespace on every namespaced resource and on RBAC subjects.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+
+    # 2. Pod-security labels on the Namespace (Pod Security Admission).
+    - toolchain: Kubernetes/YAML
+      whereResource: ConfigHub.ResourceType = 'v1/Namespace'
+      description: Apply pod-security labels to the Namespace.
+      invocations:
+        - name: set-pod-security-defaults
+
+  validators:
+    # vet-placeholders is the guard that keeps an unrendered base
+    # (namespace still `confighubplaceholder`) from deploying; the rest
+    # are the standard schema/format checks applied at the end of render.
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-placeholders
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format
