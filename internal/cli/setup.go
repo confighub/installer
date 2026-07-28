@@ -40,6 +40,7 @@ type flowOptions struct {
 	// Render controls.
 	runRender bool
 	clean     bool
+	outputOCI string
 }
 
 // runFlow is the shared body of `installer setup` and `installer wizard`.
@@ -55,9 +56,22 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	}
 
 	pkgDir := filepath.Join(absWork, "package")
-	if opts.pullRef != "" {
-		if _, err := ipkg.PullToWorkDir(ctx, opts.pullRef, absWork); err != nil {
-			return fmt.Errorf("pull %s: %w", opts.pullRef, err)
+	sourceReference := ""
+	sourceDigest := ""
+	pullRef := opts.pullRef
+	if opts.outputOCI != "" && strings.HasPrefix(opts.pullRef, "oci://") {
+		sourceReference = opts.pullRef
+		sourceDigest, err = ipkg.ResolveManifestDigest(ctx, opts.pullRef)
+		if err != nil {
+			return fmt.Errorf("resolve source package digest: %w", err)
+		}
+		if !strings.Contains(pullRef, "@") {
+			pullRef += "@" + sourceDigest
+		}
+	}
+	if pullRef != "" {
+		if _, err := ipkg.PullToWorkDir(ctx, pullRef, absWork); err != nil {
+			return fmt.Errorf("pull %s: %w", pullRef, err)
 		}
 	}
 	loaded, err := ipkg.Load(pkgDir)
@@ -125,6 +139,25 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 
 	if err := runRenderInWorkDir(ctx, absWork, loaded, res, opts.clean); err != nil {
 		return err
+	}
+
+	if opts.outputOCI != "" {
+		published, err := ipkg.PublishRenderedOCI(ctx, ipkg.RenderedOCIOptions{
+			WorkDir:         absWork,
+			Destination:     opts.outputOCI,
+			SourceReference: sourceReference,
+			SourceDigest:    sourceDigest,
+			Package:         loaded.Package,
+			Selection:       res.Selection,
+			Inputs:          res.Inputs,
+		})
+		if err != nil {
+			return fmt.Errorf("write rendered OCI: %w", err)
+		}
+		fmt.Printf("Wrote rendered OCI %s\n", published.Ref)
+		fmt.Printf("  manifest:  %s\n", published.ManifestDigest)
+		fmt.Printf("  objects:   %s (%d manifest files)\n", published.ObjectSetDigest, published.ManifestCount)
+		fmt.Printf("  pull-back: verified\n")
 	}
 
 	fmt.Printf("Next: %s upload --work-dir %s --space <slug>\n", InvocationName(), absWork)
@@ -423,6 +456,14 @@ Working directory:
                      <work-dir>/package/; spec docs to <work-dir>/out/spec/;
                      manifests to <work-dir>/out/manifests/.
 
+Rendered OCI output:
+  --output-oci <dest> optional. After a successful render, write those exact
+                      non-secret manifests as an OCI artifact. Use a local
+                      path for an OCI image layout, or oci://host/repo:tag to
+                      push to a registry. The command reads the artifact back
+                      and compares its recorded object-set digest before
+                      reporting success.
+
 Pull:
   --pull <ref>       optional. When present, fetches the package and
                      replaces <work-dir>/package/ atomically (failed
@@ -467,5 +508,6 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
 	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); applied via `kustomize edit set image` against the chosen base before render. The base's kustomization.yaml must declare an `images:` block.")
 	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
+	cmd.Flags().StringVar(&opts.outputOCI, "output-oci", "", "write rendered manifests to a local OCI layout path or push them to oci://host/repo:tag")
 	return cmd
 }

@@ -118,6 +118,34 @@ ls out/manifests/
 # service-statusboard-statusboard.yaml
 ```
 
+You can also make an OCI artifact from those exact files without a
+ConfigHub account. A local path writes an OCI image layout:
+
+```bash
+installer setup \
+    --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+    --namespace statusboard \
+    --output-oci ./statusboard-rendered.oci
+```
+
+An OCI reference pushes the rendered artifact to a registry:
+
+```bash
+installer setup \
+    --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+    --namespace statusboard \
+    --output-oci oci://ghcr.io/myorg/statusboard-rendered:0.1.0
+```
+
+The OCI layer contains the non-secret Kubernetes files and a root
+`kustomization.yaml`, so Argo CD, Flux, or another OCI-aware tool can
+consume the same files you inspected. The OCI config records the source
+reference and digest, chosen base, namespace, input and function-chain
+digests, validator results, and the rendered object-set digest. Input
+values and files under `out/secrets/` are not published. After writing
+or pushing the artifact, the installer reads it back and compares the
+recorded object-set digest before reporting success.
+
 You can edit these files directly — the next `plan` / `upload` will
 diff your edits against ConfigHub. But editing rendered output is
 usually the wrong layer; prefer editing `out/spec/inputs.yaml` and
@@ -584,6 +612,8 @@ want to refresh ConfigHub from local state, re-run `installer upload
 | Read the package's surface | `installer doc <dir>` |
 | Install (interactive) | `installer setup --pull <ref> --namespace <ns>` |
 | Install (scripted) | `installer setup --pull <ref> --non-interactive --namespace <ns> --components default` |
+| Render to a local OCI layout | `installer setup --pull <ref> --namespace <ns> --output-oci ./rendered.oci` |
+| Render and push OCI | `installer setup --pull <ref> --namespace <ns> --output-oci oci://host/repo:tag` |
 | Re-render after editing inputs | `installer setup --non-interactive` |
 | Push to ConfigHub | `installer upload --space <slug>` |
 | Preview cub-side changes | `installer plan` |

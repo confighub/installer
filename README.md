@@ -79,6 +79,9 @@ Working:
   non-interactive. Prior-state re-entry from ConfigHub (via the
   persisted `installer-record` Unit) or local `out/spec/`,
   organization + server sanity-check against the active cub context.
+  `setup --output-oci` can also write the rendered non-secret objects
+  to a local OCI image layout or push them to a registry without a
+  ConfigHub account.
 - **Day-2 lifecycle.** `installer setup` and `installer upload`
   auto-detect first-install vs upgrade vs reconcile via the presence
   of prior spec files / `out/spec/upload.yaml`. Re-running `setup`
