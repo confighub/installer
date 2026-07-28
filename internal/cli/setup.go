@@ -56,9 +56,22 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	}
 
 	pkgDir := filepath.Join(absWork, "package")
-	if opts.pullRef != "" {
-		if _, err := ipkg.PullToWorkDir(ctx, opts.pullRef, absWork); err != nil {
-			return fmt.Errorf("pull %s: %w", opts.pullRef, err)
+	sourceReference := ""
+	sourceDigest := ""
+	pullRef := opts.pullRef
+	if opts.outputOCI != "" && strings.HasPrefix(opts.pullRef, "oci://") {
+		sourceReference = opts.pullRef
+		sourceDigest, err = ipkg.ResolveManifestDigest(ctx, opts.pullRef)
+		if err != nil {
+			return fmt.Errorf("resolve source package digest: %w", err)
+		}
+		if !strings.Contains(pullRef, "@") {
+			pullRef += "@" + sourceDigest
+		}
+	}
+	if pullRef != "" {
+		if _, err := ipkg.PullToWorkDir(ctx, pullRef, absWork); err != nil {
+			return fmt.Errorf("pull %s: %w", pullRef, err)
 		}
 	}
 	loaded, err := ipkg.Load(pkgDir)
@@ -129,14 +142,6 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	}
 
 	if opts.outputOCI != "" {
-		sourceDigest, err := ipkg.ResolveManifestDigest(ctx, opts.pullRef)
-		if err != nil {
-			return fmt.Errorf("resolve source package digest: %w", err)
-		}
-		sourceReference := ""
-		if strings.HasPrefix(opts.pullRef, "oci://") {
-			sourceReference = opts.pullRef
-		}
 		published, err := ipkg.PublishRenderedOCI(ctx, ipkg.RenderedOCIOptions{
 			WorkDir:         absWork,
 			Destination:     opts.outputOCI,
