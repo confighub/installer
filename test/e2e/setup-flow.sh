@@ -75,7 +75,8 @@ with open(p, 'w') as f: yaml.safe_dump(d, f, sort_keys=False)
 WORK_TMP=$(mktemp -d -t setup-flow-wd.XXXXXX)
 log "setup --pull (v1) — first install"
 "$BIN" setup --pull "$PKG_V1" --work-dir "$WORK_TMP" \
-  --non-interactive --namespace setup-test --select monitoring 2>&1 \
+  --non-interactive --namespace setup-test --select monitoring \
+  --output-oci "$WORK_TMP/rendered.oci" 2>&1 \
   | tee "$WORK_TMP/setup-v1.out"
 
 [[ -d "$WORK_TMP/package" ]] || fail "expected $WORK_TMP/package/ after setup --pull"
@@ -84,6 +85,10 @@ log "setup --pull (v1) — first install"
 [[ -d "$WORK_TMP/out/manifests" ]] || fail "expected out/manifests/"
 [[ ! -d "$WORK_TMP/.upgrade" ]] || fail "setup should NOT create .upgrade/ (atomic pull)"
 [[ ! -d "$WORK_TMP/.upgrade-prev" ]] || fail "setup should NOT create .upgrade-prev/"
+[[ -f "$WORK_TMP/rendered.oci/oci-layout" ]] || fail "expected local rendered OCI layout"
+[[ -f "$WORK_TMP/rendered.oci/index.json" ]] || fail "expected rendered OCI index"
+grep -q "pull-back: verified" "$WORK_TMP/setup-v1.out" \
+  || fail "setup should verify the rendered OCI after writing it"
 
 if ! grep -q "Loaded prior install state" "$WORK_TMP/setup-v1.out"; then
   : # fresh install — no prior state expected
