@@ -47,6 +47,9 @@ func TestParsePackage(t *testing.T) {
 	if p.Metadata.Name != "test" {
 		t.Errorf("name = %q, want test", p.Metadata.Name)
 	}
+	if p.InstallerMetadata.Version != "1.0.0" {
+		t.Errorf("legacy metadata.version = %q, want 1.0.0", p.InstallerMetadata.Version)
+	}
 	if len(p.Spec.Bases) != 1 || p.Spec.Bases[0].Name != "default" {
 		t.Errorf("bases mismatch: %+v", p.Spec.Bases)
 	}
@@ -59,6 +62,22 @@ func TestParsePackage(t *testing.T) {
 	if len(p.Spec.Transformers) != 1 ||
 		p.Spec.Transformers[0].Toolchain != "Kubernetes/YAML" {
 		t.Errorf("function chain mismatch: %+v", p.Spec.Transformers)
+	}
+}
+
+func TestParsePackageCanonicalVersionWinsOverLegacyVersion(t *testing.T) {
+	withBoth := strings.Replace(
+		validPackage,
+		"spec:\n",
+		"installerMetadata:\n  version: 2.0.0\nspec:\n",
+		1,
+	)
+	p, err := api.ParsePackage([]byte(withBoth))
+	if err != nil {
+		t.Fatalf("ParsePackage: %v", err)
+	}
+	if p.InstallerMetadata.Version != "2.0.0" {
+		t.Errorf("version = %q, want canonical 2.0.0", p.InstallerMetadata.Version)
 	}
 }
 
