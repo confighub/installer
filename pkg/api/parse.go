@@ -28,6 +28,20 @@ func ParsePackage(data []byte) (*Package, error) {
 	if err := yaml.Unmarshal(data, &p); err != nil {
 		return nil, fmt.Errorf("parse Package: %w", err)
 	}
+	// Packages published before installerMetadata was introduced stored the
+	// package version under metadata.version. Continue to read that field so
+	// package identity and rendered OCI provenance remain complete.
+	if p.InstallerMetadata.Version == "" {
+		var legacy struct {
+			Metadata struct {
+				Version string `yaml:"version"`
+			} `yaml:"metadata"`
+		}
+		if err := yaml.Unmarshal(data, &legacy); err != nil {
+			return nil, fmt.Errorf("parse legacy Package metadata: %w", err)
+		}
+		p.InstallerMetadata.Version = legacy.Metadata.Version
+	}
 	if p.APIVersion == "" {
 		p.APIVersion = APIVersion
 	}
