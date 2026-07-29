@@ -43,7 +43,7 @@ const localConfigAnnotation = "config.kubernetes.io/local-config"
 type Package struct {
 	// Name is metadata.name from installer.yaml.
 	Name string
-	// Version is metadata.version from installer.yaml.
+	// Version is installerMetadata.version from installer.yaml.
 	Version string
 	// LocalHandle is the name the parent used for this dep in its
 	// installer.yaml + lock. Empty for the parent itself. Used to derive

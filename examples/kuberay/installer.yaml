@@ -48,7 +48,7 @@ spec:
     # Rewrite the operator image to a fully-qualified, version-pinned ref.
     # Upstream manager.yaml ships `image: kuberay/operator` (no registry, no
     # tag); the kuberay project publishes to quay.io, not Docker Hub. Bump
-    # the tag in lockstep with metadata.version above when refreshing.
+    # the tag in lockstep with installerMetadata.version above when refreshing.
     - toolchain: Kubernetes/YAML
       whereResource: "ConfigHub.ResourceType = 'apps/v1/Deployment'"
       description: Set the kuberay-operator container image.

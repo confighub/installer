@@ -27,7 +27,7 @@ Goal: a `.tgz` of the source tree that is byte-identical across machines.
   - Reject: `*.env.secret` anywhere; anything under `out/`; anything matched by `.installerignore` (gitignore syntax via `go-git/go-billy`'s gitignore or a small in-tree matcher).
   - Include: `installer.yaml` + every directory referenced by `bases[].path`, `components[].path`, `validation.*`, `collector.command` (if relative), plus an opt-in `examples/` (gated by a `package.bundleExamples` field in `installer.yaml`, default true).
 - New: `internal/bundle/bundle_test.go` — two `Bundle` invocations of the same source tree produce equal digests; rename of a single file changes the digest; `.env.secret` triggers a refusal.
-- Modify: `internal/cli/package.go` — `-o`, default output filename `<metadata.name>-<metadata.version>.tgz` in cwd; print the digest on success.
+- Modify: `internal/cli/package.go` — `-o`, default output filename `<metadata.name>-<installerMetadata.version>.tgz` in cwd; print the digest on success.
 - Decision deferred: reachability-scan vs ignore-list. v1 ships ignore-list; reachability becomes a `installer package --strict` follow-up.
 
 Acceptance: `installer package examples/hello-app` produces a tarball whose `sha256` is reproducible across machines.

@@ -146,7 +146,7 @@ resources: []
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "package metadata.name (default: basename of <dir>)")
-	cmd.Flags().StringVar(&version, "version", "0.1.0", "package metadata.version (SemVer)")
+	cmd.Flags().StringVar(&version, "version", "0.1.0", "package installerMetadata.version (SemVer)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing installer.yaml")
 	return cmd
 }

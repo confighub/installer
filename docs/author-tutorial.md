@@ -494,7 +494,7 @@ pull.
 
 ## Step 9: release a 0.2.0
 
-When you change the package, bump `metadata.version` to 0.2.0,
+When you change the package, bump `installerMetadata.version` to 0.2.0,
 re-package, re-push. Operators upgrade by re-running setup with
 `--pull` pointed at the new ref:
 

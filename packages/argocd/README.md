@@ -129,7 +129,7 @@ for b in cluster-install namespace-install ha-cluster-install ha-namespace-insta
   sed -i '' "s/newTag: v.*/newTag: $TAG/" $DST/bases/$b/kustomization.yaml
 done
 
-# Bump metadata.version in installer.yaml to match.
+# Bump installerMetadata.version in installer.yaml to match.
 ```
 
 After refresh, re-run `kustomize build` against each base to confirm

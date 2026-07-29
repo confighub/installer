@@ -134,7 +134,7 @@ operators who want pinned installs.
 
 ## Versioning and channels
 
-- `metadata.version` is required and parsed as SemVer 2.0. Tag-per-version
+- `installerMetadata.version` is required and parsed as SemVer 2.0. Tag-per-version
   artifacts are immutable.
 - Channel tags (`stable`, `latest`, `0`, `0.3`) are allowed by convention only.
   No registry-side mechanism enforces them; they are mutable aliases that

@@ -60,4 +60,4 @@ for f in inference.networking.k8s.io_inferencepools.yaml \
 done
 ```
 
-Bump `installer.yaml`'s `metadata.version` to match.
+Bump `installer.yaml`'s `installerMetadata.version` to match.

@@ -71,6 +71,6 @@ curl -sfL $BASE/samples/ray-cluster.sample.yaml \
   -o components/sample-cluster/raycluster.yaml
 ```
 
-After refreshing, update `installer.yaml`'s `metadata.version` and the
+After refreshing, update `installer.yaml`'s `installerMetadata.version` and the
 hardcoded operator image tag in the `set-container-image` invocation to match
 the new release. The vendored YAML doesn't need any post-fetch edits.
