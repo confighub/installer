@@ -66,7 +66,9 @@ jobs:
           git commit -am "deps: update ConfigHub SDK modules"
           git push -f origin chore/update-sdk
 
-          number="$(gh pr view chore/update-sdk --json number -q .number 2>/dev/null || true)"
+          # --state open matters: gh also resolves the branch to a merged PR,
+          # which would send this week's update to last week's merged one.
+          number="$(gh pr list --head chore/update-sdk --state open --json number --jq '.[0].number // empty')"
           if [ -z "$number" ]; then
             gh pr create \
               --base main \
