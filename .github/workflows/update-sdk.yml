@@ -1,0 +1,80 @@
+name: Update ConfigHub SDK
+
+# Weekly bump of every github.com/confighub/sdk/* requirement to the latest SDK
+# release, as a single pull request. If the bump does not build, go.mod is left
+# untouched and the run summary says so; fixing that is a code change, not a
+# dependency bump.
+#
+# The PR is always branch `chore/update-sdk`, force-pushed, so at most one is
+# open at a time. Requires "Allow GitHub Actions to create and approve pull
+# requests" in the repository's Actions settings.
+
+on:
+  schedule:
+    # Mondays, 14:00 UTC
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SDK version to pin to (default: latest release)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Bump SDK modules
+        env:
+          SUMMARY_FILE: ${{ runner.temp }}/sdk-update.md
+          VERSION: ${{ inputs.version }}
+        run: |
+          scripts/update-sdk.sh $VERSION
+          cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Vet and test against the new SDK
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMMARY_FILE: ${{ runner.temp }}/sdk-update.md
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Every module is already on the latest SDK; nothing to open."
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C chore/update-sdk
+          git commit -am "deps: update ConfigHub SDK modules"
+          git push -f origin chore/update-sdk
+
+          number="$(gh pr view chore/update-sdk --json number -q .number 2>/dev/null || true)"
+          if [ -z "$number" ]; then
+            gh pr create \
+              --base main \
+              --head chore/update-sdk \
+              --title 'deps: update ConfigHub SDK modules' \
+              --body-file "$SUMMARY_FILE"
+          else
+            # gh pr edit trips over this org's classic Projects; patch via the REST API.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$number" \
+              -f body="$(cat "$SUMMARY_FILE")" >/dev/null
+          fi
