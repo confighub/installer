@@ -5,13 +5,13 @@ go 1.25.0
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/confighub/sdk/core v0.1.61
-	github.com/confighub/sdk/function-impl v0.1.61
+	github.com/confighub/sdk/core v0.2.19
+	github.com/confighub/sdk/function-impl v0.2.19
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/term v0.43.0
+	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -27,20 +27,20 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
-	github.com/confighub/sdk/configkit/appyamlkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/envkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/inikit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/jsonkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/k8skit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/propkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/textkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/tomlkit v0.1.61 // indirect
-	github.com/confighub/sdk/configkit/yqkit v0.1.61 // indirect
+	github.com/confighub/sdk/configkit/appyamlkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/envkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/inikit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/jsonkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/k8skit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/propkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/textkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/tomlkit v0.2.19 // indirect
+	github.com/confighub/sdk/configkit/yqkit v0.2.19 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
@@ -110,18 +110,18 @@ require (
 	github.com/yannh/kubeconform v0.6.7 // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	github.com/zclconf/go-cty v1.18.1 // indirect
-	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.starlark.net v0.0.0-20260210143700-b62fd896b91b // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
