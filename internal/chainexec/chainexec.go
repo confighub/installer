@@ -28,7 +28,9 @@ func RunChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 	executor := funcimpl.NewStandardExecutor(nil, true)
 	registered := executor.RegisteredFunctions()
 
-	data := input
+	// Configuration is text on the function API. This package's callers deal in bytes, so
+	// the conversion happens here rather than in every one of them.
+	data := string(input)
 	for i, group := range chain.Spec.Groups {
 		toolchain := workerapi.ToolchainType(group.Toolchain)
 		fns, ok := registered[toolchain]
@@ -68,11 +70,9 @@ func RunChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 		if !resp.Success {
 			return nil, fmt.Errorf("group %d (%s): %v", i, group.Toolchain, resp.ErrorMessages)
 		}
-		if len(resp.ConfigData) > 0 {
-			data = resp.ConfigData
-		}
+		data = resp.ResultData(data)
 	}
-	return data, nil
+	return []byte(data), nil
 }
 
 // ValidatorFailure is one failing validation result. Returned by
@@ -128,7 +128,7 @@ func RunValidators(ctx context.Context, groups []api.FunctionGroup, data []byte)
 		}
 		req := &fapi.FunctionInvocationRequest{
 			FunctionContext: fapi.FunctionContext{ToolchainType: toolchain},
-			ConfigData:      data,
+			ConfigData:      string(data),
 			FunctionInvocationOptions: fapi.FunctionInvocationOptions{
 				WhereResource: group.WhereResource,
 				StopOnError:   false,
