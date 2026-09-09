@@ -272,7 +272,7 @@ ConfigHub Links + automatic apply-ordering (Roadmap item in the README) handle
 ordering inside a Space. Across Spaces, the dep tree implies an order: a Space
 is applied only after the Spaces of packages it depends on have converged. The
 installer's upload step records this in the installer-record Unit and in
-inter-Space Links; cross-Space ApplyGates enforce it at apply time.
+inter-Space Links; cross-Space ValidationErrors enforce it at apply time.
 
 ### Cluster-side `externalRequires` still apply
 

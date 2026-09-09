@@ -17,7 +17,7 @@ channels:
   inputs, and (via re-running the collector) facts.
 - **Post-install**: ConfigHub mutations on the uploaded Units (e.g.,
   `cub function do set-container-image`, hand-edits via `cub unit
-update`, ApplyGate-mediated approvals).
+update`, approvals that clear a ValidationError).
 
 Why: a consumer-edited package tree is silently overwritten on the next
 `installer setup --pull` (or `installer pull`). Worse, the edits are invisible
@@ -136,11 +136,11 @@ time and (3) for post-install one-offs; only edit spec/inputs.yaml for
 ## 6. Defer to ConfigHub for what ConfigHub does well
 
 The installer materializes Units. Everything downstream — apply,
-ApplyGates, validation Triggers, drift reconciliation, ChangeSets,
-promotion, rollback — is ConfigHub's job. The installer creates a
-ChangeSet for `installer upload` reconciles so updates are revertable,
-but it does not run apply, does not author Triggers, and does not
-reconcile cluster drift.
+validation Triggers and the ValidationErrors they record, drift
+reconciliation, ChangeSets, promotion, rollback — is ConfigHub's job.
+The installer creates a ChangeSet for `installer upload` reconciles so
+updates are revertable, but it does not run apply, does not author
+Triggers, and does not reconcile cluster drift.
 
 How to apply: when a feature request lands ("add a Trigger that blocks
 :latest"), route it to the right ConfigHub skill rather than building it
