@@ -106,13 +106,27 @@ func Report(w io.Writer, r *goclientnew.UploadResult, showMutations bool) {
 
 func reportMutations(w io.Writer, u goclientnew.UploadUnitResult) {
 	if u.Mutations != nil {
-		paths := make([]string, 0, len(*u.Mutations))
-		for path := range *u.Mutations {
-			paths = append(paths, path)
-		}
-		sort.Strings(paths)
-		for _, path := range paths {
-			fmt.Fprintf(w, "      ~ %s\n", path)
+		for _, rm := range *u.Mutations {
+			if rm.Resource == nil {
+				continue
+			}
+			resource := fmt.Sprintf("%s %s", rm.Resource.ResourceType, rm.Resource.ResourceName)
+			if info := rm.ResourceMutationInfo; info != nil && mutationType(info) != "None" {
+				fmt.Fprintf(w, "      %s %s\n", mutationType(info), resource)
+				continue
+			}
+			if rm.PathMutationMap == nil {
+				continue
+			}
+			paths := make([]string, 0, len(*rm.PathMutationMap))
+			for path := range *rm.PathMutationMap {
+				paths = append(paths, path)
+			}
+			sort.Strings(paths)
+			for _, path := range paths {
+				info := (*rm.PathMutationMap)[path]
+				fmt.Fprintf(w, "      %s %s %s\n", mutationType(&info), resource, path)
+			}
 		}
 	}
 	if u.Conflicts != nil {
@@ -120,6 +134,14 @@ func reportMutations(w io.Writer, u goclientnew.UploadUnitResult) {
 			fmt.Fprintf(w, "      ! conflict at %s\n", c.Path)
 		}
 	}
+}
+
+// mutationType names a mutation's type, treating an absent one as None.
+func mutationType(info *goclientnew.MutationInfo) string {
+	if info == nil || info.MutationType == nil || *info.MutationType == "" {
+		return "None"
+	}
+	return string(*info.MutationType)
 }
 
 func errString(e *goclientnew.ResponseError) string {

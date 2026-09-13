@@ -41,7 +41,7 @@ Plan writes nothing.`,
 			var results []*goclientnew.UploadResult
 			for i, req := range prepared.requests {
 				pkg := prepared.packages[i]
-				result, err := cubapi.Upload(ctx, prepared.client, req, true)
+				result, err := cubapi.Upload(ctx, prepared.client, req, true, cubapi.WithUploadMutations)
 				if err != nil {
 					return fmt.Errorf("plan %s: %w", pkg.Name, err)
 				}
