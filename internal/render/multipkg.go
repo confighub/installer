@@ -37,7 +37,7 @@ func DefaultFetcher(ctx context.Context, ref, digest, destDir string) (string, e
 // DepsOptions configures RenderDependencies.
 type DepsOptions struct {
 	// Lock is the resolved dependency tree, typically read from
-	// <work-dir>/out/spec/lock.yaml.
+	// <work-dir>/out/record/lock.yaml.
 	Lock *api.Lock
 
 	// ParentInputs carries the parent's namespace. Used as the default

@@ -32,7 +32,7 @@ and deletes per Space, plus the post-render image set per Space.
 Plan is read-only — it does not mutate ConfigHub. Use 'installer
 upload' to execute the plan.
 
-Plan reads <work-dir>/out/spec/upload.yaml to locate the Spaces; if
+Plan reads <work-dir>/out/record/upload.yaml to locate the Spaces; if
 upload.yaml is missing, run 'installer upload --space <slug>' first.
 The active cub organization and server are sanity-checked against the
 recorded values; mismatch fails fast.
@@ -108,11 +108,11 @@ plan actually changes anything.`,
 	return cmd
 }
 
-// readUploadDoc reads <work-dir>/out/spec/upload.yaml and returns the
+// readUploadDoc reads <work-dir>/out/record/upload.yaml and returns the
 // parsed Upload. Errors with a useful "run upload first" hint when the
 // file is missing.
 func readUploadDoc(workDir string) (*api.Upload, error) {
-	path := filepath.Join(workDir, "out", "spec", upload.UploadDocFilename)
+	path := filepath.Join(workDir, "out", api.RecordDir, upload.UploadDocFilename)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

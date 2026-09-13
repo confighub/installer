@@ -21,7 +21,7 @@ func newDepsCmd() *cobra.Command {
 		Use:   "deps",
 		Short: "Manage installer package dependencies",
 		Long: `Deps resolves the dependency DAG declared in installer.yaml against an OCI
-registry, writes <work-dir>/out/spec/lock.yaml, and optionally vendors
+registry, writes <work-dir>/out/record/lock.yaml, and optionally vendors
 locked dependencies for offline render.`,
 	}
 	cmd.AddCommand(newDepsUpdateCmd(), newDepsBuildCmd(), newDepsTreeCmd())
@@ -32,14 +32,14 @@ func newDepsUpdateCmd() *cobra.Command {
 	var workDir string
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Resolve the dependency DAG and write out/spec/lock.yaml",
+		Short: "Resolve the dependency DAG and write out/record/lock.yaml",
 		Long: `Update walks the dependency DAG declared in
 <work-dir>/package/installer.yaml, resolves SemVer constraints against the
 OCI registry by fetching each dep's manifest + config blob (no layer pull),
-and writes <work-dir>/out/spec/lock.yaml pinning every dependency to a
+and writes <work-dir>/out/record/lock.yaml pinning every dependency to a
 manifest digest. Conflicts are honored.
 
-If <work-dir>/out/spec/selection.yaml exists, the resolver honors optional
+If <work-dir>/out/record/selection.yaml exists, the resolver honors optional
 deps gated by whenComponent. If it does not, optional deps are skipped and
 listed in the output.`,
 		Args: cobra.NoArgs,
@@ -53,7 +53,7 @@ listed in the output.`,
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
-			sel, err := loadSelectionOptional(filepath.Join(absWork, "out", "spec", "selection.yaml"))
+			sel, err := loadSelectionOptional(filepath.Join(absWork, "out", api.RecordDir, "selection.yaml"))
 			if err != nil {
 				return err
 			}
@@ -85,7 +85,7 @@ func newDepsBuildCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "(not yet implemented) Pre-fetch locked dependencies into out/vendor/",
-		Long: `Build fetches every dependency listed in <work-dir>/out/spec/lock.yaml into
+		Long: `Build fetches every dependency listed in <work-dir>/out/record/lock.yaml into
 <work-dir>/out/vendor/<name>@<version>/ so that a subsequent installer
 render runs without network access.
 
@@ -107,7 +107,7 @@ func newDepsTreeCmd() *cobra.Command {
 		Use:   "tree",
 		Short: "Print the resolved dependency DAG",
 		Long: `Tree prints the resolved dependency DAG from
-<work-dir>/out/spec/lock.yaml, with each entry's pinned ref + manifest
+<work-dir>/out/record/lock.yaml, with each entry's pinned ref + manifest
 digest and the requester chain. Run deps update first.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

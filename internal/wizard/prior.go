@@ -39,10 +39,10 @@ type PriorSource string
 const (
 	// SourceNone indicates the work-dir had no usable prior state.
 	SourceNone PriorSource = "none"
-	// SourceLocal indicates state came from out/spec/*.yaml.
+	// SourceLocal indicates state came from out/record/*.yaml.
 	SourceLocal PriorSource = "local"
 	// SourceConfigHub indicates state came from the installer-record
-	// Unit on ConfigHub (located via out/spec/upload.yaml).
+	// Unit on ConfigHub (located via out/record/upload.yaml).
 	SourceConfigHub PriorSource = "confighub"
 )
 
@@ -55,8 +55,8 @@ const (
 // CLI passes a function that prints to stderr; tests pass nil to drop
 // the warning silently).
 func LoadPriorState(ctx context.Context, workDir string, warn func(string)) (*PriorState, PriorSource, error) {
-	specDir := filepath.Join(workDir, "out", "spec")
-	uploadPath := filepath.Join(specDir, upload.UploadDocFilename)
+	recordDir := filepath.Join(workDir, "out", api.RecordDir)
+	uploadPath := filepath.Join(recordDir, upload.UploadDocFilename)
 
 	// Step 1: try ConfigHub if upload.yaml is present.
 	if data, err := os.ReadFile(uploadPath); err == nil {
@@ -136,11 +136,11 @@ func firstNonNil(a, b *api.Upload) *api.Upload {
 // upgrade's schema-diff has something to compare against. If the
 // package directory is missing, PriorPackage is left nil.
 func loadLocalSpec(workDir string) (*PriorState, error) {
-	specDir := filepath.Join(workDir, "out", "spec")
+	recordDir := filepath.Join(workDir, "out", api.RecordDir)
 	state := &PriorState{}
 	any := false
 
-	if data, err := os.ReadFile(filepath.Join(specDir, "selection.yaml")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(recordDir, "selection.yaml")); err == nil {
 		s, perr := api.ParseSelection(data)
 		if perr != nil {
 			return nil, fmt.Errorf("parse selection.yaml: %w", perr)
@@ -151,7 +151,7 @@ func loadLocalSpec(workDir string) (*PriorState, error) {
 		return nil, err
 	}
 
-	if data, err := os.ReadFile(filepath.Join(specDir, "inputs.yaml")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(recordDir, "inputs.yaml")); err == nil {
 		i, perr := api.ParseInputs(data)
 		if perr != nil {
 			return nil, fmt.Errorf("parse inputs.yaml: %w", perr)
@@ -162,7 +162,7 @@ func loadLocalSpec(workDir string) (*PriorState, error) {
 		return nil, err
 	}
 
-	if data, err := os.ReadFile(filepath.Join(specDir, "facts.yaml")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(recordDir, "facts.yaml")); err == nil {
 		f, perr := api.ParseFacts(data)
 		if perr != nil {
 			return nil, fmt.Errorf("parse facts.yaml: %w", perr)
@@ -173,7 +173,7 @@ func loadLocalSpec(workDir string) (*PriorState, error) {
 		return nil, err
 	}
 
-	if data, err := os.ReadFile(filepath.Join(specDir, upload.UploadDocFilename)); err == nil {
+	if data, err := os.ReadFile(filepath.Join(recordDir, upload.UploadDocFilename)); err == nil {
 		u, perr := api.ParseUpload(data)
 		if perr != nil {
 			return nil, fmt.Errorf("parse upload.yaml: %w", perr)

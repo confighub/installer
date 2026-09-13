@@ -118,19 +118,19 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 		}
 	}
 
-	specDir := filepath.Join(outDir, "spec")
-	if err := os.MkdirAll(specDir, 0o755); err != nil {
+	recordDir := filepath.Join(outDir, api.RecordDir)
+	if err := os.MkdirAll(recordDir, 0o755); err != nil {
 		return nil, err
 	}
 
-	if err := writeYAML(filepath.Join(specDir, "selection.yaml"), sel); err != nil {
+	if err := writeYAML(filepath.Join(recordDir, "selection.yaml"), sel); err != nil {
 		return nil, err
 	}
-	if err := writeYAML(filepath.Join(specDir, "inputs.yaml"), inputs); err != nil {
+	if err := writeYAML(filepath.Join(recordDir, "inputs.yaml"), inputs); err != nil {
 		return nil, err
 	}
 	if facts != nil {
-		if err := writeYAML(filepath.Join(specDir, "facts.yaml"), facts); err != nil {
+		if err := writeYAML(filepath.Join(recordDir, "facts.yaml"), facts); err != nil {
 			return nil, err
 		}
 	}

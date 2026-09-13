@@ -5,7 +5,7 @@ package api
 
 // Upload records where a work-dir's spec was last uploaded so the wizard
 // (and plan/update/upgrade) can re-enter from ConfigHub instead of from
-// the local files. Persisted as <work-dir>/out/spec/upload.yaml after a
+// the local files. Persisted as <work-dir>/out/record/upload.yaml after a
 // successful `installer upload`. Also embedded in the per-Space
 // installer-record Unit body so a freshly cloned work-dir can be
 // recovered from ConfigHub alone.

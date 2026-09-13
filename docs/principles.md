@@ -12,7 +12,7 @@ operator never edits the package tree (`installer.yaml`, `bases/`,
 channels:
 
 - **Install-time / re-render**: the wizard's generated spec files
-  (`out/spec/{selection,inputs,facts}.yaml`). Editing these and
+  (`out/record/{selection,inputs,facts}.yaml`). Editing these and
   re-rendering is the supported workflow for adjusting selections,
   inputs, and (via re-running the collector) facts.
 - **Post-install**: ConfigHub mutations on the uploaded Units (e.g.,
@@ -38,7 +38,7 @@ rendered Units. The spec layer is the only thing the installer
 persists, and it must be sufficient to re-derive the rendered output
 without consulting the cluster or ConfigHub.
 
-The Upload doc (`out/spec/upload.yaml`) extends this: it records where
+The Upload doc (`out/record/upload.yaml`) extends this: it records where
 the spec was last uploaded so the wizard can re-enter from ConfigHub if
 the local work-dir is lost. The installer-record Unit on ConfigHub
 contains the full spec so a freshly cloned work-dir is recoverable.
@@ -130,7 +130,7 @@ operator can see the eventual image set without applying anything.
 
 How to apply: package authors, default to (1). Reach for (2) only if
 (1) is genuinely insufficient. Operators, prefer (1) for install/upgrade
-time and (3) for post-install one-offs; only edit spec/inputs.yaml for
+time and (3) for post-install one-offs; only edit out/record/inputs.yaml for
 (2).
 
 ## 6. Defer to ConfigHub for what ConfigHub does well
@@ -160,5 +160,5 @@ the installer is the upstream renderer for it.
 
 How to apply: never ship templates as ConfigHub Unit bodies. Never
 parameterize a Unit at apply time. If a Unit needs to vary across
-environments, vary it at render time (different `spec/inputs.yaml`,
+environments, vary it at render time (different `out/record/inputs.yaml`,
 different upload Space) or post-install via a ConfigHub function.

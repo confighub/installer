@@ -71,16 +71,16 @@ Acceptance: a fixture package with the new fields parses and `installer doc` sho
 
 ## Phase 4 — Resolver + `installer deps update`
 
-Goal: produce `out/spec/lock.yaml` from `installer.yaml` + the current `Selection`.
+Goal: produce `out/record/lock.yaml` from `installer.yaml` + the current `Selection`.
 
 - New: `internal/deps/semver.go` — wrap `github.com/Masterminds/semver/v3`.
 - New: `internal/deps/resolver.go`
   - DAG walk: for each `Dependency`, call `pkg.Inspect` to read the dep's manifest from the config blob (no layer fetch), recurse.
   - One version per package name. Conflict report names the chain of parents that produced each incompatible constraint.
-  - `optional: true` + `whenComponent: <name>` honored against the current `out/spec/selection.yaml`. Missing selection ⇒ resolver treats all optionals as not-followed and notes them in `deps tree` output.
+  - `optional: true` + `whenComponent: <name>` honored against the current `out/record/selection.yaml`. Missing selection ⇒ resolver treats all optionals as not-followed and notes them in `deps tree` output.
   - `conflicts`, `replaces`, and `satisfies → externalRequires` linkage all applied at resolve time.
   - Cycle detection ⇒ hard error.
-- New: `internal/deps/lock.go` — write `out/spec/lock.yaml`; reject load if the parent's `dependencies:` summary disagrees with the lock (stale-lock detection).
+- New: `internal/deps/lock.go` — write `out/record/lock.yaml`; reject load if the parent's `dependencies:` summary disagrees with the lock (stale-lock detection).
 - Modify: `internal/cli/deps.go` — wire `update`, `tree`, `build`. `build` populates `out/vendor/<name>@<version>/` from the OCI cache.
 - New: shared content-addressed cache under `~/.cache/installer/oci/sha256/...`, used by `pull` and `deps build` (a small helper in `internal/pkg/cache.go`).
 - Tests: `internal/deps/testdata/` with golden-file fixtures: linear chain, diamond, conflict, optional toggled by component, channel-tag pinning.
@@ -94,7 +94,7 @@ Goal: parent and each dep render into their own subtrees, deterministically.
 - Modify: `internal/render/` — factor the current single-package render path into `RenderPackage(loaded *pkg.Loaded, selection, inputs, outDir)` used for both the parent and every locked dep.
 - Modify: `internal/cli/render.go`
   - Require a lock when `Dependencies` is non-empty; otherwise behave as today.
-  - Render parent into `out/manifests/` + `out/spec/` (unchanged).
+  - Render parent into `out/manifests/` + `out/record/` (unchanged).
   - For each `LockedDependency`: ensure the dep is fetched (use the cache, populated either by `deps build` or fetched on demand), then `RenderPackage` into `out/<dep-name>/manifests/` + `out/<dep-name>/spec/` using the lock's `selection` and `inputs` as wizard pre-answers.
 - Tests: render a 2-level fixture; assert subtree layout, manifest counts, and deterministic file digests.
 

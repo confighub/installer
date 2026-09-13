@@ -119,9 +119,9 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Wizard wrote %s/spec/selection.yaml and inputs.yaml\n", outDir)
+	fmt.Printf("Wizard wrote %s/record/selection.yaml and inputs.yaml\n", outDir)
 	if res.Facts != nil {
-		fmt.Printf("Collector produced %d fact(s) in %s/spec/facts.yaml\n", len(res.Facts.Spec.Values), outDir)
+		fmt.Printf("Collector produced %d fact(s) in %s/record/facts.yaml\n", len(res.Facts.Spec.Values), outDir)
 	}
 	fmt.Printf("Base: %s; components: %v\n", res.Selection.Spec.Base, res.Selection.Spec.Components)
 	fmt.Printf("Namespace: %s\n", raw.Namespace)
@@ -357,7 +357,7 @@ func buildUpgradeAnswers(newPkg *api.Package, prior *wizard.PriorState, interact
 }
 
 // runDepsUpdate resolves the dependency DAG against the OCI registry
-// and writes <work-dir>/out/spec/lock.yaml. Honors the package's
+// and writes <work-dir>/out/record/lock.yaml. Honors the package's
 // optional-deps gated by whenComponent, using the supplied selection.
 func runDepsUpdate(ctx context.Context, workDir string, pkg *api.Package, sel *api.Selection) error {
 	res, err := deps.Resolve(ctx, pkg, deps.OCISource{}, deps.Options{Selection: sel})
@@ -453,7 +453,7 @@ this is a first install or a re-render against an existing work-dir
 
 Working directory:
   --work-dir <dir>   defaults to the current directory. Pull writes to
-                     <work-dir>/package/; spec docs to <work-dir>/out/spec/;
+                     <work-dir>/package/; spec docs to <work-dir>/out/record/;
                      manifests to <work-dir>/out/manifests/.
 
 Rendered OCI output:
@@ -473,9 +473,9 @@ Pull:
                      <ref> --work-dir <dir>).
 
 Auto-detection:
-  - <work-dir>/out/spec/upload.yaml exists → load prior install state
+  - <work-dir>/out/record/upload.yaml exists → load prior install state
     from the recorded ConfigHub Space.
-  - else <work-dir>/out/spec/{selection,inputs,facts}.yaml exist → load
+  - else <work-dir>/out/record/{selection,inputs,facts}.yaml exist → load
     prior locally.
   - else → fresh install.
 

@@ -88,7 +88,7 @@ log "setup --pull (multi-package)"
 log "assertions"
 parent_manifests="$WORK_TMP/out/manifests"
 dep_manifests="$WORK_TMP/out/base/manifests"
-lock="$WORK_TMP/out/spec/lock.yaml"
+lock="$WORK_TMP/out/record/lock.yaml"
 
 [[ -d "$parent_manifests" ]] || fail "parent manifests dir missing: $parent_manifests"
 [[ -d "$dep_manifests"    ]] || fail "dep manifests dir missing: $dep_manifests"

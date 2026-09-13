@@ -527,7 +527,7 @@ inherited so `cub` works inside the script):
   (uppercased)
 
 The collector's stdout is parsed as a YAML map and persisted to
-`out/spec/facts.yaml`. The map's keys become available in chain
+`out/record/facts.yaml`. The map's keys become available in chain
 templates as `{{ .Facts.<key> }}`. The collector may also write
 `.env.secret` files inside the package working copy at paths its
 kustomize secretGenerator references; the installer never reads or
@@ -591,7 +591,7 @@ spec:
 
 The resolver walks the DAG, picks one version per package satisfying
 every constraint, honors `conflicts:` and `replaces:`, and writes
-`out/spec/lock.yaml` pinning each dependency to a manifest digest.
+`out/record/lock.yaml` pinning each dependency to a manifest digest.
 
 ### `spec.conflicts` and `spec.replaces`
 
@@ -631,9 +631,9 @@ what isn't.
    render` granularly) — loads `installer.yaml`, runs the selection
    solver (closure of `requires:`, conflict / `validForBases` checks),
    runs your collector if present, writes
-   `out/spec/{selection,inputs,facts}.yaml`. For multi-package
+   `out/record/{selection,inputs,facts}.yaml`. For multi-package
    installs, automatically runs `deps update` to resolve the
-   dependency DAG and write `out/spec/lock.yaml`. Then composes a
+   dependency DAG and write `out/record/lock.yaml`. Then composes a
    synthetic top-level kustomization under `out/compose/` that
    references your chosen base + components, resolves your
    `spec.transformers` / `spec.validators` against `.Inputs` /
@@ -875,7 +875,7 @@ it as a kustomize image / replicas / patch transformer.
 ### Design for re-render
 
 Every install state (selection, inputs, facts, dependency lock) is
-captured in `out/spec/`. Your render must be deterministic from
+captured in `out/record/`. Your render must be deterministic from
 those files plus your package source — same package + same spec +
 same facts = byte-identical Unit bodies. If you have a non-determinism
 (timestamps, random IDs), push it into the collector's facts so it's

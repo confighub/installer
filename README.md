@@ -77,14 +77,14 @@ Working:
   point: optional pull, wizard with high-level component presets
   `minimal` / `default` / `all` / `selected`, render). Interactive +
   non-interactive. Prior-state re-entry from ConfigHub (via the
-  persisted `installer-record` Unit) or local `out/spec/`,
+  persisted `installer-record` Unit) or local `out/record/`,
   organization + server sanity-check against the active cub context.
   `setup --output-oci` can also write the rendered non-secret objects
   to a local OCI image layout or push them to a registry without a
   ConfigHub account.
 - **Day-2 lifecycle.** `installer setup` and `installer upload`
   auto-detect first-install vs upgrade vs reconcile via the presence
-  of prior spec files / `out/spec/upload.yaml`. Re-running `setup`
+  of prior spec files / `out/record/upload.yaml`. Re-running `setup`
   with `--pull <new-ref>` runs the schema-diff machinery (carry
   forward existing values, adopt new defaults, prompt for new
   required-without-default). Re-running `upload` against an already-
@@ -131,7 +131,7 @@ bin/installer setup \
   --namespace demo
 
 # 3. Upload to ConfigHub. Records the destination Space(s) in
-#    out/spec/upload.yaml so subsequent commands re-enter the same
+#    out/record/upload.yaml so subsequent commands re-enter the same
 #    Space without re-typing.
 bin/installer upload --space my-greeter
 
@@ -151,7 +151,7 @@ selecting `ingress-tls` automatically pulls in `ingress`. Conflicts and
 `validForBases` are enforced at solve time.
 
 `setup` auto-detects whether the work-dir is a fresh install (no
-`out/spec/`) or a re-entry (prior state present, possibly with a
+`out/record/`) or a re-entry (prior state present, possibly with a
 newer package). On re-entry it runs the schema-diff machinery:
 silently carry prior values, adopt new defaults, drop removed inputs,
 prompt or fail-fast on newly-required inputs.
@@ -180,7 +180,7 @@ After `setup` (or `wizard` + `render`), the working dir looks like:
     │   ├── transformers.yaml     # resolved ConfigHubTransformers (chain)
     │   ├── validators.yaml       # resolved ConfigHubValidators (if any)
     │   └── installer-transformer.sh   # exec wrapper kustomize invokes
-    └── spec/                 # the "installer record" (also uploadable as Units)
+    └── record/               # the record of the render: selection, inputs, facts, chain, lock
         ├── selection.yaml    # base + closure-resolved components
         ├── inputs.yaml       # validated wizard answers
         ├── function-chain.yaml   # the resolved chain that ran (audit copy)

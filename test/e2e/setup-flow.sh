@@ -80,8 +80,8 @@ log "setup --pull (v1) — first install"
   | tee "$WORK_TMP/setup-v1.out"
 
 [[ -d "$WORK_TMP/package" ]] || fail "expected $WORK_TMP/package/ after setup --pull"
-[[ -f "$WORK_TMP/out/spec/selection.yaml" ]] || fail "expected out/spec/selection.yaml"
-[[ -f "$WORK_TMP/out/spec/inputs.yaml" ]] || fail "expected out/spec/inputs.yaml"
+[[ -f "$WORK_TMP/out/record/selection.yaml" ]] || fail "expected out/record/selection.yaml"
+[[ -f "$WORK_TMP/out/record/inputs.yaml" ]] || fail "expected out/record/inputs.yaml"
 [[ -d "$WORK_TMP/out/manifests" ]] || fail "expected out/manifests/"
 [[ ! -d "$WORK_TMP/.upgrade" ]] || fail "setup should NOT create .upgrade/ (atomic pull)"
 [[ ! -d "$WORK_TMP/.upgrade-prev" ]] || fail "setup should NOT create .upgrade-prev/"
@@ -130,7 +130,7 @@ grep -q 'Adopted new default for input "log_level"' "$WORK_TMP/setup-v2.out" \
   || fail "setup --pull v2 should report adopting the new log_level default"
 
 # Confirm log_level is in inputs.yaml.
-grep -q 'log_level: info' "$WORK_TMP/out/spec/inputs.yaml" \
+grep -q 'log_level: info' "$WORK_TMP/out/record/inputs.yaml" \
   || fail "inputs.yaml should contain the adopted log_level value"
 
 # 7. setup --pull v2 again with --set-image — image override applies +
@@ -141,7 +141,7 @@ log "setup --pull --set-image — override applied"
   | tee "$WORK_TMP/setup-setimg.out"
 grep -q 'plain-text-v2' "$WORK_TMP/out/manifests"/*.yaml \
   || fail "--set-image should rewrite the image tag in rendered output"
-grep -q 'plain-text-v2' "$WORK_TMP/out/spec/inputs.yaml" \
+grep -q 'plain-text-v2' "$WORK_TMP/out/record/inputs.yaml" \
   || fail "image override should be recorded in inputs.yaml"
 
 # 8. setup --pull v2 again WITHOUT --set-image — override carries forward.

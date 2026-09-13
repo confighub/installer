@@ -23,7 +23,7 @@ const AnnotationRootDepsHash = "installer.confighub.com/root-dependencies-hash"
 
 // LockPath returns the canonical path where deps update writes the lock.
 func LockPath(workDir string) string {
-	return filepath.Join(workDir, "out", "spec", "lock.yaml")
+	return filepath.Join(workDir, "out", api.RecordDir, "lock.yaml")
 }
 
 // WriteLock stamps the root-deps hash onto lock and writes it under workDir.
@@ -44,7 +44,7 @@ func WriteLock(workDir string, pkg *api.Package, lock *api.Lock) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// ReadLock returns the lock at workDir/out/spec/lock.yaml, or (nil, nil)
+// ReadLock returns the lock at workDir/out/record/lock.yaml, or (nil, nil)
 // if absent.
 func ReadLock(workDir string) (*api.Lock, error) {
 	data, err := os.ReadFile(LockPath(workDir))

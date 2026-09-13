@@ -28,7 +28,7 @@ the user do X," that doc says why.
   `default`, `all`, `selected`) and aggressive use of declared defaults
   so most users press Enter through it.
 - Re-running anything starts from prior choices: prefer ConfigHub if
-  the spec has been uploaded, fall back to local `out/spec/` files.
+  the spec has been uploaded, fall back to local `out/record/` files.
 - Image upgrades — the most common day-2 change — are one flag away.
 - No new heavy TUI dependency that breaks on terminals where capability
   detection hangs.
@@ -89,7 +89,7 @@ The layout under `<work-dir>` is:
 └── out/
     ├── manifests/            # per-resource YAML, ready to upload
     ├── compose/              # synthesized kustomization driving render
-    └── spec/                 # the "installer record" (also uploadable as Units)
+    └── record/               # the record of the render: selection, inputs, facts, chain, lock
         ├── selection.yaml
         ├── inputs.yaml
         ├── facts.yaml         (optional, when the package has a collector)
@@ -118,15 +118,15 @@ installer setup [--pull <ref>] [--work-dir <dir>] [wizard flags] [render flags]
 - `--pull <ref>` is optional. When present, fetches the package and
   replaces `<work-dir>/package/`. When absent, assumes the package is
   already pulled (use this form to re-render after editing
-  `out/spec/inputs.yaml`, or after the package was pulled via a
+  `out/record/inputs.yaml`, or after the package was pulled via a
   separate `installer pull` invocation).
 - Supports every flag the granular `wizard` and `render` commands
   accept: `--namespace`, `--select`, `--input`, `--non-interactive`,
   `--components`, `--set-image`, `--reuse`, `--base`, `--clean`.
 - **Auto-detects install vs upgrade** by checking for prior state:
-  - `<work-dir>/out/spec/upload.yaml` exists → load prior from
+  - `<work-dir>/out/record/upload.yaml` exists → load prior from
     ConfigHub (`installer-record` Unit in the recorded Space).
-  - Else `<work-dir>/out/spec/{selection,inputs}.yaml` exist → load
+  - Else `<work-dir>/out/record/{selection,inputs}.yaml` exist → load
     prior locally.
   - Else → fresh install.
 - When prior state is present, runs the schema-diff machinery against
@@ -162,7 +162,7 @@ installer upload
 Re-render after editing inputs:
 
 ```bash
-$EDITOR out/spec/inputs.yaml
+$EDITOR out/record/inputs.yaml
 installer setup            # no --pull → reuses package, re-renders
 installer upload
 ```
@@ -196,7 +196,7 @@ installer wizard <ref> [--work-dir <dir>] [--render=false]
 
 Pulls the package (same as `pull`) and runs the interactive (or
 flag-driven non-interactive) Q&A to produce
-`<work-dir>/out/spec/{selection,inputs,facts}.yaml`. Renders by
+`<work-dir>/out/record/{selection,inputs,facts}.yaml`. Renders by
 default; pass `--render=false` to write only the spec docs and skip
 manifest generation.
 
@@ -212,7 +212,7 @@ rather than carry forward silently.
 installer render [--work-dir <dir>] [--clean]
 ```
 
-Reads `<work-dir>/package/` + `<work-dir>/out/spec/` and produces
+Reads `<work-dir>/package/` + `<work-dir>/out/record/` and produces
 `<work-dir>/out/manifests/`. Deterministic — same package + same spec
 + same collector output = byte-identical rendered Units.
 
@@ -228,15 +228,15 @@ Reconciles `<work-dir>/out/manifests/` (and dep subtrees, if any) with
 the configured ConfigHub Spaces. Behavior depends on whether the
 work-dir has been uploaded before:
 
-- **First upload** — `out/spec/upload.yaml` does not exist. Creates
+- **First upload** — `out/record/upload.yaml` does not exist. Creates
   Spaces (idempotent), creates one Unit per rendered manifest plus the
   untargeted `installer-record` Unit, creates an AppConfig Unit +
   `render-configmap` Invocation + placeholder Unit + Upsert link for
   any AppConfig-tagged manifests, creates cross-Space
   `installer-record → installer-record` links for dependencies, runs
   intra-Space NeedsProvides link inference. Writes
-  `out/spec/upload.yaml` at the end.
-- **Reconcile** — `out/spec/upload.yaml` exists. Re-computes the same
+  `out/record/upload.yaml` at the end.
+- **Reconcile** — `out/record/upload.yaml` exists. Re-computes the same
   plan `installer plan` would produce, opens one ChangeSet per Space,
   runs `cub unit update --merge-external-source --changeset <slug>` for
   updates, `cub unit create` for adds, and for Units that dropped out of
@@ -295,10 +295,10 @@ uploaded yet (no `upload.yaml`).
 
 `setup` and `wizard` both check for prior state in this order:
 
-1. `<work-dir>/out/spec/upload.yaml` exists → fetch the
+1. `<work-dir>/out/record/upload.yaml` exists → fetch the
    `installer-record` Unit from the recorded Space and use the
    Selection + Inputs + Facts embedded in it as the starting state.
-2. Else `<work-dir>/out/spec/{selection,inputs,facts}.yaml` exist →
+2. Else `<work-dir>/out/record/{selection,inputs,facts}.yaml` exist →
    use them.
 3. Else: fresh wizard.
 
@@ -316,7 +316,7 @@ notes that the next successful upload will refresh `upload.yaml`.
 
 ### Upload doc
 
-`out/spec/upload.yaml` persists where this work-dir's spec was last
+`out/record/upload.yaml` persists where this work-dir's spec was last
 uploaded:
 
 ```yaml
@@ -347,7 +347,7 @@ bootstraps the lookup.
 
 Every command that touches ConfigHub reads the current cub
 organization and compares it against `spec.organizationID` in
-`out/spec/upload.yaml`. A mismatch fails fast with a message naming
+`out/record/upload.yaml`. A mismatch fails fast with a message naming
 both org IDs and pointing at `cub context set` / `cub auth login`.
 Same treatment for `spec.server` mismatch.
 
@@ -386,7 +386,7 @@ the recommended path depends on how often the override is expected:
   Operator passes `--set-image name=ref` (repeatable) to `installer
   setup` or `installer wizard`; the installer runs `kustomize edit set
   image` against the package's working copy before render. The
-  `--set-image` value is recorded in `out/spec/inputs.yaml` under
+  `--set-image` value is recorded in `out/record/inputs.yaml` under
   `spec.imageOverrides` so the next setup carries it forward without
   the operator re-typing it.
 - **Frequent / structured override** — package author declares an
@@ -416,7 +416,7 @@ base kustomization.yaml has no `images:` block; declare one to use
   Plan shows a one-line image change.
 - **Adding a component**:
   ```bash
-  $EDITOR out/spec/selection.yaml
+  $EDITOR out/record/selection.yaml
   installer setup --non-interactive   # re-renders against edited selection
   installer plan                       # preview
   installer upload                     # materialize

@@ -25,12 +25,12 @@ func newRenderCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "render",
 		Short: "Render selection + inputs into per-resource Kubernetes YAML",
-		Long: `Render reads <work-dir>/package + <work-dir>/out/spec/{selection,inputs}.yaml,
+		Long: `Render reads <work-dir>/package + <work-dir>/out/record/{selection,inputs}.yaml,
 runs kustomize on the chosen base + components, then runs the package's
 function chain template (resolved against the inputs) via the ConfigHub
 function executor SDK. Output goes to <work-dir>/out/manifests/ as one YAML
 file per resource. The resolved function-chain.yaml and a manifest-index.yaml
-are written to <work-dir>/out/spec/.
+are written to <work-dir>/out/record/.
 
 The kustomize binary must be on PATH.
 
@@ -44,7 +44,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			}
 			pkgDir := filepath.Join(absWork, "package")
 			outDir := filepath.Join(absWork, "out")
-			specDir := filepath.Join(outDir, "spec")
+			recordDir := filepath.Join(outDir, api.RecordDir)
 			manifestsDir := filepath.Join(outDir, "manifests")
 
 			loaded, err := ipkg.Load(pkgDir)
@@ -52,11 +52,11 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				return fmt.Errorf("load package from %s: %w", pkgDir, err)
 			}
 
-			sel, err := readSelection(filepath.Join(specDir, "selection.yaml"))
+			sel, err := readSelection(filepath.Join(recordDir, "selection.yaml"))
 			if err != nil {
 				return err
 			}
-			inputs, err := readInputs(filepath.Join(specDir, "inputs.yaml"))
+			inputs, err := readInputs(filepath.Join(recordDir, "inputs.yaml"))
 			if err != nil {
 				return err
 			}
@@ -67,7 +67,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				}
 			}
 
-			facts, err := readFactsOptional(filepath.Join(specDir, "facts.yaml"))
+			facts, err := readFactsOptional(filepath.Join(recordDir, "facts.yaml"))
 			if err != nil {
 				return err
 			}
@@ -103,7 +103,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			if len(result.Secrets) > 0 {
 				fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(result.Secrets), outDir)
 			}
-			fmt.Printf("Spec docs in %s\n", specDir)
+			fmt.Printf("Spec docs in %s\n", recordDir)
 
 			if lock != nil {
 				depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
@@ -126,7 +126,7 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/spec, writes ./out/manifests)")
+	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/record, writes ./out/manifests)")
 	cmd.Flags().BoolVar(&clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }

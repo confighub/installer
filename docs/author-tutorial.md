@@ -237,11 +237,11 @@ grep image /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 #  - image: nginxdemos/hello:plain-text-v2
 ```
 
-The override is recorded in `out/spec/inputs.yaml` under
+The override is recorded in `out/record/inputs.yaml` under
 `spec.imageOverrides`, so it round-trips across upgrades:
 
 ```bash
-grep -A 1 imageOverrides /tmp/statusboard/out/spec/inputs.yaml
+grep -A 1 imageOverrides /tmp/statusboard/out/record/inputs.yaml
 # imageOverrides:
 #   nginxdemos/hello: nginxdemos/hello:plain-text-v2
 ```
@@ -399,7 +399,7 @@ errors on conflicts. Test:
 rm -rf /tmp/statusboard
 installer setup --pull ./. --work-dir /tmp/statusboard --non-interactive \
   --namespace demo --select ingress-tls
-cat /tmp/statusboard/out/spec/selection.yaml
+cat /tmp/statusboard/out/record/selection.yaml
 #   components: [ingress, ingress-tls]   # both selected
 ```
 

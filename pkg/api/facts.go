@@ -8,7 +8,7 @@ package api
 // cannot be supplied by the user up front (e.g., a server-derived image tag,
 // a freshly created BridgeWorkerID, the active context's server URL).
 //
-// Facts are persisted as out/spec/facts.yaml so re-render is reproducible from
+// Facts are persisted as out/record/facts.yaml so re-render is reproducible from
 // the same captured state. Re-run `installer wizard` to refresh.
 //
 // Sensitive material (passwords, tokens, worker secrets) MUST NOT be placed

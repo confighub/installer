@@ -49,7 +49,7 @@ func TestDiscoverParentOnly(t *testing.T) {
 	writeFile(t, filepath.Join(work, "package", "installer.yaml"), minimalParentYAML)
 	writeFile(t, filepath.Join(work, "package", "bases/default/kustomization.yaml"), "resources: []")
 	writeFile(t, filepath.Join(work, "out", "manifests", "x.yaml"), "kind: ConfigMap")
-	writeFile(t, filepath.Join(work, "out", "spec", "selection.yaml"), "kind: Selection")
+	writeFile(t, filepath.Join(work, "out", api.RecordDir, "selection.yaml"), "kind: Selection")
 
 	parent, err := api.ParsePackage([]byte(minimalParentYAML))
 	if err != nil {
@@ -130,7 +130,7 @@ func TestDiscoverErrorOnMissingVendor(t *testing.T) {
 	parent, _ := api.ParsePackage([]byte(parentWithDepYAML))
 	lock := &api.Lock{
 		Spec: api.LockSpec{
-			Package: api.LockedPackage{Name: "parent"},
+			Package:  api.LockedPackage{Name: "parent"},
 			Resolved: []api.LockedDependency{{Name: "dep-a", Ref: "oci://reg/dep-pkg:0.2.0", Version: "0.2.0"}},
 		},
 	}
@@ -143,15 +143,15 @@ func TestDiscoverErrorOnMissingVendor(t *testing.T) {
 func TestBuildInstallerRecord(t *testing.T) {
 	work := t.TempDir()
 	pkgDir := filepath.Join(work, "package")
-	specDir := filepath.Join(work, "out", "spec")
+	recordDir := filepath.Join(work, "out", api.RecordDir)
 	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), minimalParentYAML)
-	writeFile(t, filepath.Join(specDir, "selection.yaml"), "kind: Selection\nmetadata: {name: x}\n")
-	writeFile(t, filepath.Join(specDir, "inputs.yaml"), "kind: Inputs\nmetadata: {name: y}\n")
-	writeFile(t, filepath.Join(specDir, "notes.txt"), "ignored")
+	writeFile(t, filepath.Join(recordDir, "selection.yaml"), "kind: Selection\nmetadata: {name: x}\n")
+	writeFile(t, filepath.Join(recordDir, "inputs.yaml"), "kind: Inputs\nmetadata: {name: y}\n")
+	writeFile(t, filepath.Join(recordDir, "notes.txt"), "ignored")
 
 	body, err := BuildInstallerRecord(Package{
 		PackageDir: pkgDir,
-		SpecDir:    specDir,
+		RecordDir:  recordDir,
 	})
 	if err != nil {
 		t.Fatalf("BuildInstallerRecord: %v", err)
@@ -183,16 +183,16 @@ func TestBuildInstallerRecord(t *testing.T) {
 func TestBuildInstallerRecord_LocalConfigAnnotation(t *testing.T) {
 	work := t.TempDir()
 	pkgDir := filepath.Join(work, "package")
-	specDir := filepath.Join(work, "out", "spec")
+	recordDir := filepath.Join(work, "out", api.RecordDir)
 	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), minimalParentYAML)
 	// Spec doc with no annotations: section should be added.
-	writeFile(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	writeFile(t, filepath.Join(recordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Selection
 metadata: {name: x}
 `)
 	// Spec doc with a pre-existing unrelated annotation: should keep it
 	// AND gain local-config.
-	writeFile(t, filepath.Join(specDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	writeFile(t, filepath.Join(recordDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Inputs
 metadata:
   name: y
@@ -200,7 +200,7 @@ metadata:
     example.com/keep-me: "1"
 `)
 
-	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, SpecDir: specDir})
+	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, RecordDir: recordDir})
 	if err != nil {
 		t.Fatalf("BuildInstallerRecord: %v", err)
 	}
@@ -217,9 +217,9 @@ metadata:
 func TestSplitInstallerRecord(t *testing.T) {
 	work := t.TempDir()
 	pkgDir := filepath.Join(work, "package")
-	specDir := filepath.Join(work, "out", "spec")
+	recordDir := filepath.Join(work, "out", api.RecordDir)
 	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), minimalParentYAML)
-	writeFile(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	writeFile(t, filepath.Join(recordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Selection
 metadata: {name: parent-selection}
 spec:
@@ -227,7 +227,7 @@ spec:
   base: default
   components: [a, b]
 `)
-	writeFile(t, filepath.Join(specDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	writeFile(t, filepath.Join(recordDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Inputs
 metadata: {name: parent-inputs}
 spec:
@@ -235,7 +235,7 @@ spec:
   namespace: demo
   values: {greeting: hi}
 `)
-	writeFile(t, filepath.Join(specDir, "upload.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	writeFile(t, filepath.Join(recordDir, "upload.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Upload
 metadata: {name: parent-upload}
 spec:
@@ -247,7 +247,7 @@ spec:
   server: https://hub.example.com
 `)
 
-	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, SpecDir: specDir})
+	body, err := BuildInstallerRecord(Package{PackageDir: pkgDir, RecordDir: recordDir})
 	if err != nil {
 		t.Fatalf("BuildInstallerRecord: %v", err)
 	}

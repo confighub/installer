@@ -32,7 +32,7 @@ type Options struct {
 
 // Result is what Render produces.
 type Result struct {
-	// OutDir is the directory written to (out/manifests + out/secrets + out/spec
+	// OutDir is the directory written to (out/manifests + out/secrets + out/record
 	// + out/compose underneath).
 	OutDir string
 	// Manifests is the per-resource non-sensitive output, ordered by Slug.
@@ -145,11 +145,11 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 
 	manifestsDir := filepath.Join(outDir, "manifests")
 	secretsDir := filepath.Join(outDir, "secrets")
-	specDir := filepath.Join(outDir, "spec")
+	recordDir := filepath.Join(outDir, api.RecordDir)
 	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(specDir, 0o755); err != nil {
+	if err := os.MkdirAll(recordDir, 0o755); err != nil {
 		return nil, err
 	}
 	// Keep rendered secrets out of version control. out/secrets/ holds
@@ -182,21 +182,21 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	// Persist spec docs alongside the rendered output: selection, inputs,
 	// optional facts, the resolved function-chain, and a manifest index for
 	// downstream tools.
-	if err := writeYAML(filepath.Join(specDir, "selection.yaml"), opts.Selection); err != nil {
+	if err := writeYAML(filepath.Join(recordDir, "selection.yaml"), opts.Selection); err != nil {
 		return nil, err
 	}
-	if err := writeYAML(filepath.Join(specDir, "inputs.yaml"), opts.Inputs); err != nil {
+	if err := writeYAML(filepath.Join(recordDir, "inputs.yaml"), opts.Inputs); err != nil {
 		return nil, err
 	}
 	if opts.Facts != nil {
-		if err := writeYAML(filepath.Join(specDir, "facts.yaml"), opts.Facts); err != nil {
+		if err := writeYAML(filepath.Join(recordDir, "facts.yaml"), opts.Facts); err != nil {
 			return nil, err
 		}
 	}
-	if err := writeYAML(filepath.Join(specDir, "function-chain.yaml"), chain); err != nil {
+	if err := writeYAML(filepath.Join(recordDir, "function-chain.yaml"), chain); err != nil {
 		return nil, err
 	}
-	if err := writeManifestIndex(filepath.Join(specDir, "manifest-index.yaml"), opts.Loaded.Package, manifests); err != nil {
+	if err := writeManifestIndex(filepath.Join(recordDir, "manifest-index.yaml"), opts.Loaded.Package, manifests); err != nil {
 		return nil, err
 	}
 

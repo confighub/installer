@@ -177,7 +177,7 @@ func TestRenderDependencies(t *testing.T) {
 
 	// The dep's spec dir should carry its own selection/inputs/function-chain.
 	for _, name := range []string{"selection.yaml", "inputs.yaml", "function-chain.yaml", "manifest-index.yaml"} {
-		if _, err := os.Stat(filepath.Join(wantOut, "spec", name)); err != nil {
+		if _, err := os.Stat(filepath.Join(wantOut, api.RecordDir, name)); err != nil {
 			t.Errorf("missing dep spec doc %s: %v", name, err)
 		}
 	}

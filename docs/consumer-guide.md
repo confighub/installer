@@ -27,7 +27,7 @@ installer is anchored to lives in [principles.md](./principles.md).
 Day-2 commands operate on the same work-dir:
 
 - `installer setup` — re-runs wizard + render against the existing
-  package, picking up edits to `out/spec/inputs.yaml` or a different
+  package, picking up edits to `out/record/inputs.yaml` or a different
   pulled package version.
 - `installer plan` — show what's different between the work-dir and
   ConfigHub.
@@ -89,7 +89,7 @@ installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
 ```
 
 `setup` pulls the package into `./package/` and writes the wizard's
-output to `./out/spec/`, then renders manifests to `./out/manifests/`.
+output to `./out/record/`, then renders manifests to `./out/manifests/`.
 If you prefer to script the wizard:
 
 ```bash
@@ -148,19 +148,19 @@ recorded object-set digest before reporting success.
 
 You can edit these files directly — the next `plan` / `upload` will
 diff your edits against ConfigHub. But editing rendered output is
-usually the wrong layer; prefer editing `out/spec/inputs.yaml` and
+usually the wrong layer; prefer editing `out/record/inputs.yaml` and
 re-running `installer setup`. See "Where to make changes" below.
 
 Finally, upload to ConfigHub:
 
 ```bash
 # 2. Upload: one Unit per file, plus an installer-record Unit
-#    holding installer.yaml + spec/ docs.
+#    holding installer.yaml + record/ docs.
 installer upload --space statusboard-prod
 ```
 
 `installer upload` records the destination Space (and your active
-cub organization + server) into `./out/spec/upload.yaml` so all
+cub organization + server) into `./out/record/upload.yaml` so all
 subsequent commands re-enter without you re-typing.
 
 For multi-package installs (a parent that declares dependencies),
@@ -190,7 +190,7 @@ decreasing reversibility. Use the lowest layer that fits.
 When you re-render with a different selection / inputs, the install
 re-derives the manifests. This is the right layer for choices the
 package author exposed as inputs: replica counts, names, tunable
-behaviors. Edit `out/spec/inputs.yaml` (or re-run `setup`
+behaviors. Edit `out/record/inputs.yaml` (or re-run `setup`
 interactively to walk every prompt with prior values pre-filled):
 
 ```bash
@@ -200,7 +200,7 @@ interactively to walk every prompt with prior values pre-filled):
 installer setup
 
 # Or hand-edit and re-render via setup --non-interactive:
-$EDITOR out/spec/inputs.yaml
+$EDITOR out/record/inputs.yaml
 installer setup --non-interactive
 ```
 
@@ -219,7 +219,7 @@ installer setup --set-image myorg/statusboard=myorg/statusboard:1.2.4
 installer upload
 ```
 
-The override is recorded in `out/spec/inputs.yaml` under
+The override is recorded in `out/record/inputs.yaml` under
 `spec.imageOverrides`, so subsequent setups carry it forward unless
 you pass a different `--set-image` for the same name. If the package
 doesn't declare an `images:` block, this fails fast with a message
@@ -368,7 +368,7 @@ installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
 # Loaded prior install state from confighub.
 # Adopted new default for input "metrics_port": 9090
 # Adopted new default-flagged component(s): metrics-collector
-# Wizard wrote out/spec/{selection,inputs}.yaml
+# Wizard wrote out/record/{selection,inputs}.yaml
 # Rendered 4 manifest(s) to out/manifests/
 # Next: installer upload --work-dir … --space <slug>
 
@@ -444,9 +444,9 @@ are available for step-by-step debugging or advanced workflows:
 - `installer wizard <ref> --work-dir <dir> [--render=false]` — pull
   + Q&A. Renders by default; pass `--render=false` to skip.
 - `installer render --work-dir <dir>` — render only; reads existing
-  `<work-dir>/package/` + `<work-dir>/out/spec/`.
+  `<work-dir>/package/` + `<work-dir>/out/record/`.
 - `installer deps update --work-dir <dir>` — multi-package only:
-  resolve the dependency DAG and write `out/spec/lock.yaml`. (`setup`
+  resolve the dependency DAG and write `out/record/lock.yaml`. (`setup`
   runs this automatically before render.)
 
 The semantics are equivalent: `setup --pull <ref>` is
@@ -527,7 +527,7 @@ who depends on what.
 
 ## Re-entering an install from a fresh machine
 
-The `out/spec/upload.yaml` file written by `installer upload` is
+The `out/record/upload.yaml` file written by `installer upload` is
 what bootstraps everything. From a fresh clone of the work-dir, all
 day-2 commands work because they read `upload.yaml` to find the
 Spaces.
@@ -543,9 +543,9 @@ mkdir recovered && cd recovered
 installer pull oci://ghcr.io/myorg/statusboard:0.1.0
 
 # Pull the installer-record Unit body and split it into spec docs.
-mkdir -p out/spec
+mkdir -p out/record
 cub unit data --space statusboard-prod installer-record \
-    > out/spec/installer-record.yaml
+    > out/record/installer-record.yaml
 # (Splitting it back into selection.yaml / inputs.yaml / facts.yaml
 # / upload.yaml is a manual step today; an `installer recover`
 # command will automate this.)
@@ -599,7 +599,7 @@ re-run.
 
 The installer-record Unit was deleted from cub, or the recorded
 Space slug in `upload.yaml` is stale. Setup's prior-state load falls
-back to local `out/spec/*.yaml` automatically with a warning. If you
+back to local `out/record/*.yaml` automatically with a warning. If you
 want to refresh ConfigHub from local state, re-run `installer upload
 --space <slug>` against the same Space.
 

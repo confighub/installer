@@ -16,6 +16,12 @@ package api
 
 const APIVersion = "installer.confighub.com/v1alpha1"
 
+// RecordDir is the name of the directory under a work-dir's out/ (and under
+// out/<dependency>/) that holds the record of a render: the selection, inputs,
+// facts, function chain, manifest index, and lock that produced the manifests
+// next to it.
+const RecordDir = "record"
+
 const (
 	KindPackage       = "Package"
 	KindInputs        = "Inputs"

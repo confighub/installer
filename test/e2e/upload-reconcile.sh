@@ -191,7 +191,7 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
   --input space="$SPACE" || fail "setup failed (see $WORK_TMP/setup.log)"
 
 [[ -d "$WORK_TMP/out/manifests" ]] || fail "expected $WORK_TMP/out/manifests/"
-[[ -f "$WORK_TMP/out/spec/facts.yaml" ]] || fail "expected facts.yaml after setup (worker collector should have run)"
+[[ -f "$WORK_TMP/out/record/facts.yaml" ]] || fail "expected facts.yaml after setup (worker collector should have run)"
 
 # The worker package's secretGenerator emits the worker secret to
 # out/secrets/ (sensitive — never uploaded as a Unit).
@@ -205,9 +205,9 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
 #    to assert against downstream.
 log "pin worker image to $PINNED_IMAGE (edit facts.yaml + installer render)"
 note "collector-reported image was:"
-grep -E '^[[:space:]]+image:' "$WORK_TMP/out/spec/facts.yaml" | sed 's/^/      /'
+grep -E '^[[:space:]]+image:' "$WORK_TMP/out/record/facts.yaml" | sed 's/^/      /'
 # Use python for a safe in-place YAML update — preserves other fact keys.
-python3 - "$WORK_TMP/out/spec/facts.yaml" "$PINNED_IMAGE" <<'PY'
+python3 - "$WORK_TMP/out/record/facts.yaml" "$PINNED_IMAGE" <<'PY'
 import sys, yaml
 p, image = sys.argv[1], sys.argv[2]
 with open(p) as f:
@@ -279,7 +279,7 @@ run upload-first "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" \
   --target "$TARGET_SPACE/$TARGET_SLUG" \
   || fail "first upload failed (see $WORK_TMP/upload-first.log)"
 
-[[ -f "$WORK_TMP/out/spec/upload.yaml" ]] || fail "first upload did not write out/spec/upload.yaml"
+[[ -f "$WORK_TMP/out/record/upload.yaml" ]] || fail "first upload did not write out/record/upload.yaml"
 
 # 6a. Standard-Unit assertions.
 unit_count=$(cub unit list --space "$SPACE" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')

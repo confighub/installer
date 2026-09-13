@@ -9,7 +9,7 @@
 // Phase 6 wires this up:
 //   - One Space per package (parent + each locked dep).
 //   - One untargeted installer-record Unit per Space, holding
-//     installer.yaml plus every file in that package's out/<pkg>/spec/
+//     installer.yaml plus every file in that package's out/<pkg>/record/
 //     (plus the lock for the parent).
 //   - Cross-Space NeedsProvides links from the parent's record Unit to each
 //     dep's record Unit, derived from the lock.
@@ -53,8 +53,8 @@ type Package struct {
 	PackageDir string
 	// ManifestsDir is where rendered per-resource YAML lives.
 	ManifestsDir string
-	// SpecDir is where this package's spec docs live (selection.yaml etc.).
-	SpecDir string
+	// RecordDir is where this package's spec docs live (selection.yaml etc.).
+	RecordDir string
 	// SecretsDir is where rendered Secret YAML lives (never uploaded).
 	SecretsDir string
 	// SpaceSlug is the ConfigHub Space this package's Units land in.
@@ -132,7 +132,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 		Version:      in.ParentPackage.InstallerMetadata.Version,
 		PackageDir:   filepath.Join(in.WorkDir, "package"),
 		ManifestsDir: filepath.Join(in.WorkDir, "out", "manifests"),
-		SpecDir:      filepath.Join(in.WorkDir, "out", "spec"),
+		RecordDir:    filepath.Join(in.WorkDir, "out", api.RecordDir),
 		SecretsDir:   filepath.Join(in.WorkDir, "out", "secrets"),
 		SpaceSlug:    parentSlug,
 		IsParent:     true,
@@ -171,7 +171,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 			LocalHandle:  d.Name,
 			PackageDir:   vendor,
 			ManifestsDir: filepath.Join(in.WorkDir, "out", d.Name, "manifests"),
-			SpecDir:      filepath.Join(in.WorkDir, "out", d.Name, "spec"),
+			RecordDir:    filepath.Join(in.WorkDir, "out", d.Name, api.RecordDir),
 			SecretsDir:   filepath.Join(in.WorkDir, "out", d.Name, "secrets"),
 			SpaceSlug:    slug,
 			IsParent:     false,
@@ -199,15 +199,15 @@ const UploadDocFilename = "upload.yaml"
 
 // BuildInstallerRecord builds the multi-doc YAML body for the per-Space
 // installer-record Unit. The result is `installer.yaml` followed by every
-// YAML doc in pkg.SpecDir (in lexicographic order), separated by `---`.
+// YAML doc in pkg.RecordDir (in lexicographic order), separated by `---`.
 // Files outside spec/ are not included. upload.yaml (if present) is
 // included so a freshly cloned work-dir can re-derive everything,
 // including where it was uploaded, from ConfigHub alone.
 func BuildInstallerRecord(pkg Package) ([]byte, error) {
 	paths := []string{filepath.Join(pkg.PackageDir, "installer.yaml")}
-	entries, err := os.ReadDir(pkg.SpecDir)
+	entries, err := os.ReadDir(pkg.RecordDir)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", pkg.SpecDir, err)
+		return nil, fmt.Errorf("read %s: %w", pkg.RecordDir, err)
 	}
 	var specFiles []string
 	for _, e := range entries {
@@ -218,7 +218,7 @@ func BuildInstallerRecord(pkg Package) ([]byte, error) {
 		if !strings.HasSuffix(n, ".yaml") && !strings.HasSuffix(n, ".yml") {
 			continue
 		}
-		specFiles = append(specFiles, filepath.Join(pkg.SpecDir, n))
+		specFiles = append(specFiles, filepath.Join(pkg.RecordDir, n))
 	}
 	sort.Strings(specFiles)
 	paths = append(paths, specFiles...)
@@ -445,7 +445,7 @@ func SplitInstallerRecord(body []byte) (*RecordContents, error) {
 	return out, nil
 }
 
-// WriteUploadDoc writes <work-dir>/out/spec/upload.yaml from the
+// WriteUploadDoc writes <work-dir>/out/record/upload.yaml from the
 // discovered package set. Reads the active cub context to record the
 // organization ID and server URL alongside the resolved Space slugs.
 //
@@ -491,7 +491,7 @@ func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages 
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(workDir, "out", "spec", UploadDocFilename)
+	path := filepath.Join(workDir, "out", api.RecordDir, UploadDocFilename)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

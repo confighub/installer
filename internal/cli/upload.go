@@ -50,7 +50,7 @@ func newUploadCmd() *cobra.Command {
 		Short: "Reconcile rendered manifests with ConfigHub Space(s) (create or update)",
 		Long: `Upload reconciles <work-dir>/out/manifests/ with ConfigHub. It auto-
 detects whether this is a first upload or a subsequent reconcile via the
-presence of <work-dir>/out/spec/upload.yaml (written by the first upload):
+presence of <work-dir>/out/record/upload.yaml (written by the first upload):
 
 First upload (no upload.yaml):
   Creates Space(s), one Unit per rendered manifest, plus the untargeted
@@ -158,9 +158,9 @@ passed again.`,
 			}
 
 			// Auto-detect first-upload vs reconcile. The presence of
-			// <work-dir>/out/spec/upload.yaml is the canonical signal that
+			// <work-dir>/out/record/upload.yaml is the canonical signal that
 			// this work-dir has already been pushed to ConfigHub once.
-			uploadDocPath := filepath.Join(absWork, "out", "spec", upload.UploadDocFilename)
+			uploadDocPath := filepath.Join(absWork, "out", api.RecordDir, upload.UploadDocFilename)
 			if _, statErr := os.Stat(uploadDocPath); statErr == nil {
 				return runUploadReconcile(ctx, absWork, loaded, meta, unitAnnotations, unitLabels, yes, changeSetSlug, space, spacePattern)
 			} else if !os.IsNotExist(statErr) {
@@ -382,7 +382,7 @@ func runUploadReconcile(ctx context.Context, workDir string, loaded *ipkg.Loaded
 // refreshInstallerRecordHook builds an Apply PostSpaceHook that
 // matches each SpacePlan to its upload.Package by space slug and
 // upserts the installer-record Unit so the cub-side spec body stays
-// in sync with the local out/spec/. Without this, a subsequent
+// in sync with the local out/record/. Without this, a subsequent
 // setup reads stale state (notably ImageOverrides) from ConfigHub
 // via wizard.LoadPriorState.
 func refreshInstallerRecordHook(packages []upload.Package) diff.PackageRefresher {
@@ -430,14 +430,14 @@ func uploadOnePackage(ctx context.Context, pkg upload.Package, meta spaceMetaInp
 		return err
 	}
 
-	// Read the wizard's namespace from out/spec/inputs.yaml. AppConfig
+	// Read the wizard's namespace from out/record/inputs.yaml. AppConfig
 	// placeholders need it post-render: render-configmap stamps
 	// metadata.namespace=confighubplaceholder onto the rendered ConfigMap
 	// (it expects a namespace link to fill that in at apply time), but our
 	// intra-Space link inference matches by namespace and a placeholder
 	// value never resolves. set-namespace on the placeholder Unit lets
 	// the inference wire the Deployment → ConfigMap link.
-	inputs, err := readInputs(filepath.Join(pkg.SpecDir, "inputs.yaml"))
+	inputs, err := readInputs(filepath.Join(pkg.RecordDir, "inputs.yaml"))
 	if err != nil {
 		return fmt.Errorf("read inputs.yaml for %s: %w", pkg.Name, err)
 	}

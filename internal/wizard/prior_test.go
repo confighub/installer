@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/pkg/api"
 )
 
 func TestLoadPriorStateNone(t *testing.T) {
@@ -28,9 +29,9 @@ func TestLoadPriorStateNone(t *testing.T) {
 
 func TestLoadPriorStateLocal(t *testing.T) {
 	work := t.TempDir()
-	specDir := filepath.Join(work, "out", "spec")
+	recordDir := filepath.Join(work, "out", api.RecordDir)
 	pkgDir := filepath.Join(work, "package")
-	mustWrite(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	mustWrite(t, filepath.Join(recordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Selection
 metadata: {name: hello-selection}
 spec:
@@ -38,7 +39,7 @@ spec:
   base: default
   components: [foo]
 `)
-	mustWrite(t, filepath.Join(specDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	mustWrite(t, filepath.Join(recordDir, "inputs.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Inputs
 metadata: {name: hello-inputs}
 spec:
@@ -84,13 +85,13 @@ func TestLoadPriorStateUploadYAMLOnly(t *testing.T) {
 	// `go test` env, or the recorded Space doesn't exist). The loader
 	// must fall back to local spec without erroring.
 	work := t.TempDir()
-	specDir := filepath.Join(work, "out", "spec")
-	mustWrite(t, filepath.Join(specDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	recordDir := filepath.Join(work, "out", api.RecordDir)
+	mustWrite(t, filepath.Join(recordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Selection
 metadata: {name: x}
 spec: {package: hello, base: default}
 `)
-	mustWrite(t, filepath.Join(specDir, upload.UploadDocFilename), `apiVersion: installer.confighub.com/v1alpha1
+	mustWrite(t, filepath.Join(recordDir, upload.UploadDocFilename), `apiVersion: installer.confighub.com/v1alpha1
 kind: Upload
 metadata: {name: hello-upload}
 spec:

@@ -15,6 +15,7 @@ import (
 	"github.com/confighub/installer/internal/render"
 	"github.com/confighub/installer/internal/selection"
 	"github.com/confighub/installer/internal/wizard"
+	"github.com/confighub/installer/pkg/api"
 )
 
 // TestEndToEnd_HelloApp drives the example package through wizard → render
@@ -95,7 +96,7 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 
 	// Spec docs persisted.
 	for _, name := range []string{"selection.yaml", "inputs.yaml", "function-chain.yaml", "manifest-index.yaml"} {
-		if _, err := os.Stat(filepath.Join(outDir, "spec", name)); err != nil {
+		if _, err := os.Stat(filepath.Join(outDir, api.RecordDir, name)); err != nil {
 			t.Errorf("missing spec doc %s: %v", name, err)
 		}
 	}
