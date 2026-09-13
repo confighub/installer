@@ -157,6 +157,7 @@ When the upload would empty any Unit it lists them and asks first, unless
 				upload.Report(os.Stdout, result, false)
 				failed = failed || upload.Failed(result)
 				results = append(results, result)
+				printRevert(ctx, prepared.client, pkg, result)
 			}
 			fmt.Printf("\n%s\n", upload.Summarize(results).Applied())
 
@@ -174,6 +175,28 @@ When the upload would empty any Unit it lists them and asks first, unless
 	flags.register(cmd)
 	cmd.Flags().BoolVar(&yes, "yes", false, "empty Units whose resources left the render without asking")
 	return cmd
+}
+
+// printRevert prints how to revert what an upload wrote to a Space: restoring
+// the package's Units to before the upload's ChangeSet, which empties the Units
+// it created and reverts the rest.
+func printRevert(ctx context.Context, c *cubapi.Client, pkg upload.Package, result *goclientnew.UploadResult) {
+	if !upload.Summarize([]*goclientnew.UploadResult{result}).Changes() {
+		return
+	}
+	for _, comp := range result.Components {
+		for _, s := range comp.Spaces {
+			if s.ChangeSetID == nil {
+				continue
+			}
+			ref := s.ChangeSetID.String()
+			if cs, err := cubapi.ResolveChangeSet(ctx, c, cubapi.RefFromID(*s.ChangeSetID), cubapi.ResolveOpts{}); err == nil && cs.ChangeSet != nil {
+				ref = cs.ChangeSet.Slug
+			}
+			fmt.Printf("\nRevert this upload of %s with:\n  cub unit update --patch --space %s --restore Before:ChangeSet:%s --where \"Labels.UploadSource = '%s'\"\n",
+				s.SpaceSlug, s.SpaceSlug, ref, pkg.Name)
+		}
+	}
 }
 
 // prepareUpload loads the work-dir, finds its packages, resolves --target and
