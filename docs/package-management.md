@@ -271,8 +271,9 @@ Inspired by Cargo's resolver and apt's coherent-set behavior:
 ConfigHub Links + automatic apply-ordering (Roadmap item in the README) handle
 ordering inside a Space. Across Spaces, the dep tree implies an order: a Space
 is applied only after the Spaces of packages it depends on have converged. The
-installer's upload step records this in the installer-record Unit and in
-inter-Space Links; cross-Space ValidationErrors enforce it at apply time.
+installer's upload step records this as the parent Space's `DependsOn`
+annotation, naming its dependencies' components, and the lock is carried in
+the parent's installer record.
 
 ### Cluster-side `externalRequires` still apply
 
@@ -349,6 +350,7 @@ digest.
 5. Render wired to read the lock, fetch deps (cached via `deps build`), and
    render each into its own output subtree (`out/<dep-name>/manifests/`,
    `out/<dep-name>/record/`).
-6. Upload step extended to create one Space per dep and one installer-record
-   Unit per package, with cross-Space Links for the dep relationships.
+6. Upload step extended to create one Space per dep and one installer record
+   Unit per package, with the parent's Space recording its dependencies in a
+   `DependsOn` annotation.
 7. Signing.

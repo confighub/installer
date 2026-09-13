@@ -38,10 +38,9 @@ rendered Units. The spec layer is the only thing the installer
 persists, and it must be sufficient to re-derive the rendered output
 without consulting the cluster or ConfigHub.
 
-The Upload doc (`out/record/upload.yaml`) extends this: it records where
-the spec was last uploaded so the wizard can re-enter from ConfigHub if
-the local work-dir is lost. The installer-record Unit on ConfigHub
-contains the full spec so a freshly cloned work-dir is recoverable.
+Upload extends this: each package's `installer` record Unit in ConfigHub
+holds the same record, so the wizard can re-enter from ConfigHub if the
+local work-dir is lost.
 
 How to apply: any new state the installer learns about an install goes
 into a spec doc. Anything not in the spec must be derivable from it
@@ -56,8 +55,8 @@ plus the package.
   machinery).
 - **Post-install** changes are made in ConfigHub on the materialized
   Units. They affect what ConfigHub serves to apply. They are
-  preserved across re-render via `cub unit update --merge-external-source`,
-  which only writes the paths that changed in the new render.
+  preserved across re-render because upload 3-way merges the new render
+  into each Unit, writing only the paths the render changed.
 
 The two layers do not need to know about each other. A package author
 asking "should this be an input or a post-install mutation?" should
@@ -138,8 +137,8 @@ time and (3) for post-install one-offs; only edit out/record/inputs.yaml for
 The installer materializes Units. Everything downstream — apply,
 validation Triggers and the ValidationErrors they record, drift
 reconciliation, ChangeSets, promotion, rollback — is ConfigHub's job.
-The installer creates a ChangeSet for `installer upload` reconciles so
-updates are revertable, but it does not run apply, does not author
+ConfigHub records every `installer upload` in a ChangeSet, so an upload is
+revertable, but the installer does not run apply, does not author
 Triggers, and does not reconcile cluster drift.
 
 How to apply: when a feature request lands ("add a Trigger that blocks

@@ -645,16 +645,17 @@ what isn't.
    resource per file in `out/manifests/`. For multi-package installs,
    each dep is rendered into its own subtree under `out/<dep-name>/`.
 
-3. **`installer upload`** — creates one Space per package (parent +
-   each locked dep) and one Unit per rendered file, plus one
-   untargeted `installer-record` Unit per Space carrying your
-   `installer.yaml` + the spec docs (so a freshly cloned work-dir is
-   recoverable from cub alone). Cross-Space Links wire the parent's
-   record to each dep's record. Subsequent uploads against the same
-   work-dir reconcile inside a ChangeSet (updates / adds / deletes).
+3. **`installer upload`** — sends each package (parent + each locked
+   dep) to ConfigHub's upload API, one Space per package. Every rendered
+   resource becomes its own Unit, and each Space gets an untargeted
+   `installer` record Unit carrying your `installer.yaml` and the record of
+   the render, so a freshly cloned work-dir is recoverable from ConfigHub.
+   The parent's Space records its dependencies in a `DependsOn`
+   annotation. Every upload is create-or-update: later uploads merge what
+   changed and empty what the render dropped.
 
-4. **`installer plan`** — day-2 read-only preview of what the next
-   `installer upload` reconcile would change in ConfigHub. The
+4. **`installer plan`** — day-2 dry run of what the next `installer
+   upload` would change in ConfigHub. The
    operator's job, but several things you author shape how it
    behaves: your `images:` block enables `--set-image`; your
    `default: true` components are adopted by `default`-preset
