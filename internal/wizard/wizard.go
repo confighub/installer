@@ -56,7 +56,7 @@ type Result struct {
 
 // Run validates answers against the package, runs the selection solver,
 // invokes the package's Collector (if any), and writes selection.yaml +
-// inputs.yaml + facts.yaml into outDir/spec.
+// inputs.yaml + facts.yaml into outDir/record.
 //
 // packageDir is the absolute path to the loaded package working copy; the
 // collector runs with that as its working directory.

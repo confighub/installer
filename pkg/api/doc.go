@@ -9,9 +9,9 @@
 //   - FunctionChain  (resolved function invocations, executed by render)
 //
 // Each schema is shaped as a Kubernetes-style document with apiVersion, kind,
-// metadata, spec. They are stored as Kubernetes/YAML Units in ConfigHub today;
-// later they may move to a ConfigHub/YAML toolchain when first-class entities
-// exist for them.
+// metadata, spec, as it is written to a work-dir. In ConfigHub a package's
+// documents travel together as one AppConfig/YAML record document instead (see
+// internal/upload).
 package api
 
 const APIVersion = "installer.confighub.com/v1alpha1"
@@ -29,7 +29,6 @@ const (
 	KindFunctionChain = "FunctionChain"
 	KindFacts         = "Facts"
 	KindLock          = "Lock"
-	KindUpload        = "Upload"
 )
 
 // Metadata is the common metadata block on every installer doc. The shape

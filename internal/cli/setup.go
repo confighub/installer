@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighub/installer/internal/cubctx"
 	"github.com/confighub/installer/internal/deps"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/render"
@@ -86,16 +85,11 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 
 	interactive := !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd()))
 
-	prior, source, err := wizard.LoadPriorState(ctx, absWork, func(msg string) {
+	prior, source, err := wizard.LoadPriorState(ctx, absWork, loaded.Package.Metadata.Name, fetchInstallerRecord, func(msg string) {
 		fmt.Fprintln(os.Stderr, "warning:", msg)
 	})
 	if err != nil {
 		return fmt.Errorf("load prior state: %w", err)
-	}
-	if prior != nil && prior.Upload != nil {
-		if err := cubctx.CheckMatches(ctx, prior.Upload.Spec.OrganizationID, prior.Upload.Spec.Server); err != nil {
-			return err
-		}
 	}
 	if source != wizard.SourceNone {
 		fmt.Printf("Loaded prior install state from %s.\n", source)
@@ -160,7 +154,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		fmt.Printf("  pull-back: verified\n")
 	}
 
-	fmt.Printf("Next: %s upload --work-dir %s --space <slug>\n", InvocationName(), absWork)
+	fmt.Printf("Next: %s upload --work-dir %s\n", InvocationName(), absWork)
 	return nil
 }
 
@@ -473,10 +467,11 @@ Pull:
                      <ref> --work-dir <dir>).
 
 Auto-detection:
-  - <work-dir>/out/record/upload.yaml exists → load prior install state
-    from the recorded ConfigHub Space.
-  - else <work-dir>/out/record/{selection,inputs,facts}.yaml exist → load
-    prior locally.
+  - <work-dir>/out/record/{selection,inputs,facts}.yaml exist → load prior
+    install state from them.
+  - else the package's base Space in ConfigHub (labeled Component=<package>,
+    Variant=base) has an "installer" record Unit from an earlier upload →
+    load prior install state from it. This recovers a fresh clone.
   - else → fresh install.
 
 When prior state is loaded, setup runs the schema-diff machinery

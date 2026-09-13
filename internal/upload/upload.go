@@ -1,43 +1,22 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-// Package upload turns a rendered work-dir into the inputs the cub CLI
-// needs to materialize ConfigHub Spaces, Units, and Links — without itself
-// shelling out. The CLI layer in internal/cli/upload.go orchestrates the
-// cub calls.
-//
-// Phase 6 wires this up:
-//   - One Space per package (parent + each locked dep).
-//   - One untargeted installer-record Unit per Space, holding
-//     installer.yaml plus every file in that package's out/<pkg>/record/
-//     (plus the lock for the parent).
-//   - Cross-Space NeedsProvides links from the parent's record Unit to each
-//     dep's record Unit, derived from the lock.
+// Package upload turns a rendered work-dir into ConfigHub upload requests,
+// one per package: the parent and each locked dependency, each into its own
+// Space. The server decides what to create, merge, or empty; this package
+// only says what the bundle is and where it goes, and reports the result.
 package upload
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"text/template"
-	"time"
 
-	"gopkg.in/yaml.v3"
-
-	"github.com/confighub/installer/internal/cubctx"
 	"github.com/confighub/installer/pkg/api"
 )
-
-// localConfigAnnotation is the kubernetes.io annotation that marks a KRM
-// resource as installer-/tool-only so kustomize, kpt, and the ConfigHub
-// bridges skip applying it to the cluster. See
-// https://kubernetes.io/docs/reference/labels-annotations-taints/#config-kubernetes-io-local-config
-const localConfigAnnotation = "config.kubernetes.io/local-config"
 
 // Package is one unit-of-upload — the parent or a locked dep.
 type Package struct {
@@ -46,14 +25,15 @@ type Package struct {
 	// Version is installerMetadata.version from installer.yaml.
 	Version string
 	// LocalHandle is the name the parent used for this dep in its
-	// installer.yaml + lock. Empty for the parent itself. Used to derive
-	// link slugs and to match dep packages back to lock entries.
+	// installer.yaml + lock. Empty for the parent itself. Names the dep's
+	// out/<handle>/ directory.
 	LocalHandle string
 	// PackageDir is the directory containing installer.yaml.
 	PackageDir string
 	// ManifestsDir is where rendered per-resource YAML lives.
 	ManifestsDir string
-	// RecordDir is where this package's spec docs live (selection.yaml etc.).
+	// RecordDir is where this package's record of the render lives
+	// (selection.yaml, inputs.yaml, and so on).
 	RecordDir string
 	// SecretsDir is where rendered Secret YAML lives (never uploaded).
 	SecretsDir string
@@ -67,7 +47,7 @@ type Package struct {
 type Vars struct {
 	PackageName    string
 	PackageVersion string
-	// Variant is reserved for the variant work (Phase 9+). Empty in v1.
+	// Variant is the value of the Space's Variant label.
 	Variant string
 }
 
@@ -94,10 +74,12 @@ func RenderSpaceSlug(pattern string, vars Vars) (string, error) {
 }
 
 // DiscoverInput is what Discover needs to do its job. Caller supplies the
-// parent's already-loaded Package and Lock, plus the workDir and pattern.
+// parent's already-loaded Package and Lock, plus the workDir, pattern, and
+// variant the pattern is rendered with.
 type DiscoverInput struct {
 	WorkDir       string
 	SpacePattern  string
+	Variant       string
 	ParentPackage *api.Package
 	Lock          *api.Lock // nil when the parent declares no Dependencies
 }
@@ -123,6 +105,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 	parentSlug, err := RenderSpaceSlug(pattern, Vars{
 		PackageName:    in.ParentPackage.Metadata.Name,
 		PackageVersion: in.ParentPackage.InstallerMetadata.Version,
+		Variant:        in.Variant,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parent space slug: %w", err)
@@ -161,6 +144,7 @@ func Discover(in DiscoverInput) ([]Package, error) {
 		slug, err := RenderSpaceSlug(pattern, Vars{
 			PackageName:    depPkg.Metadata.Name,
 			PackageVersion: depPkg.InstallerMetadata.Version,
+			Variant:        in.Variant,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("dep %s space slug: %w", d.Name, err)
@@ -187,360 +171,4 @@ func vendorSlug(name, version string) string {
 		return name
 	}
 	return name + "@" + version
-}
-
-// InstallerRecordSlug is the conventional name for the per-Space Unit that
-// carries installer.yaml + spec docs (no Target). One per Space.
-const InstallerRecordSlug = "installer-record"
-
-// UploadDocFilename is the basename of the persisted Upload doc inside
-// the parent's spec dir.
-const UploadDocFilename = "upload.yaml"
-
-// BuildInstallerRecord builds the multi-doc YAML body for the per-Space
-// installer-record Unit. The result is `installer.yaml` followed by every
-// YAML doc in pkg.RecordDir (in lexicographic order), separated by `---`.
-// Files outside spec/ are not included. upload.yaml (if present) is
-// included so a freshly cloned work-dir can re-derive everything,
-// including where it was uploaded, from ConfigHub alone.
-func BuildInstallerRecord(pkg Package) ([]byte, error) {
-	paths := []string{filepath.Join(pkg.PackageDir, "installer.yaml")}
-	entries, err := os.ReadDir(pkg.RecordDir)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", pkg.RecordDir, err)
-	}
-	var specFiles []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		n := e.Name()
-		if !strings.HasSuffix(n, ".yaml") && !strings.HasSuffix(n, ".yml") {
-			continue
-		}
-		specFiles = append(specFiles, filepath.Join(pkg.RecordDir, n))
-	}
-	sort.Strings(specFiles)
-	paths = append(paths, specFiles...)
-
-	var buf bytes.Buffer
-	for i, p := range paths {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", p, err)
-		}
-		// Strip the BOM-style "---\n" header some YAML emitters leave at
-		// the front so the boundary marker we insert is the only one.
-		trimmed := bytes.TrimSpace(data)
-		trimmed = bytes.TrimPrefix(trimmed, []byte("---\n"))
-		trimmed = bytes.TrimSpace(trimmed)
-		// Mark every doc as local-config so a stray `cub unit apply`
-		// (or kubectl/kustomize) treats the installer-record Unit as
-		// tooling state, not a workload to push to the cluster.
-		marked, err := addLocalConfigAnnotation(trimmed)
-		if err != nil {
-			return nil, fmt.Errorf("annotate %s: %w", p, err)
-		}
-		if i > 0 {
-			buf.WriteString("---\n")
-		}
-		buf.Write(marked)
-		buf.WriteByte('\n')
-	}
-	return buf.Bytes(), nil
-}
-
-// addLocalConfigAnnotation sets metadata.annotations[localConfigAnnotation]
-// = "true" on a single YAML doc and returns the re-emitted bytes. The
-// re-emit goes through yaml.v3 so it preserves comments and node order
-// where possible. Returns the input unchanged if the doc isn't a mapping
-// (an empty stream or a non-KRM-shaped doc has nowhere to attach the
-// annotation, and there's nothing to apply in that case either).
-func addLocalConfigAnnotation(doc []byte) ([]byte, error) {
-	var node yaml.Node
-	if err := yaml.Unmarshal(doc, &node); err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
-	}
-	root := documentRoot(&node)
-	if root == nil || root.Kind != yaml.MappingNode {
-		return doc, nil
-	}
-	metadata := mappingValue(root, "metadata")
-	if metadata == nil {
-		metadata = &yaml.Node{Kind: yaml.MappingNode}
-		setMappingValue(root, "metadata", metadata)
-	}
-	annotations := mappingValue(metadata, "annotations")
-	if annotations == nil {
-		annotations = &yaml.Node{Kind: yaml.MappingNode}
-		setMappingValue(metadata, "annotations", annotations)
-	}
-	setMappingScalar(annotations, localConfigAnnotation, "true")
-	out, err := yaml.Marshal(&node)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-	return bytes.TrimRight(out, "\n"), nil
-}
-
-// documentRoot returns the inner mapping node of a top-level yaml.Node
-// returned by yaml.Unmarshal (which always wraps the document in a
-// DocumentNode). Returns nil if the stream is empty.
-func documentRoot(n *yaml.Node) *yaml.Node {
-	if n == nil {
-		return nil
-	}
-	if n.Kind == yaml.DocumentNode {
-		if len(n.Content) == 0 {
-			return nil
-		}
-		return n.Content[0]
-	}
-	return n
-}
-
-// mappingValue returns the value node for key inside a MappingNode, or nil
-// if absent. Mapping nodes store key/value pairs as alternating entries in
-// Content.
-func mappingValue(m *yaml.Node, key string) *yaml.Node {
-	if m == nil || m.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return m.Content[i+1]
-		}
-	}
-	return nil
-}
-
-// setMappingValue replaces or appends a key/value pair on m.
-func setMappingValue(m *yaml.Node, key string, value *yaml.Node) {
-	if m == nil || m.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			m.Content[i+1] = value
-			return
-		}
-	}
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
-		value,
-	)
-}
-
-// setMappingScalar sets a scalar string value under key on m.
-func setMappingScalar(m *yaml.Node, key, value string) {
-	setMappingValue(m, key, &yaml.Node{Kind: yaml.ScalarNode, Value: value})
-}
-
-// RefreshInstallerRecord rebuilds the installer-record Unit body from
-// pkg's local files and uploads it to ConfigHub. Used after
-// `installer update` / `installer upgrade-apply` mutates the local
-// spec so the cub-side record stays in sync — without this refresh,
-// a subsequent upgrade reads stale inputs (notably ImageOverrides)
-// from ConfigHub via wizard.LoadPriorState.
-//
-// Idempotent: cub unit update --merge-external-source upserts
-// against the prior MergeExternal recorded under the same source
-// name (installer-record).
-func RefreshInstallerRecord(ctx context.Context, pkg Package) error {
-	body, err := BuildInstallerRecord(pkg)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp("", "installer-record-*.yaml")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		return err
-	}
-	tmp.Close()
-	cmd := exec.CommandContext(ctx, "cub", "unit", "update",
-		"--space", pkg.SpaceSlug,
-		"--merge-external-source", InstallerRecordSlug,
-		InstallerRecordSlug, tmp.Name(),
-	)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("refresh installer-record in %s: %w\n%s", pkg.SpaceSlug, err, stderr.String())
-	}
-	return nil
-}
-
-// SplitInstallerRecord is the inverse of BuildInstallerRecord: it
-// splits a multi-doc body into one decoded value per kind. Unknown
-// kinds are silently skipped — the body is forward-compatible with
-// future spec docs. installer.yaml is parsed as Package; everything
-// else is keyed by Kind.
-type RecordContents struct {
-	Package   *api.Package
-	Selection *api.Selection
-	Inputs    *api.Inputs
-	Facts     *api.Facts
-	Lock      *api.Lock
-	Upload    *api.Upload
-}
-
-// SplitInstallerRecord parses a multi-doc YAML stream produced by
-// BuildInstallerRecord. It is tolerant of new kinds being added later.
-func SplitInstallerRecord(body []byte) (*RecordContents, error) {
-	docs, err := api.SplitMultiDoc(body)
-	if err != nil {
-		return nil, fmt.Errorf("split installer-record: %w", err)
-	}
-	out := &RecordContents{}
-	for i, d := range docs {
-		_, kind, err := api.SniffKind(d)
-		if err != nil {
-			return nil, fmt.Errorf("doc %d: %w", i, err)
-		}
-		switch kind {
-		case api.KindPackage:
-			p, err := api.ParsePackage(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Package): %w", i, err)
-			}
-			out.Package = p
-		case api.KindSelection:
-			s, err := api.ParseSelection(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Selection): %w", i, err)
-			}
-			out.Selection = s
-		case api.KindInputs:
-			ins, err := api.ParseInputs(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Inputs): %w", i, err)
-			}
-			out.Inputs = ins
-		case api.KindFacts:
-			f, err := api.ParseFacts(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Facts): %w", i, err)
-			}
-			out.Facts = f
-		case api.KindLock:
-			l, err := api.ParseLock(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Lock): %w", i, err)
-			}
-			out.Lock = l
-		case api.KindUpload:
-			u, err := api.ParseUpload(d)
-			if err != nil {
-				return nil, fmt.Errorf("doc %d (Upload): %w", i, err)
-			}
-			out.Upload = u
-		default:
-			// Unknown kind — ignore for forward compatibility.
-		}
-	}
-	return out, nil
-}
-
-// WriteUploadDoc writes <work-dir>/out/record/upload.yaml from the
-// discovered package set. Reads the active cub context to record the
-// organization ID and server URL alongside the resolved Space slugs.
-//
-// Called by the CLI at the end of a successful `installer upload`. Safe
-// to call when packages contains only the parent (no deps).
-func WriteUploadDoc(ctx context.Context, workDir, spacePattern string, packages []Package) error {
-	if len(packages) == 0 || !packages[0].IsParent {
-		return fmt.Errorf("WriteUploadDoc: packages must start with the parent")
-	}
-	parent := packages[0]
-	cc, err := cubctx.Get(ctx)
-	if err != nil {
-		// Don't fail the upload — record what we have. The org/server
-		// check on subsequent commands will still flag a true mismatch
-		// (against an empty value the check is a no-op, which is the
-		// right behavior for an installer that ran before cubctx
-		// existed).
-		cc = &cubctx.Context{}
-	}
-	doc := &api.Upload{
-		APIVersion: api.APIVersion,
-		Kind:       api.KindUpload,
-		Metadata:   api.Metadata{Name: parent.Name + "-upload"},
-		Spec: api.UploadSpec{
-			Package:        parent.Name,
-			PackageVersion: parent.Version,
-			SpacePattern:   spacePattern,
-			Spaces:         make([]api.UploadedSpace, 0, len(packages)),
-			UploadedAt:     time.Now().UTC().Format(time.RFC3339),
-			Server:         cc.ServerURL,
-			OrganizationID: cc.OrganizationID,
-		},
-	}
-	for _, p := range packages {
-		doc.Spec.Spaces = append(doc.Spec.Spaces, api.UploadedSpace{
-			Package:  p.Name,
-			Version:  p.Version,
-			Slug:     p.SpaceSlug,
-			IsParent: p.IsParent,
-		})
-	}
-	data, err := api.MarshalYAML(doc)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(workDir, "out", api.RecordDir, UploadDocFilename)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
-
-// CrossSpaceLink describes one parent-to-dep edge to materialize as a
-// ConfigHub Link spanning two Spaces. Both ends point at each Space's
-// installer-record Unit.
-type CrossSpaceLink struct {
-	// Slug is the link's deterministic slug, derived from the dep name.
-	Slug string
-	// Package is the parent package name, used as the value of the
-	// "Package" label on the created link.
-	Package string
-	// FromSpace is the parent's Space; FromUnit is the parent's
-	// installer-record Unit slug.
-	FromSpace string
-	FromUnit  string
-	// ToSpace is the dep's Space; ToUnit is the dep's installer-record
-	// Unit slug.
-	ToSpace string
-	ToUnit  string
-	// Reason is the human-readable why (the dep's Name from the lock).
-	Reason string
-}
-
-// PlanCrossSpaceLinks builds the list of links to create from a discovered
-// package set. Packages must include the parent first; deps are matched by
-// LocalHandle.
-func PlanCrossSpaceLinks(packages []Package) []CrossSpaceLink {
-	if len(packages) < 2 {
-		return nil
-	}
-	if !packages[0].IsParent {
-		return nil
-	}
-	parent := packages[0]
-	var out []CrossSpaceLink
-	for _, dep := range packages[1:] {
-		out = append(out, CrossSpaceLink{
-			Slug:      "dep-" + dep.LocalHandle,
-			Package:   parent.Name,
-			FromSpace: parent.SpaceSlug,
-			FromUnit:  InstallerRecordSlug,
-			ToSpace:   dep.SpaceSlug,
-			ToUnit:    InstallerRecordSlug,
-			Reason:    "depends on " + dep.LocalHandle,
-		})
-	}
-	return out
 }

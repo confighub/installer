@@ -58,7 +58,7 @@ worker_id=$(sed -n 's/^CONFIGHUB_WORKER_ID=//p' "$secret_file")
 
 # Discover the active context's server URL and the server-version-matched image.
 configHubURL=$(cub context get -o jq=.coordinate.serverURL --quiet)
-image=$(cub worker get-image)
+image=$(cub worker get-image ${space_args[@]+"${space_args[@]}"})
 [ -n "$configHubURL" ] || err "could not read CONFIGHUB_URL from cub context"
 [ -n "$image" ] || err "cub worker get-image returned empty"
 

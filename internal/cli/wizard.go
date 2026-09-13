@@ -48,9 +48,8 @@ out/secrets/ (never uploaded as a Unit).
 When stdin is a TTY the wizard runs interactively, prompting for base,
 component preset (minimal / default / all / selected), namespace, and
 any required inputs without defaults. If a prior install is recorded
-in the work-dir (out/record/upload.yaml or out/record/*.yaml), wizard
-re-enters from those choices using the same schema-diff logic setup
-uses.
+in the work-dir (out/record/*.yaml), wizard re-enters from those choices
+using the same schema-diff logic setup uses.
 
 Pass --non-interactive to script the wizard with --base, --components,
 --select, --input, and --namespace.`,

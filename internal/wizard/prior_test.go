@@ -5,17 +5,17 @@ package wizard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/pkg/api"
 )
 
 func TestLoadPriorStateNone(t *testing.T) {
 	work := t.TempDir()
-	state, src, err := LoadPriorState(context.Background(), work, nil)
+	state, src, err := LoadPriorState(context.Background(), work, "hello", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,7 +56,7 @@ spec:
     - {name: default, path: bases/default, default: true}
 `)
 
-	state, src, err := LoadPriorState(context.Background(), work, nil)
+	state, src, err := LoadPriorState(context.Background(), work, "hello", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,44 +75,71 @@ spec:
 	if state.PriorPackage == nil || state.PriorPackage.Metadata.Name != "hello" {
 		t.Errorf("PriorPackage mismatch: %+v", state.PriorPackage)
 	}
-	if state.Upload != nil {
-		t.Errorf("Upload should be nil (no upload.yaml written): %+v", state.Upload)
-	}
 }
 
-func TestLoadPriorStateUploadYAMLOnly(t *testing.T) {
-	// upload.yaml present but cub fetch will fail (no cub on PATH in
-	// `go test` env, or the recorded Space doesn't exist). The loader
-	// must fall back to local spec without erroring.
+// A work-dir with its own record uses it, without asking ConfigHub.
+func TestLoadPriorStatePrefersLocal(t *testing.T) {
 	work := t.TempDir()
-	recordDir := filepath.Join(work, "out", api.RecordDir)
-	mustWrite(t, filepath.Join(recordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+	mustWrite(t, filepath.Join(work, "out", api.RecordDir, "selection.yaml"), `apiVersion: installer.confighub.com/v1alpha1
 kind: Selection
 metadata: {name: x}
 spec: {package: hello, base: default}
 `)
-	mustWrite(t, filepath.Join(recordDir, upload.UploadDocFilename), `apiVersion: installer.confighub.com/v1alpha1
-kind: Upload
-metadata: {name: hello-upload}
-spec:
-  package: hello
-  packageVersion: 0.1.0
-  spaces:
-    - {package: hello, version: 0.1.0, slug: nonexistent-test-space, isParent: true}
+	fetch := func(context.Context, string) ([]byte, error) {
+		t.Fatal("ConfigHub was asked although the work-dir has a record")
+		return nil, nil
+	}
+	_, src, err := LoadPriorState(context.Background(), work, "hello", fetch, nil)
+	if err != nil || src != SourceLocal {
+		t.Fatalf("source = %q, err = %v", src, err)
+	}
+}
+
+// A work-dir without a record, such as a fresh clone, is recovered from the
+// installer record in ConfigHub.
+func TestLoadPriorStateFromConfigHub(t *testing.T) {
+	record := []byte(`configHub:
+  configSchema: InstallerRecord
+  configName: installer
+package:
+  name: hello
+  installerMetadata: {version: 0.1.0}
+  spec:
+    bases:
+      - {name: default, path: bases/default, default: true}
+selection: {base: default, components: [foo]}
+inputs: {namespace: demo, values: {greeting: hi}}
 `)
-	warned := 0
-	state, src, err := LoadPriorState(context.Background(), work, func(string) { warned++ })
+	var asked string
+	fetch := func(_ context.Context, name string) ([]byte, error) {
+		asked = name
+		return record, nil
+	}
+	state, src, err := LoadPriorState(context.Background(), t.TempDir(), "hello", fetch, nil)
 	if err != nil {
-		t.Fatalf("loader should fall back, got %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if src != SourceLocal {
-		t.Errorf("expected fallback to local source, got %q", src)
+	if src != SourceConfigHub || asked != "hello" {
+		t.Fatalf("source = %q, asked for %q", src, asked)
 	}
-	if state == nil || state.Selection == nil {
-		t.Fatal("expected local state to be loaded")
+	if state.Inputs.Spec.Namespace != "demo" || state.Inputs.Spec.Package != "hello" {
+		t.Errorf("Inputs = %+v", state.Inputs.Spec)
 	}
-	if warned == 0 {
-		t.Errorf("expected at least one warn callback for the fetch failure")
+	if state.PriorPackage == nil || state.PriorPackage.InstallerMetadata.Version != "0.1.0" {
+		t.Errorf("PriorPackage = %+v", state.PriorPackage)
+	}
+}
+
+// A ConfigHub failure warns and starts fresh rather than failing setup.
+func TestLoadPriorStateFetchFailureWarns(t *testing.T) {
+	warned := 0
+	fetch := func(context.Context, string) ([]byte, error) { return nil, errors.New("no session") }
+	state, src, err := LoadPriorState(context.Background(), t.TempDir(), "hello", fetch, func(string) { warned++ })
+	if err != nil || state != nil || src != SourceNone {
+		t.Fatalf("state = %+v, source = %q, err = %v", state, src, err)
+	}
+	if warned != 1 {
+		t.Errorf("warned %d times, want 1", warned)
 	}
 }
 
