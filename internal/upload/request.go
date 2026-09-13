@@ -76,7 +76,10 @@ func BuildRequest(pkg Package, packages []Package, opts RequestOptions) (goclien
 	labels["Variant"] = opts.Variant
 
 	component := goclientnew.UploadComponentRequest{
-		Name:             name,
+		Name: name,
+		// Ownership follows the package, not the Component label, so a
+		// relabeled Component keeps the Units its earlier uploads wrote.
+		SourceName:       pkg.Name,
 		Namespace:        namespace,
 		Space:            pkg.SpaceSlug,
 		SpaceLabels:      labels,

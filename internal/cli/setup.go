@@ -25,6 +25,9 @@ import (
 type flowOptions struct {
 	workDir string
 	pullRef string // empty means: do not pull; require an existing <work-dir>/package/.
+	// recoverSpace is the Space to recover a prior install from when the
+	// work-dir has none of its own.
+	recoverSpace string
 
 	// Wizard answer flags.
 	baseName       string
@@ -85,7 +88,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 
 	interactive := !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd()))
 
-	prior, source, err := wizard.LoadPriorState(ctx, absWork, loaded.Package.Metadata.Name, fetchInstallerRecord, func(msg string) {
+	prior, source, err := wizard.LoadPriorState(ctx, absWork, loaded.Package.Metadata.Name, installerRecordFetcher(opts.recoverSpace), func(msg string) {
 		fmt.Fprintln(os.Stderr, "warning:", msg)
 	})
 	if err != nil {
@@ -469,9 +472,11 @@ Pull:
 Auto-detection:
   - <work-dir>/out/record/{selection,inputs,facts}.yaml exist → load prior
     install state from them.
-  - else the package's base Space in ConfigHub (labeled Component=<package>,
-    Variant=base) has an "installer" record Unit from an earlier upload →
-    load prior install state from it. This recovers a fresh clone.
+  - else an earlier upload of the package left an "installer" record Unit in
+    ConfigHub → load prior install state from it. This recovers a fresh
+    clone. --space names the Space to recover from; without it the
+    package's only install in the organization is used, and several
+    installs are refused.
   - else → fresh install.
 
 When prior state is loaded, setup runs the schema-diff machinery
@@ -494,6 +499,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	}
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
+	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization)")
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")

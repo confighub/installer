@@ -33,6 +33,7 @@ Plan writes nothing.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
+			flags.noteChanged(cmd)
 			prepared, err := prepareUpload(ctx, flags)
 			if err != nil {
 				return err

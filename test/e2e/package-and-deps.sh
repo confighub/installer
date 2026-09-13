@@ -5,7 +5,7 @@
 #
 #   build → start registry → push example-base → setup (multi-package,
 #   includes pull + wizard + deps update + render) → assertions →
-#   (optional) upload to ConfigHub + reconcile + upgrade flow.
+#   (optional) upload to ConfigHub + re-upload + upgrade flow.
 #
 # Requirements:
 #   - go and a working build environment
@@ -14,7 +14,7 @@
 #
 # Optional:
 #   - cub on PATH and authenticated (INSTALLER_E2E_CONFIGHUB=1 runs
-#     upload + reconcile against the live server). Upload uses Spaces
+#     upload and plan against the live server). Upload uses Spaces
 #     prefixed installer-e2e-* and tears them down on exit.
 #
 # Exit codes:
@@ -148,22 +148,26 @@ diff -q -r "$WORK_TMP/out/manifests" "$WORK_TMP/out/manifests.bak" >/dev/null \
 rm -rf "$WORK_TMP/out/manifests.bak"
 echo "setup (no --pull): re-render byte-identical against prior state"
 
-# 8. Optional upload + reconcile + upgrade against ConfigHub.
+# 8. Optional upload + upgrade against ConfigHub. Every upload and plan names
+#    the Spaces with the same --space-pattern: nothing local records it.
 if [[ "$DO_UPLOAD" = "1" ]]; then
-  log "upload to ConfigHub (--space-pattern installer-e2e-{{.PackageName}})"
+  PATTERN='installer-e2e-{{.PackageName}}'
+  PARENT_SPACE=installer-e2e-example-stack
+  log "upload to ConfigHub (--space-pattern $PATTERN)"
   if ! command -v cub >/dev/null 2>&1; then
     fail "INSTALLER_E2E_CONFIGHUB=1 but cub not on PATH"
   fi
   if ! cub space list >/dev/null 2>&1; then
     fail "cub auth not configured (run \`cub auth login\`)"
   fi
-  # Prefix all Spaces so cleanup picks them up.
-  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern 'installer-e2e-{{.PackageName}}'
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/upload-first.out"
 
   for s in "${UPLOAD_SPACES[@]}"; do
     if ! cub space list 2>/dev/null | awk '{print $1}' | grep -qx "$s"; then
       fail "expected Space $s not found after upload"
     fi
+    [[ "$(cub unit get --space "$s" installer --quiet -o jq=.Unit.ToolchainType | tr -d '"')" == "AppConfig/YAML" ]] \
+      || fail "Space $s should hold its package's installer record Unit"
   done
   echo "Spaces created:"
   for s in "${UPLOAD_SPACES[@]}"; do
@@ -171,21 +175,29 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
     cub unit list --space "$s" 2>&1 | awk 'NR>1 {print "    "$1}'
   done
 
+  # The parent's Space names its dependency's component, and only the parent's
+  # record carries the lock.
+  [[ "$(cub space get "$PARENT_SPACE" --quiet -o jq=.Space.Annotations.DependsOn | tr -d '"')" == "example-base" ]] \
+    || fail "parent Space should record DependsOn=example-base"
+  cub unit data --space "$PARENT_SPACE" installer | grep -q "^lock:" \
+    || fail "the parent's installer record should carry the lock"
+  if cub unit data --space installer-e2e-example-base installer | grep -q "^lock:"; then
+    fail "a dependency's installer record should not carry a lock"
+  fi
+  echo "DependsOn recorded on $PARENT_SPACE; lock only in the parent's record"
+
   log "plan against unchanged work-dir"
-  "$BIN" plan --work-dir "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-clean.out"
+  "$BIN" plan --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/plan-clean.out"
   if ! grep -q "^No changes\\.$" "$WORK_TMP/plan-clean.out"; then
     fail "plan against just-uploaded work-dir should report No changes"
   fi
 
   log "plan after editing one rendered manifest"
-  # Pick the first .yaml file under example-base manifests and inject a
-  # marker label so the plan must surface a change.
-  PARENT_DIR="$WORK_TMP/out/example-base/manifests"
-  if [[ ! -d "$PARENT_DIR" ]]; then
-    PARENT_DIR="$WORK_TMP/out/manifests"
-  fi
-  EDIT_FILE=$(ls "$PARENT_DIR"/*.yaml 2>/dev/null | head -1)
-  [[ -n "$EDIT_FILE" ]] || fail "no rendered manifest to edit under $PARENT_DIR"
+  # Inject a marker label into the first rendered dependency manifest so the
+  # plan must surface a change.
+  EDIT_DIR="$WORK_TMP/out/base/manifests"
+  EDIT_FILE=$(ls "$EDIT_DIR"/*.yaml 2>/dev/null | head -1)
+  [[ -n "$EDIT_FILE" ]] || fail "no rendered manifest to edit under $EDIT_DIR"
   python3 -c "
 import sys, yaml
 p = sys.argv[1]
@@ -200,39 +212,26 @@ with open(p, 'w') as f:
     yaml.safe_dump_all(docs, f, default_flow_style=False, sort_keys=False)
 " "$EDIT_FILE"
 
-  "$BIN" plan --work-dir "$WORK_TMP" 2>&1 | tee "$WORK_TMP/plan-edited.out"
-  if ! grep -q "^Plan: 0 to add, 1 to change, 0 to delete\\.$" "$WORK_TMP/plan-edited.out"; then
-    fail "plan after edit should report 1 change"
+  "$BIN" plan --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/plan-edited.out"
+  if ! grep -q "^Plan: 0 to create, 1 to update, 0 to empty, 0 to revive, 0 to adopt\\.$" "$WORK_TMP/plan-edited.out"; then
+    fail "plan after edit should report 1 update"
   fi
-  EDIT_SLUG=$(basename "$EDIT_FILE" .yaml)
-  if ! grep -q "~ $EDIT_SLUG" "$WORK_TMP/plan-edited.out"; then
-    fail "plan after edit should name the edited slug ($EDIT_SLUG)"
-  fi
-  echo "plan: clean → No changes; edit → 1 change naming $EDIT_SLUG"
+  echo "plan: clean → No changes; edit → 1 update"
 
-  log "upload reconcile applies the diff"
-  "$BIN" upload --work-dir "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/upload-reconcile.out"
-  if ! grep -q "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upload-reconcile.out"; then
-    fail "upload reconcile should apply 1 change"
-  fi
-  if ! grep -q "ChangeSet: " "$WORK_TMP/upload-reconcile.out"; then
-    fail "upload reconcile should open and name a ChangeSet"
-  fi
-  if ! grep -q "Updates revertable via:" "$WORK_TMP/upload-reconcile.out"; then
-    fail "upload reconcile should print revert command"
+  log "upload applies the edit"
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" --yes 2>&1 | tee "$WORK_TMP/upload-edited.out"
+  if ! grep -q "^Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-edited.out"; then
+    fail "upload should apply 1 update"
   fi
 
-  log "upload reconcile converges (re-run is no-op)"
-  "$BIN" upload --work-dir "$WORK_TMP" 2>&1 | tee "$WORK_TMP/upload-converge.out"
+  log "upload converges (re-run is no-op)"
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/upload-converge.out"
   if ! grep -q "^No changes\\.$" "$WORK_TMP/upload-converge.out"; then
     fail "second upload on the same work-dir should be No changes"
   fi
-  if grep -q "ChangeSet: " "$WORK_TMP/upload-converge.out"; then
-    fail "second upload should not open a ChangeSet (no changes)"
-  fi
-  echo "upload reconcile: applied 1 change in ChangeSet; second run is no-op"
+  echo "upload: applied 1 update; second run is no-op"
 
-  log "setup --pull with edited package source surfaces a real diff via upload reconcile"
+  log "setup --pull with edited package source surfaces an update"
   EDITED_SRC="$WORK_TMP/example-stack-edited"
   cp -r "$REPO_ROOT/examples/example-stack" "$EDITED_SRC"
   python3 -c "
@@ -256,18 +255,15 @@ with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, so
   grep -q "installer-e2e-upgrade-marker" "$WORK_TMP/out/manifests"/*.yaml \
     || fail "setup --pull on edited source should produce the new label in rendered output"
 
-  "$BIN" plan --work-dir "$WORK_TMP" 2>&1 | tee "$WORK_TMP/upgrade-plan.out"
-  if ! grep -q "to change" "$WORK_TMP/upgrade-plan.out"; then
-    fail "plan after setup --pull (edited source) should plan a change"
-  fi
-  if ! grep -q "installer-e2e-upgrade-marker" "$WORK_TMP/upgrade-plan.out"; then
-    fail "upgrade plan should mention the new label"
+  "$BIN" plan --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/upgrade-plan.out"
+  if ! grep -q "to update" "$WORK_TMP/upgrade-plan.out"; then
+    fail "plan after setup --pull (edited source) should plan an update"
   fi
 
-  log "upload reconcile applies the upgrade diff"
-  "$BIN" upload --work-dir "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/upgrade-upload.out"
-  if ! grep -qE "^Applied: [0-9]+ created, [1-9][0-9]* updated, [0-9]+ deleted\\.$" "$WORK_TMP/upgrade-upload.out"; then
-    fail "upload reconcile after setup --pull should report at least 1 update"
+  log "upload applies the upgrade"
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" --yes 2>&1 | tee "$WORK_TMP/upgrade-upload.out"
+  if ! grep -qE "^Applied: [0-9]+ created, [1-9][0-9]* updated, [0-9]+ emptied, [0-9]+ revived, [0-9]+ adopted\\.$" "$WORK_TMP/upgrade-upload.out"; then
+    fail "upload after setup --pull should report at least 1 update"
   fi
 
   log "setup --pull --set-image bumps the image and the override carries forward"
@@ -277,12 +273,13 @@ with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, so
   grep -q "plain-text-v2" "$WORK_TMP/out/manifests"/*.yaml \
     || fail "setup --set-image should rewrite the image tag in rendered output"
 
-  "$BIN" upload --work-dir "$WORK_TMP" --yes 2>&1 | tee "$WORK_TMP/upload-setimg.out"
-  if ! grep -qE "^Applied: 0 created, 1 updated, 0 deleted\\.$" "$WORK_TMP/upload-setimg.out"; then
-    fail "upload reconcile after --set-image should report exactly 1 update (the image bump)"
+  "$BIN" plan --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/plan-setimg.out"
+  if ! grep -q "plain-text-v2" "$WORK_TMP/plan-setimg.out"; then
+    fail "the plan's Images footer should reflect the new tag"
   fi
-  if ! grep -q "plain-text-v2" "$WORK_TMP/upload-setimg.out"; then
-    fail "Images footer should reflect the new tag"
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" --yes 2>&1 | tee "$WORK_TMP/upload-setimg.out"
+  if ! grep -q "^Applied: 0 created, [1-9][0-9]* updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-setimg.out"; then
+    fail "upload after --set-image should report only updates (the image bump and the installer record)"
   fi
 
   log "setup re-run WITHOUT --set-image carries the override forward (no-op)"
@@ -290,11 +287,11 @@ with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, so
     | tee "$WORK_TMP/setup-carry.out"
   grep -q "plain-text-v2" "$WORK_TMP/out/manifests"/*.yaml \
     || fail "subsequent setup (no --set-image) should preserve the override in rendered output"
-  "$BIN" upload --work-dir "$WORK_TMP" 2>&1 | tee "$WORK_TMP/upload-carry.out"
+  "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/upload-carry.out"
   if ! grep -q "^No changes\\.$" "$WORK_TMP/upload-carry.out"; then
-    fail "subsequent upload should be No changes (override carried via installer-record)"
+    fail "subsequent upload should be No changes (the override carried forward in out/record)"
   fi
-  echo "setup --set-image: bump applied; override round-trips through installer-record"
+  echo "setup --set-image: bump applied; override carried forward"
 
   log "setup --pull --set-image against a package without images: block fails fast"
   NO_IMG_SRC="$WORK_TMP/example-stack-no-images"

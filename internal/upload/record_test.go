@@ -152,7 +152,7 @@ func TestBuildRequest(t *testing.T) {
 		t.Errorf("files = %v", paths)
 	}
 	c := req.Components[0]
-	if c.Name != "storefront" || c.Space != "web-space" || c.Namespace != "web" {
+	if c.Name != "storefront" || c.SourceName != "web" || c.Space != "web-space" || c.Namespace != "web" {
 		t.Errorf("component = %+v", c)
 	}
 	if c.SpaceLabels["Component"] != "storefront" || c.SpaceLabels["Variant"] != "base" || c.SpaceLabels["Environment"] != "Prod" {

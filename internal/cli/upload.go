@@ -30,6 +30,10 @@ var confighub = cubapi.MemoizedClient{UserAgent: "installer"}
 // uploadFlags are the flags `installer upload` and `installer plan` share:
 // everything that decides what is uploaded and where it goes.
 type uploadFlags struct {
+	// componentSet and variantSet say whether --component and --variant were
+	// given: a Space an earlier upload labeled keeps its labels unless they are.
+	componentSet     bool
+	variantSet       bool
 	workDir          string
 	space            string
 	spacePattern     string
@@ -63,6 +67,11 @@ func (f *uploadFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&f.spaceAnnotations, "space-annotation", nil, "annotation key=value to set on the Space(s) (repeatable); \"TargetID\" is reserved (use --target)")
 	cmd.Flags().StringSliceVar(&f.unitLabels, "unit-label", nil, "label key=value to set on every Unit the upload writes (repeatable)")
 	cmd.Flags().StringSliceVar(&f.unitAnnotations, "unit-annotation", nil, "annotation key=value to set on every Unit the upload writes (repeatable)")
+}
+
+func (f *uploadFlags) noteChanged(cmd *cobra.Command) {
+	f.componentSet = cmd.Flags().Changed("component")
+	f.variantSet = cmd.Flags().Changed("variant")
 }
 
 // preparedUpload is one request per package, in upload order: the parent, then
@@ -113,6 +122,7 @@ When the upload would empty any Unit it lists them and asks first, unless
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
+			flags.noteChanged(cmd)
 			prepared, err := prepareUpload(ctx, flags)
 			if err != nil {
 				return err
@@ -247,6 +257,15 @@ func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) 
 		return nil, err
 	}
 
+	if f.changeSet != "" {
+		id, err := resolveChangeSet(ctx, client, packages[0].SpaceSlug, f.changeSet)
+		if err != nil {
+			return nil, err
+		}
+		opts.ChangeSetID = &id
+	}
+
+	prepared := &preparedUpload{client: client, packages: packages}
 	for _, pkg := range packages {
 		space, err := existingSpace(ctx, client, pkg.SpaceSlug)
 		if err != nil {
@@ -259,18 +278,18 @@ func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) 
 		if id != nil {
 			opts.TargetIDs[pkg.SpaceSlug] = *id
 		}
-	}
-	if f.changeSet != "" {
-		id, err := resolveChangeSet(ctx, client, packages[0].SpaceSlug, f.changeSet)
-		if err != nil {
-			return nil, err
+		// Every request sets Component and Variant, so a Space an earlier
+		// upload labeled keeps those labels unless the flags say otherwise.
+		pkgOpts := opts
+		if space != nil {
+			if !f.componentSet && pkg.IsParent && space.Labels["Component"] != "" {
+				pkgOpts.Component = space.Labels["Component"]
+			}
+			if !f.variantSet && space.Labels["Variant"] != "" {
+				pkgOpts.Variant = space.Labels["Variant"]
+			}
 		}
-		opts.ChangeSetID = &id
-	}
-
-	prepared := &preparedUpload{client: client, packages: packages}
-	for _, pkg := range packages {
-		req, err := upload.BuildRequest(pkg, packages, opts)
+		req, err := upload.BuildRequest(pkg, packages, pkgOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -462,38 +481,54 @@ func validateSpaceAnnotationFlags(vals []string) error {
 	return nil
 }
 
-// fetchInstallerRecord returns the installer record an earlier upload of
-// packageName wrote: the "installer" Unit in the package's base Space, the one
-// labeled with its Component and Variant=base. It returns nil when there is no
-// such Space or Unit, and an error when more than one Space matches, since
-// picking one would re-enter someone else's install.
-func fetchInstallerRecord(ctx context.Context, packageName string) ([]byte, error) {
-	c, err := confighub.Client(ctx)
-	if err != nil {
-		return nil, err
+// installerRecordFetcher returns a wizard.RecordFetcher that reads the
+// installer record an earlier upload wrote: the Unit keyed
+// AppConfig/YAML/installer that the package's uploads own. With space set it
+// reads the record in that Space. Without, it looks across the organization
+// and uses the one it finds, refusing when several installs of the package
+// exist, since picking one could re-enter someone else's.
+func installerRecordFetcher(space string) func(ctx context.Context, packageName string) ([]byte, error) {
+	return func(ctx context.Context, packageName string) ([]byte, error) {
+		c, err := confighub.Client(ctx)
+		if err != nil {
+			return nil, err
+		}
+		where := cubapi.Where{}.
+			Eq("Labels.UploadSource", packageName).
+			Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
+		if space != "" {
+			found, err := existingSpace(ctx, c, space)
+			if err != nil {
+				return nil, err
+			}
+			if found == nil {
+				return nil, fmt.Errorf("Space %s does not exist", space)
+			}
+			where = where.Eq("SpaceID", found.SpaceID.String())
+		}
+		units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID"})
+		if err != nil {
+			return nil, err
+		}
+		switch len(units) {
+		case 0:
+			return nil, nil
+		case 1:
+		default:
+			var spaces []string
+			for _, u := range units {
+				if u.Space != nil {
+					spaces = append(spaces, u.Space.Slug)
+				}
+			}
+			return nil, fmt.Errorf("%s is installed in %d Spaces (%s); pass --space to choose one",
+				packageName, len(units), strings.Join(spaces, ", "))
+		}
+		unit := units[0].Unit
+		data, err := cubapi.UnitData(ctx, c, unit.SpaceID, unit.UnitID)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(data), nil
 	}
-	spaces, err := cubapi.ListSpaces(ctx, c, cubapi.Where{}.Eq("Labels.Component", packageName).Eq("Labels.Variant", "base"), cubapi.ListOpts{})
-	if err != nil {
-		return nil, err
-	}
-	switch len(spaces) {
-	case 0:
-		return nil, nil
-	case 1:
-	default:
-		return nil, fmt.Errorf("%d Spaces are labeled Component=%s, Variant=base; nothing to choose between them", len(spaces), packageName)
-	}
-	space := spaces[0].Space
-	unit, err := cubapi.ResolveUnit(ctx, c, cubapi.NewRef(space.Slug, upload.RecordConfigName), cubapi.ResolveOpts{})
-	if cubapi.IsNotFoundError(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	data, err := cubapi.UnitData(ctx, c, space.SpaceID, unit.Unit.UnitID)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(data), nil
 }
