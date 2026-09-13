@@ -5,8 +5,9 @@ go 1.25.0
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/confighub/sdk/core v0.4.10
-	github.com/confighub/sdk/function-impl v0.4.10
+	github.com/confighub/sdk/core v0.4.19
+	github.com/confighub/sdk/function-impl v0.4.19
+	github.com/google/uuid v1.6.0
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -23,6 +24,7 @@ require (
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -32,15 +34,15 @@ require (
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
-	github.com/confighub/sdk/configkit/appyamlkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/envkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/inikit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/jsonkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/k8skit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/propkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/textkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/tomlkit v0.4.10 // indirect
-	github.com/confighub/sdk/configkit/yqkit v0.4.10 // indirect
+	github.com/confighub/sdk/configkit/appyamlkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/envkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/inikit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/jsonkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/k8skit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/propkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/textkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/tomlkit v0.4.19 // indirect
+	github.com/confighub/sdk/configkit/yqkit v0.4.19 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
@@ -61,7 +63,6 @@ require (
 	github.com/google/gnostic v0.7.0 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -86,6 +87,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oapi-codegen/runtime v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.23.0 // indirect
@@ -95,6 +97,7 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
+	github.com/sethvargo/go-envconfig v1.3.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/swaggest/jsonschema-go v0.3.78 // indirect
