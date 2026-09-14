@@ -2,13 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package cubctx reads the active cub CLI context (organization ID,
-// server URL) and offers a sanity-check helper that compares the live
-// context against values recorded in a work-dir's upload.yaml.
-//
-// Used by every installer command that touches ConfigHub (wizard, plan,
-// update, upgrade) so an operator who switches accounts between
-// sessions cannot silently materialize Units in the wrong organization
-// or against the wrong server.
+// server URL), for commands that record where an install lives.
 package cubctx
 
 import (
@@ -40,37 +34,6 @@ func Get(ctx context.Context) (*Context, error) {
 		OrganizationID: org,
 		ServerURL:      server,
 	}, nil
-}
-
-// CheckMatches compares the active cub context against values recorded
-// in a work-dir's upload.yaml. Empty `wantOrg` or `wantServer` skips
-// that check (e.g., a freshly created upload.yaml from an older
-// installer that did not record one of the fields).
-//
-// The returned error names both the recorded and current values plus
-// the remediation command, so the operator can fix it without
-// re-reading documentation.
-func CheckMatches(ctx context.Context, wantOrg, wantServer string) error {
-	if wantOrg == "" && wantServer == "" {
-		return nil
-	}
-	got, err := Get(ctx)
-	if err != nil {
-		return err
-	}
-	if wantOrg != "" && got.OrganizationID != wantOrg {
-		return fmt.Errorf(
-			"cub context organization mismatch: upload.yaml recorded %s, current cub context is %s — run `cub context set <name>` or `cub auth login` against the recorded organization",
-			wantOrg, got.OrganizationID,
-		)
-	}
-	if wantServer != "" && got.ServerURL != wantServer {
-		return fmt.Errorf(
-			"cub context server mismatch: upload.yaml recorded %s, current cub context is %s — run `cub context set <name>` or `cub auth login --server %s`",
-			wantServer, got.ServerURL, wantServer,
-		)
-	}
-	return nil
 }
 
 func runJQ(ctx context.Context, expr string) (string, error) {

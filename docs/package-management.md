@@ -121,7 +121,7 @@ installer sign    <ref>                                # cosign keyed or keyless
 installer verify  <ref>
 installer login   <registry>
 installer logout  <registry>
-installer deps update <dir>                            # write installer.lock to out/spec/
+installer deps update <dir>                            # write installer.lock to out/record/
 installer deps build  <dir>                            # pre-fetch locked deps for offline render
 installer deps tree   <dir>                            # render the resolved DAG
 ```
@@ -206,13 +206,13 @@ precondition.
 
 ### Lock file
 
-The lock is not stored in git. Per the broader design, all of `out/spec/*` —
+The lock is not stored in git. Per the broader design, all of `out/record/*` —
 `selection.yaml`, `inputs.yaml`, `function-chain.yaml`, `manifest-index.yaml`,
 the new `lock.yaml`, and the package's `installer.yaml` itself — are combined
 into a single multi-document YAML stream and uploaded as one
 `Kubernetes/YAML` Unit (the "installer record" Unit). That Unit has **no
 Target** because it is not deployed: it exists to reproduce a render. The
-renderer reads from `out/spec/` locally; the upload step also writes the
+renderer reads from `out/record/` locally; the upload step also writes the
 record Unit alongside the rendered Units.
 
 Lock contents:
@@ -243,7 +243,7 @@ spec:
 
 Workflow:
 
-- `installer deps update <dir>` resolves the DAG, writes `out/spec/lock.yaml`.
+- `installer deps update <dir>` resolves the DAG, writes `out/record/lock.yaml`.
 - `installer render` requires a lock; if absent or stale (root manifest's
   declared deps disagree with the lock), it errors and instructs the user to
   re-run `installer deps update`.
@@ -271,8 +271,9 @@ Inspired by Cargo's resolver and apt's coherent-set behavior:
 ConfigHub Links + automatic apply-ordering (Roadmap item in the README) handle
 ordering inside a Space. Across Spaces, the dep tree implies an order: a Space
 is applied only after the Spaces of packages it depends on have converged. The
-installer's upload step records this in the installer-record Unit and in
-inter-Space Links; cross-Space ValidationErrors enforce it at apply time.
+installer's upload step records this as the parent Space's `DependsOn`
+annotation, naming its dependencies' components, and the lock is carried in
+the parent's installer record.
 
 ### Cluster-side `externalRequires` still apply
 
@@ -345,10 +346,11 @@ digest.
    reusing oras-go.
 3. `installer.yaml` schema additions (`dependencies`, `conflicts`,
    `replaces`, satisfies-link on existing fields) — parse-only.
-4. Resolver + `installer deps update` writing `out/spec/lock.yaml`.
+4. Resolver + `installer deps update` writing `out/record/lock.yaml`.
 5. Render wired to read the lock, fetch deps (cached via `deps build`), and
    render each into its own output subtree (`out/<dep-name>/manifests/`,
-   `out/<dep-name>/spec/`).
-6. Upload step extended to create one Space per dep and one installer-record
-   Unit per package, with cross-Space Links for the dep relationships.
+   `out/<dep-name>/record/`).
+6. Upload step extended to create one Space per dep and one installer record
+   Unit per package, with the parent's Space recording its dependencies in a
+   `DependsOn` annotation.
 7. Signing.

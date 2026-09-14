@@ -71,27 +71,26 @@ Working:
   keyless) with a `~/.config/installer/policy.yaml` trust policy that
   gates `pull` and `deps update`.
 - **Dependencies.** SemVer resolver + lock (`deps update`, `deps tree`),
-  multi-package render into per-dep subtrees, upload into per-dep Spaces
-  with cross-Space Links.
+  multi-package render into per-dep subtrees, upload into per-dep Spaces,
+  with the parent's Space recording its dependencies in a `DependsOn`
+  annotation.
 - **Install lifecycle.** `installer setup` (the one-shot consumer entry
   point: optional pull, wizard with high-level component presets
   `minimal` / `default` / `all` / `selected`, render). Interactive +
-  non-interactive. Prior-state re-entry from ConfigHub (via the
-  persisted `installer-record` Unit) or local `out/spec/`,
-  organization + server sanity-check against the active cub context.
+  non-interactive. Prior-state re-entry from the work-dir's `out/record/`,
+  or, for a fresh clone, from the `installer` record Unit an earlier
+  upload left in ConfigHub.
   `setup --output-oci` can also write the rendered non-secret objects
   to a local OCI image layout or push them to a registry without a
   ConfigHub account.
-- **Day-2 lifecycle.** `installer setup` and `installer upload`
-  auto-detect first-install vs upgrade vs reconcile via the presence
-  of prior spec files / `out/spec/upload.yaml`. Re-running `setup`
-  with `--pull <new-ref>` runs the schema-diff machinery (carry
-  forward existing values, adopt new defaults, prompt for new
-  required-without-default). Re-running `upload` against an already-
-  uploaded work-dir opens a ChangeSet and reconciles updates / adds /
-  deletes. `installer plan` previews the reconcile diff read-only.
-  `--merge-external-source` is the change predicate, so post-install
-  ConfigHub edits survive re-render.
+- **Day-2 lifecycle.** Re-running `setup` with `--pull <new-ref>` runs
+  the schema-diff machinery (carry forward existing values, adopt new
+  defaults, prompt for new required-without-default). `installer upload`
+  sends each package's render to ConfigHub's upload API, which makes the
+  package's Space match it: new resources become Units, changed ones are
+  merged, dropped ones are emptied, and an unchanged work-dir writes
+  nothing. Every upload is create-or-update, so the first and every later
+  one run the same way. `installer plan` is the same requests as a dry run.
 - **Image overrides.** `installer setup --set-image` applies
   `kustomize edit set image` before render. Overrides round-trip via
   `Inputs.Spec.ImageOverrides` and carry forward across re-renders /
@@ -130,20 +129,19 @@ bin/installer setup \
   --select monitoring --select ingress \
   --namespace demo
 
-# 3. Upload to ConfigHub. Records the destination Space(s) in
-#    out/spec/upload.yaml so subsequent commands re-enter the same
-#    Space without re-typing.
+# 3. Upload to ConfigHub. Nothing local records the Space, so name it on
+#    every upload and plan.
 bin/installer upload --space my-greeter
 
 # 4. Day-2: edit a rendered file, see what upload would do, apply.
 $EDITOR out/manifests/deployment-demo-hello-app.yaml
-bin/installer plan                       # read-only diff vs ConfigHub
-bin/installer upload --yes               # reconcile (ChangeSet-wrapped)
+bin/installer plan --space my-greeter    # dry run: what upload would change
+bin/installer upload --space my-greeter
 
 # 5. Upgrade: re-pull (atomic), re-render via setup, then upload.
 bin/installer setup --pull ./examples/hello-app \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
-bin/installer upload --yes
+bin/installer upload --space my-greeter
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -151,7 +149,7 @@ selecting `ingress-tls` automatically pulls in `ingress`. Conflicts and
 `validForBases` are enforced at solve time.
 
 `setup` auto-detects whether the work-dir is a fresh install (no
-`out/spec/`) or a re-entry (prior state present, possibly with a
+`out/record/`) or a re-entry (prior state present, possibly with a
 newer package). On re-entry it runs the schema-diff machinery:
 silently carry prior values, adopt new defaults, drop removed inputs,
 prompt or fail-fast on newly-required inputs.
@@ -180,7 +178,7 @@ After `setup` (or `wizard` + `render`), the working dir looks like:
     │   ├── transformers.yaml     # resolved ConfigHubTransformers (chain)
     │   ├── validators.yaml       # resolved ConfigHubValidators (if any)
     │   └── installer-transformer.sh   # exec wrapper kustomize invokes
-    └── spec/                 # the "installer record" (also uploadable as Units)
+    └── record/               # the record of the render: selection, inputs, facts, chain, lock
         ├── selection.yaml    # base + closure-resolved components
         ├── inputs.yaml       # validated wizard answers
         ├── function-chain.yaml   # the resolved chain that ran (audit copy)
@@ -191,7 +189,7 @@ After `setup` (or `wizard` + `render`), the working dir looks like:
 kustomize build --enable-exec --enable-alpha-plugins .` to reproduce
 the render byte-for-byte outside the installer.
 
-The two spec docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
+The two record docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
 to re-render: edit them, re-run `installer render`, get a deterministic new set
 of manifests.
 
@@ -276,15 +274,13 @@ installed, the same commands work via `cub installer ...`.
 │   ├── render/                 # kustomize compose + chain execution + split,
 │   │                           # --set-image (kustomize edit) + image extraction
 │   ├── deps/                   # SemVer resolver + lock writer
-│   ├── upload/                 # discover Spaces, build/split installer-record,
-│   │                           # write upload.yaml, intra-Space link inference
-│   ├── diff/                   # plan compute (cub list + dry-run mutations) +
-│   │                           # apply (with ChangeSet) + image footer
-│   ├── changeset/              # cub changeset open + restore-command formatter
-│   ├── cubctx/                 # active cub context (org / server) + sanity check
+│   ├── upload/                 # discover packages + Spaces, build the installer
+│   │                           # record and upload requests, report results,
+│   │                           # image footer
+│   ├── cubctx/                 # active cub context (org / server)
 │   └── sign/                   # cosign sign + verify
 ├── pkg/api/                    # Package, Selection, Inputs, FunctionChain,
-│                               # Lock, Upload schemas
+│                               # Lock schemas
 ├── packages/                   # "published" packages bundled in this repo
 │   ├── kubernetes-resources/   # 11 canonical resource templates with
 │   │                           # per-type defaults (used by `installer new`)
@@ -358,11 +354,13 @@ That script starts `registry:2`, pushes `example-base`, runs
 `wizard → deps update → render`, asserts the output layout + digest
 stability, and (when `INSTALLER_E2E_CONFIGHUB=1`) drives the full
 day-2 flow against the live server:
-`upload → plan (clean) → edit → plan (diff) → update → update (no-op) →
-upgrade (edit) → upgrade-apply → upgrade (carry-forward) →
-upgrade --set-image → upgrade (override carries forward) →
-upgrade --set-image preflight rejection`. Spaces created with the
-`installer-e2e-*` prefix are cleaned on exit.
+`upload → plan (clean) → edit → plan → upload → upload (no-op) →
+setup --pull (edited source) → upload → setup --set-image → upload →
+setup (override carries forward) → upload (no-op) → --set-image preflight
+rejection`. Spaces created with the `installer-e2e-*` prefix are cleaned on
+exit. `test/e2e/upload-reconcile.sh` drives the worker package, which has an
+AppConfig carrier and a collector, through upload, re-upload, emptying, a
+DestroyGate refusal, and recovering a fresh work-dir from ConfigHub.
 
 ## Roadmap
 

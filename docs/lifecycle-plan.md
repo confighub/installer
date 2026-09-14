@@ -24,8 +24,8 @@ working interactive flow built on `survey/v2`.
     missing.
 - New: `internal/wizard/prior.go`
   - `LoadPriorState(ctx, workDir) (*Result, source string, err error)`.
-  - Source order: ConfigHub (via `out/spec/upload.yaml`) → local
-    `out/spec/*.yaml` → none.
+  - Source order: ConfigHub (via `out/record/upload.yaml`) → local
+    `out/record/*.yaml` → none.
   - ConfigHub fetch shells out to `cub unit get --space <slug>
     installer-record -o body`, then splits the multi-doc YAML body
     using the same code path that builds it (`upload.BuildInstallerRecord`'s
@@ -45,7 +45,7 @@ working interactive flow built on `survey/v2`.
   `upgrade`.
 - Modify: `internal/upload/upload.go`
   - At end of successful `Discover` + per-package upload + cross-Space
-    link creation, write `<work-dir>/out/spec/upload.yaml` (including
+    link creation, write `<work-dir>/out/record/upload.yaml` (including
     `OrganizationID` from the live cub context).
   - `BuildInstallerRecord` includes `upload.yaml` in the multi-doc
     body.
@@ -165,7 +165,7 @@ interactively, re-collect facts, re-render, plan) and "promote"
   <work-dir> [--yes]`.
   - Refuses if `.upgrade/` is missing or if the staged spec has
     unsatisfied required inputs (records this in
-    `.upgrade/out/spec/upgrade-status.yaml` so it survives a re-shell).
+    `.upgrade/out/record/upgrade-status.yaml` so it survives a re-shell).
   - Atomic rename: archives the current `package/` and `out/` to
     `.upgrade-prev/`, then renames `.upgrade/package` → `package` and
     `.upgrade/out` → `out`.
@@ -181,7 +181,7 @@ interactively, re-collect facts, re-render, plan) and "promote"
   - Adding a new required input to the package and running `installer
     upgrade` non-interactively fails fast with the new input named.
   - Removing an input from the package and running `installer
-    upgrade` succeeds; the value is dropped from `out/spec/inputs.yaml`.
+    upgrade` succeeds; the value is dropped from `out/record/inputs.yaml`.
 
 ## Phase E — Image affordances
 
@@ -235,7 +235,7 @@ remediation. We do not silently switch contexts.
 
 ### Backwards compatibility
 
-Existing work-dirs without `out/spec/upload.yaml` fall through to local
+Existing work-dirs without `out/record/upload.yaml` fall through to local
 spec on wizard re-entry — no migration needed. Existing Units without
 the `Package=<pkg>` label are not visible to plan/update; once the
 prior task ships and the Space is re-uploaded with the label, they
@@ -320,7 +320,7 @@ behavior matches today's `wizard`. The render path is the same code
 `internal/cli/upload.go`:
 
 - Auto-detects "first upload" vs "reconcile" by presence of
-  `<work-dir>/out/spec/upload.yaml`.
+  `<work-dir>/out/record/upload.yaml`.
 - First upload: existing `uploadOnePackage` / cross-Space links /
   `PlanCrossSpaceLinks` paths, writes `upload.yaml` at the end.
 - Reconcile: invokes the existing `diff.Compute` + `diff.Apply` path
@@ -396,7 +396,7 @@ behavior matches today's `wizard`. The render path is the same code
   the expected schema-diff log lines, re-renders, and the next
   `upload` reconciles.
 - `setup --set-image foo=foo:v2` (no `--pull`) re-renders with the
-  image override; the override persists in `out/spec/inputs.yaml`
+  image override; the override persists in `out/record/inputs.yaml`
   across subsequent setup invocations.
 - No `.upgrade/` or `.upgrade-prev/` directories are created at any
   point.

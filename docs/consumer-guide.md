@@ -27,13 +27,13 @@ installer is anchored to lives in [principles.md](./principles.md).
 Day-2 commands operate on the same work-dir:
 
 - `installer setup` — re-runs wizard + render against the existing
-  package, picking up edits to `out/spec/inputs.yaml` or a different
+  package, picking up edits to `out/record/inputs.yaml` or a different
   pulled package version.
-- `installer plan` — show what's different between the work-dir and
+- `installer plan` — show what `installer upload` would change in
   ConfigHub.
-- `installer upload` — reconcile the work-dir with ConfigHub. First
-  upload creates Units; subsequent uploads open a ChangeSet and
-  update/add/delete.
+- `installer upload` — make ConfigHub match the work-dir. Every upload is
+  create-or-update: new resources become Units, changed ones are merged,
+  and ones the render dropped are emptied.
 
 The installer never pushes to your cluster. Cluster apply is
 ConfigHub's job (typically via `cub unit apply`, ArgoCD, or Flux —
@@ -89,7 +89,7 @@ installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
 ```
 
 `setup` pulls the package into `./package/` and writes the wizard's
-output to `./out/spec/`, then renders manifests to `./out/manifests/`.
+output to `./out/record/`, then renders manifests to `./out/manifests/`.
 If you prefer to script the wizard:
 
 ```bash
@@ -148,20 +148,21 @@ recorded object-set digest before reporting success.
 
 You can edit these files directly — the next `plan` / `upload` will
 diff your edits against ConfigHub. But editing rendered output is
-usually the wrong layer; prefer editing `out/spec/inputs.yaml` and
+usually the wrong layer; prefer editing `out/record/inputs.yaml` and
 re-running `installer setup`. See "Where to make changes" below.
 
 Finally, upload to ConfigHub:
 
 ```bash
-# 2. Upload: one Unit per file, plus an installer-record Unit
-#    holding installer.yaml + spec/ docs.
+# 2. Upload: one Unit per resource, plus an "installer" record Unit
+#    holding installer.yaml and the record of the render.
 installer upload --space statusboard-prod
 ```
 
-`installer upload` records the destination Space (and your active
-cub organization + server) into `./out/spec/upload.yaml` so all
-subsequent commands re-enter without you re-typing.
+Nothing local records the Space, so pass the same `--space` (or
+`--space-pattern`) to every later `upload` and `plan`. The Space is
+labeled `Component` (the package name, or `--component`), `Variant`
+(`base`, or `--variant`), and `Namespace` (the install namespace).
 
 For multi-package installs (a parent that declares dependencies),
 use `--space-pattern` instead of `--space`:
@@ -173,8 +174,8 @@ installer upload --space-pattern '{{.PackageName}}-prod'
 
 If the package ships application-config files (a `configMapGenerator`
 tagged with `installer.confighub.com/toolchain`, e.g.
-`AppConfig/Properties` or `AppConfig/Env`), `installer upload` also
-creates a separate AppConfig Unit holding the raw config body, a
+`AppConfig/Properties` or `AppConfig/Env`), the upload also creates a
+separate AppConfig Unit holding the raw config body, a
 `render-configmap` Invocation, and a placeholder Kubernetes/YAML Unit
 wired by an Upsert link that renders the ConfigMap into the
 placeholder. No bridge worker is required — rendering runs as a
@@ -190,7 +191,7 @@ decreasing reversibility. Use the lowest layer that fits.
 When you re-render with a different selection / inputs, the install
 re-derives the manifests. This is the right layer for choices the
 package author exposed as inputs: replica counts, names, tunable
-behaviors. Edit `out/spec/inputs.yaml` (or re-run `setup`
+behaviors. Edit `out/record/inputs.yaml` (or re-run `setup`
 interactively to walk every prompt with prior values pre-filled):
 
 ```bash
@@ -200,7 +201,7 @@ interactively to walk every prompt with prior values pre-filled):
 installer setup
 
 # Or hand-edit and re-render via setup --non-interactive:
-$EDITOR out/spec/inputs.yaml
+$EDITOR out/record/inputs.yaml
 installer setup --non-interactive
 ```
 
@@ -219,7 +220,7 @@ installer setup --set-image myorg/statusboard=myorg/statusboard:1.2.4
 installer upload
 ```
 
-The override is recorded in `out/spec/inputs.yaml` under
+The override is recorded in `out/record/inputs.yaml` under
 `spec.imageOverrides`, so subsequent setups carry it forward unless
 you pass a different `--set-image` for the same name. If the package
 doesn't declare an `images:` block, this fails fast with a message
@@ -230,13 +231,14 @@ naming the missing block.
 Once Units are in ConfigHub, you can mutate them directly:
 
 ```bash
-cub function do --space statusboard-prod set-container-image \
-    deployment-statusboard-statusboard app myorg/statusboard:1.2.5
+cub function do --space statusboard-prod --unit statusboard \
+    set-container-image app myorg/statusboard:1.2.5
 ```
 
-These edits survive re-render: `installer upload` uses
-`--merge-external-source`, which only writes paths that changed in
-the new render. Your post-install ConfigHub edits are preserved.
+These edits survive re-render: `installer upload` 3-way merges the new
+render into each Unit, so it only writes the paths the render changed.
+To hold an edit even against a render that changes the same path, make it
+with `--protect`.
 
 This is the right layer for changes that don't warrant a re-render
 — ad-hoc fixes, exploratory tuning, anything where you want the
@@ -245,7 +247,7 @@ change tracked in cub's revision history rather than your work-dir.
 Post-install mutations can also be made with [kpt](https://kpt.dev)
 instead of ConfigHub — a git-based configuration-as-data tool whose
 package merge preserves your edits across re-renders the same way
-`--merge-external-source` does. This is an alternative to `installer
+upload's 3-way merge does. This is an alternative to `installer
 upload` + `cub unit apply` for kpt users, or for trying post-install
 changes without ConfigHub first. See the [kpt guide](./kpt-guide.md).
 
@@ -257,100 +259,77 @@ changes without ConfigHub first. See the [kpt guide](./kpt-guide.md).
   use `--set-image` or post-install mutations instead. (See
   [Principle 1](./principles.md#1-package-files-are-read-only-to-consumers).)
 
-## Day-2: plan, upload (reconcile), revert
+## Day-2: plan, upload, revert
 
 ### Plan
 
-`installer plan` is read-only. It shows three things per Space:
+`installer plan` runs the requests `installer upload` would send, as dry
+runs, and writes nothing. It takes upload's flags, since they decide the
+Spaces:
 
 ```
-Plan: 1 to add, 2 to change, 0 to delete.
-
-Space statusboard-prod:
-  + ingress-tls-cert
-  ~ deployment-statusboard-statusboard
-      Resource: apps/v1/Deployment statusboard/statusboard
-        ~ [Update] spec.replicas
-          1 →     3
-  ~ service-statusboard-statusboard
-      ...
+installer plan --space statusboard-prod
+Space statusboard-prod (Update)
+  Create    ingress-tls-cert-certificate
+  Update    statusboard
+  Unchanged 5 Unit(s)
+  Create    link ingress-tls-cert-certificate -> namespace (reference:v1/Namespace)
 
 Images in statusboard-prod (post-render):
       Deployment/statusboard [app] myorg/statusboard:1.2.4
+
+Plan: 1 to create, 1 to update, 0 to empty, 0 to revive, 0 to adopt.
 ```
 
-Plan computes the diff by listing existing Units (filtered by the
-`Package=<package>` label) and dry-running a merge of each
-rendered file against ConfigHub. Empty diff (after filtering
-ConfigHub bookkeeping) means no change.
+ConfigHub computes the plan with the same code an upload runs, so an
+upload with the same flags does what plan shows. The `Images:` footer is
+built from the rendered manifests locally, so it reflects what would land
+whether or not anything else changes.
 
-The `Images:` footer is built from the rendered manifests locally,
-so it reflects what would land if you ran `upload` — independent
-of whether plan shows other changes.
+### Upload
 
-### Upload reconcile
-
-`installer upload` on an already-uploaded work-dir reconciles the
-local render with ConfigHub. It re-runs the same plan and executes
-it inside a ChangeSet:
+Every upload is create-or-update, so there is no separate day-2 command:
 
 ```bash
-installer upload --yes
-# == Space statusboard-prod (statusboard@0.1.0) ==
-# ChangeSet: statusboard-prod/installer-update-20260514-…
-# Successfully updated unit deployment-statusboard-statusboard …
+installer upload --space statusboard-prod
+# == statusboard@0.1.0 → Space statusboard-prod ==
+# Space statusboard-prod (Update)
+#   Update    statusboard
+#   Unchanged 5 Unit(s)
 #
-# Applied: 0 created, 1 updated, 0 emptied.
-# Updates revertable via:
-#   cub unit update --patch --space statusboard-prod \
-#       --restore Before:ChangeSet:installer-update-20260514-… \
-#       --where "Slug IN ('deployment-statusboard-statusboard')"
+# Revert this upload of statusboard-prod with:
+#   cub unit update --patch --space statusboard-prod --restore Before:ChangeSet:upload-20260514-… --where "Labels.UploadSource = 'statusboard'"
+#
+# Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted.
 ```
 
-The ChangeSet name is printed and the precise revert command is
-written to stdout — copy/paste it later if you need to roll back.
+- **Changed resources are merged.** A change you made in ConfigHub after
+  the upload survives unless the render changes the same path; protect the
+  path (`cub function do --protect …`) to hold it even then.
+- **Dropped resources are emptied, never deleted.** A Unit whose resource
+  left the render keeps its ID, links, and history, and the next release
+  withdraws the object. Upload lists the Units it would empty and asks
+  first; pass `--yes` when there is no terminal to ask on. A Unit guarded
+  by a DestroyGate is never emptied — the upload is refused.
+- **Ownership.** Every Unit an upload writes is labeled
+  `UploadSource=<package>`, and an upload only writes or empties what its
+  package owns, so Units you add to the Space by hand are left alone.
 
-`--yes` is required when stdin isn't a TTY and the plan empties Units
-(those that dropped out of the rendered output); otherwise upload
-prompts before emptying. Upload never runs `cub unit delete`: a Unit
-that left the render is **emptied** rather than deleted. Emptying is a
-`--merge-external-source` 3-way merge that drops only the installer-
-contributed resources, so the Unit record, target binding, and any
-post-install edits survive, and applying the emptied Unit later removes
-its deployed resources. Units guarded by a DestroyGate are refused —
-clear the gate first if you really intend to tear them down.
-
-A re-run on a converged work-dir is a no-op (no ChangeSet opened):
+A re-run on an unchanged work-dir writes nothing:
 
 ```bash
-installer upload
+installer upload --space statusboard-prod
+# ...
 # No changes.
 ```
 
 ### Revert
 
-To revert a reconcile upload, run the printed `cub unit update --patch
---restore` command. **Note the ChangeSet revert scope:**
-
-- Only **updates** are reverted by `--restore Before:ChangeSet:…`.
-- **Creates** from that upload are not reverted automatically — to
-  undo a create, delete the Unit (`cub unit delete --space S
-  <slug>`).
-- **Empties** from that upload (Units that dropped out of the render)
-  are not part of the ChangeSet, but the prior Data is preserved in the
-  Unit's revision history — restore it with `cub unit update --restore`
-  against the pre-empty revision, or re-render and re-run `installer
-  upload` to repopulate it.
-
-If you need to roll back a multi-Unit change, this is where having
-the Package label pays off:
-
-```bash
-# Delete every Unit this package owns in this Space.
-cub unit delete --space statusboard-prod \
-    --where "Labels.Package='statusboard'"
-# Then re-render + re-upload from the work-dir's prior state.
-```
+Run the command upload printed. ConfigHub records each Space's writes in
+a ChangeSet — creates, updates, and empties alike — so restoring the
+package's Units to before that ChangeSet empties the Units the upload
+created and reverts the rest. Re-render and upload again to move forward
+from there.
 
 ## Upgrade: re-pull, re-render, plan, upload
 
@@ -368,7 +347,7 @@ installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
 # Loaded prior install state from confighub.
 # Adopted new default for input "metrics_port": 9090
 # Adopted new default-flagged component(s): metrics-collector
-# Wizard wrote out/spec/{selection,inputs}.yaml
+# Wizard wrote out/record/{selection,inputs}.yaml
 # Rendered 4 manifest(s) to out/manifests/
 # Next: installer upload --work-dir … --space <slug>
 
@@ -444,9 +423,9 @@ are available for step-by-step debugging or advanced workflows:
 - `installer wizard <ref> --work-dir <dir> [--render=false]` — pull
   + Q&A. Renders by default; pass `--render=false` to skip.
 - `installer render --work-dir <dir>` — render only; reads existing
-  `<work-dir>/package/` + `<work-dir>/out/spec/`.
+  `<work-dir>/package/` + `<work-dir>/out/record/`.
 - `installer deps update --work-dir <dir>` — multi-package only:
-  resolve the dependency DAG and write `out/spec/lock.yaml`. (`setup`
+  resolve the dependency DAG and write `out/record/lock.yaml`. (`setup`
   runs this automatically before render.)
 
 The semantics are equivalent: `setup --pull <ref>` is
@@ -518,41 +497,33 @@ ls out/<dep-name>/manifests/     # each dep's manifests
 installer upload --space-pattern '{{.PackageName}}-prod'
 ```
 
-Plan / upload work the same way — each operates across all locked
-packages, opens one ChangeSet per Space when there are updates, and
-prints a per-Space revert command.
+Plan and upload send one request per package, parent first, with the
+same `--space-pattern` each time. Each dependency's Space is labeled with
+its own package name as `Component`, and the parent's Space lists them in
+its `DependsOn` annotation. Upload prints a revert command per Space it
+writes to; `--changeset <ref>` puts every package's writes in one existing
+ChangeSet instead, so one restore reverts the whole install.
 
 `installer deps tree` shows the resolved DAG if you want to audit
 who depends on what.
 
 ## Re-entering an install from a fresh machine
 
-The `out/spec/upload.yaml` file written by `installer upload` is
-what bootstraps everything. From a fresh clone of the work-dir, all
-day-2 commands work because they read `upload.yaml` to find the
-Spaces.
-
-If the work-dir is genuinely lost (disk failure, lost laptop), the
-package's `installer-record` Unit on ConfigHub holds the full spec
-+ a copy of `upload.yaml`. Recover with:
+Everything `setup` needs to re-enter an install is in the work-dir's
+`out/record/`. If the work-dir is lost, each package's `installer` record
+Unit in ConfigHub holds the same thing, and `setup` recovers from it when
+the work-dir has no `out/record/` of its own:
 
 ```bash
 mkdir recovered && cd recovered
-
-# Pull the package source.
-installer pull oci://ghcr.io/myorg/statusboard:0.1.0
-
-# Pull the installer-record Unit body and split it into spec docs.
-mkdir -p out/spec
-cub unit data --space statusboard-prod installer-record \
-    > out/spec/installer-record.yaml
-# (Splitting it back into selection.yaml / inputs.yaml / facts.yaml
-# / upload.yaml is a manual step today; an `installer recover`
-# command will automate this.)
-
-installer render
-installer plan       # should be No changes if cub is in sync
+installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 --space statusboard-prod
+# Loaded prior install state from confighub.
+installer plan --space statusboard-prod     # No changes if nothing drifted
 ```
+
+`--space` names the install to recover. Without it, setup looks for the
+package's install across the organization, uses it if there is exactly
+one, and refuses with a list of the Spaces if there are several.
 
 ## Common errors
 
@@ -562,12 +533,6 @@ The package author hasn't declared the image as overridable. Two
 options: (1) ask the author to add an `images:` block declaring the
 image you want to override; (2) make the change post-install via
 `cub function do set-container-image` instead.
-
-### `cub context organization mismatch: upload.yaml recorded org_… current cub context is org_…`
-
-Your active cub context is signed into a different organization than
-the one the install was uploaded to. Switch with `cub context set
-<name>` or `cub auth login` against the recorded organization.
 
 ### `no package found in <work-dir>/package/ — pass --pull <ref> to fetch one`
 
@@ -588,20 +553,24 @@ A non-interactive `installer setup --pull <new-ref>` ran against a
 package version that adds new required inputs. Re-run setup
 interactively to answer them.
 
-### Non-existent revert: `change_set_id value does not match Unit ChangeSetID`
+### `change_set_id value does not match Unit ChangeSetID`
 
-You're trying to update or restore a Unit that's currently locked
-inside an open ChangeSet (typically a still-running `installer
-upload` reconcile from another shell). Wait for it to finish, then
-re-run.
+You're trying to update or restore a Unit that's currently in an open
+ChangeSet (typically an `installer upload` still running from another
+shell). Wait for it to finish, then re-run.
 
-### `cub unit data installer-record: … not found`
+### `<package> is installed in N Spaces (…); pass --space to choose one`
 
-The installer-record Unit was deleted from cub, or the recorded
-Space slug in `upload.yaml` is stale. Setup's prior-state load falls
-back to local `out/spec/*.yaml` automatically with a warning. If you
-want to refresh ConfigHub from local state, re-run `installer upload
---space <slug>` against the same Space.
+`setup` in a work-dir with no `out/record/` looked for the package's
+installer record in ConfigHub and found more than one install. Pass
+`--space` to name the one to recover. Setup warns and starts a fresh
+install until you do.
+
+### `refusing to empty N Unit(s) without a terminal to confirm on; pass --yes`
+
+The render no longer produces some resources, so the upload would empty
+their Units, and it had no terminal to ask on. Check the listed Units and
+pass `--yes`.
 
 ## Quick reference
 

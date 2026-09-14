@@ -12,7 +12,7 @@ operator never edits the package tree (`installer.yaml`, `bases/`,
 channels:
 
 - **Install-time / re-render**: the wizard's generated spec files
-  (`out/spec/{selection,inputs,facts}.yaml`). Editing these and
+  (`out/record/{selection,inputs,facts}.yaml`). Editing these and
   re-rendering is the supported workflow for adjusting selections,
   inputs, and (via re-running the collector) facts.
 - **Post-install**: ConfigHub mutations on the uploaded Units (e.g.,
@@ -38,10 +38,9 @@ rendered Units. The spec layer is the only thing the installer
 persists, and it must be sufficient to re-derive the rendered output
 without consulting the cluster or ConfigHub.
 
-The Upload doc (`out/spec/upload.yaml`) extends this: it records where
-the spec was last uploaded so the wizard can re-enter from ConfigHub if
-the local work-dir is lost. The installer-record Unit on ConfigHub
-contains the full spec so a freshly cloned work-dir is recoverable.
+Upload extends this: each package's `installer` record Unit in ConfigHub
+holds the same record, so the wizard can re-enter from ConfigHub if the
+local work-dir is lost.
 
 How to apply: any new state the installer learns about an install goes
 into a spec doc. Anything not in the spec must be derivable from it
@@ -56,8 +55,8 @@ plus the package.
   machinery).
 - **Post-install** changes are made in ConfigHub on the materialized
   Units. They affect what ConfigHub serves to apply. They are
-  preserved across re-render via `cub unit update --merge-external-source`,
-  which only writes the paths that changed in the new render.
+  preserved across re-render because upload 3-way merges the new render
+  into each Unit, writing only the paths the render changed.
 
 The two layers do not need to know about each other. A package author
 asking "should this be an input or a post-install mutation?" should
@@ -130,7 +129,7 @@ operator can see the eventual image set without applying anything.
 
 How to apply: package authors, default to (1). Reach for (2) only if
 (1) is genuinely insufficient. Operators, prefer (1) for install/upgrade
-time and (3) for post-install one-offs; only edit spec/inputs.yaml for
+time and (3) for post-install one-offs; only edit out/record/inputs.yaml for
 (2).
 
 ## 6. Defer to ConfigHub for what ConfigHub does well
@@ -138,8 +137,8 @@ time and (3) for post-install one-offs; only edit spec/inputs.yaml for
 The installer materializes Units. Everything downstream — apply,
 validation Triggers and the ValidationErrors they record, drift
 reconciliation, ChangeSets, promotion, rollback — is ConfigHub's job.
-The installer creates a ChangeSet for `installer upload` reconciles so
-updates are revertable, but it does not run apply, does not author
+ConfigHub records every `installer upload` in a ChangeSet, so an upload is
+revertable, but the installer does not run apply, does not author
 Triggers, and does not reconcile cluster drift.
 
 How to apply: when a feature request lands ("add a Trigger that blocks
@@ -160,5 +159,5 @@ the installer is the upstream renderer for it.
 
 How to apply: never ship templates as ConfigHub Unit bodies. Never
 parameterize a Unit at apply time. If a Unit needs to vary across
-environments, vary it at render time (different `spec/inputs.yaml`,
+environments, vary it at render time (different `out/record/inputs.yaml`,
 different upload Space) or post-install via a ConfigHub function.

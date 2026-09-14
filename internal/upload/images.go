@@ -1,7 +1,7 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-package diff
+package upload
 
 import (
 	"errors"
@@ -203,4 +203,25 @@ func imagesFromList(kind, name string, list []any, init bool) []WorkloadImage {
 		})
 	}
 	return out
+}
+
+// ReportImages prints the images a package's rendered manifests run, so a plan
+// shows the eventual image set whether or not anything else changes.
+func ReportImages(w io.Writer, pkg Package) error {
+	images, err := ExtractImages(pkg.ManifestsDir)
+	if err != nil {
+		return err
+	}
+	if len(images) == 0 {
+		return nil
+	}
+	fmt.Fprintf(w, "\nImages in %s (post-render):\n", pkg.SpaceSlug)
+	for _, img := range images {
+		tag := "    "
+		if img.Init {
+			tag = "  init"
+		}
+		fmt.Fprintf(w, "%s  %s/%s [%s] %s\n", tag, img.Kind, img.Name, img.Container, img.Image)
+	}
+	return nil
 }

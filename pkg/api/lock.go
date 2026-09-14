@@ -4,13 +4,12 @@
 package api
 
 // Lock pins every dependency of a package to a specific OCI digest. The
-// resolver (Phase 4) writes one Lock as <work-dir>/out/spec/lock.yaml; the
+// resolver (Phase 4) writes one Lock as <work-dir>/out/record/lock.yaml; the
 // renderer (Phase 5) reads it and refuses to proceed if stale.
 //
-// The lock is also embedded in the parent's installer-record Unit on upload
-// (Phase 6), so each rendered package's ConfigHub Space carries enough
-// metadata to reproduce its own render — without keeping a separate file
-// under version control.
+// The lock is also carried in the parent's installer record on upload, so the
+// parent's ConfigHub Space carries enough to reproduce its render without
+// keeping a separate file under version control.
 type Lock struct {
 	// APIVersion is the installer API group/version.
 	APIVersion string `yaml:"apiVersion" json:"apiVersion"`

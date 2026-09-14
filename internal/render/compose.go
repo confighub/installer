@@ -17,7 +17,7 @@
 //  4. Splitting the resulting multi-doc YAML into per-resource files with
 //     deterministic naming, written to out/manifests/.
 //  5. Persisting the resolved FunctionChain alongside selection.yaml and
-//     inputs.yaml in out/spec/ so re-render is reproducible and the exact
+//     inputs.yaml in out/record/ so re-render is reproducible and the exact
 //     transforms applied are inspectable.
 package render
 

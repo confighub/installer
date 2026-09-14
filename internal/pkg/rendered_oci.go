@@ -306,15 +306,15 @@ func renderedConfig(
 	layerSize int64,
 	objectSetDigest string,
 ) (*api.RenderedConfigBlob, error) {
-	selectionDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", "spec", "selection.yaml"))
+	selectionDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", api.RecordDir, "selection.yaml"))
 	if err != nil {
 		return nil, err
 	}
-	inputsDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", "spec", "inputs.yaml"))
+	inputsDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", api.RecordDir, "inputs.yaml"))
 	if err != nil {
 		return nil, err
 	}
-	chainDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", "spec", "function-chain.yaml"))
+	chainDigest, err := sha256Path(filepath.Join(opts.WorkDir, "out", api.RecordDir, "function-chain.yaml"))
 	if err != nil {
 		return nil, err
 	}

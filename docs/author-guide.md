@@ -527,7 +527,7 @@ inherited so `cub` works inside the script):
   (uppercased)
 
 The collector's stdout is parsed as a YAML map and persisted to
-`out/spec/facts.yaml`. The map's keys become available in chain
+`out/record/facts.yaml`. The map's keys become available in chain
 templates as `{{ .Facts.<key> }}`. The collector may also write
 `.env.secret` files inside the package working copy at paths its
 kustomize secretGenerator references; the installer never reads or
@@ -591,7 +591,7 @@ spec:
 
 The resolver walks the DAG, picks one version per package satisfying
 every constraint, honors `conflicts:` and `replaces:`, and writes
-`out/spec/lock.yaml` pinning each dependency to a manifest digest.
+`out/record/lock.yaml` pinning each dependency to a manifest digest.
 
 ### `spec.conflicts` and `spec.replaces`
 
@@ -631,9 +631,9 @@ what isn't.
    render` granularly) — loads `installer.yaml`, runs the selection
    solver (closure of `requires:`, conflict / `validForBases` checks),
    runs your collector if present, writes
-   `out/spec/{selection,inputs,facts}.yaml`. For multi-package
+   `out/record/{selection,inputs,facts}.yaml`. For multi-package
    installs, automatically runs `deps update` to resolve the
-   dependency DAG and write `out/spec/lock.yaml`. Then composes a
+   dependency DAG and write `out/record/lock.yaml`. Then composes a
    synthetic top-level kustomization under `out/compose/` that
    references your chosen base + components, resolves your
    `spec.transformers` / `spec.validators` against `.Inputs` /
@@ -645,16 +645,17 @@ what isn't.
    resource per file in `out/manifests/`. For multi-package installs,
    each dep is rendered into its own subtree under `out/<dep-name>/`.
 
-3. **`installer upload`** — creates one Space per package (parent +
-   each locked dep) and one Unit per rendered file, plus one
-   untargeted `installer-record` Unit per Space carrying your
-   `installer.yaml` + the spec docs (so a freshly cloned work-dir is
-   recoverable from cub alone). Cross-Space Links wire the parent's
-   record to each dep's record. Subsequent uploads against the same
-   work-dir reconcile inside a ChangeSet (updates / adds / deletes).
+3. **`installer upload`** — sends each package (parent + each locked
+   dep) to ConfigHub's upload API, one Space per package. Every rendered
+   resource becomes its own Unit, and each Space gets an untargeted
+   `installer` record Unit carrying your `installer.yaml` and the record of
+   the render, so a freshly cloned work-dir is recoverable from ConfigHub.
+   The parent's Space records its dependencies in a `DependsOn`
+   annotation. Every upload is create-or-update: later uploads merge what
+   changed and empty what the render dropped.
 
-4. **`installer plan`** — day-2 read-only preview of what the next
-   `installer upload` reconcile would change in ConfigHub. The
+4. **`installer plan`** — day-2 dry run of what the next `installer
+   upload` would change in ConfigHub. The
    operator's job, but several things you author shape how it
    behaves: your `images:` block enables `--set-image`; your
    `default: true` components are adopted by `default`-preset
@@ -875,7 +876,7 @@ it as a kustomize image / replicas / patch transformer.
 ### Design for re-render
 
 Every install state (selection, inputs, facts, dependency lock) is
-captured in `out/spec/`. Your render must be deterministic from
+captured in `out/record/`. Your render must be deterministic from
 those files plus your package source — same package + same spec +
 same facts = byte-identical Unit bodies. If you have a non-determinism
 (timestamps, random IDs), push it into the collector's facts so it's

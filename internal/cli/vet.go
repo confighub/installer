@@ -35,7 +35,7 @@ render' — vet only matters when the validator list itself changes.
 Validators are templated against the same context as
 transformers ({{ .Inputs.* }}, {{ .Selection.* }}, etc.),
 so a validator may reference an input. The wizard's persisted
-out/spec/{inputs,selection,facts}.yaml is the source of those
+out/record/{inputs,selection,facts}.yaml is the source of those
 values. If those files are missing, vet fails fast (run 'installer
 wizard' first).`,
 		Args: cobra.NoArgs,
@@ -53,16 +53,16 @@ wizard' first).`,
 			if err != nil {
 				return fmt.Errorf("load package: %w", err)
 			}
-			specDir := filepath.Join(workDir, "out", "spec")
-			sel, err := readSelection(filepath.Join(specDir, "selection.yaml"))
+			recordDir := filepath.Join(workDir, "out", api.RecordDir)
+			sel, err := readSelection(filepath.Join(recordDir, "selection.yaml"))
 			if err != nil {
 				return fmt.Errorf("read selection.yaml: %w (run `installer wizard` first)", err)
 			}
-			inputs, err := readInputs(filepath.Join(specDir, "inputs.yaml"))
+			inputs, err := readInputs(filepath.Join(recordDir, "inputs.yaml"))
 			if err != nil {
 				return fmt.Errorf("read inputs.yaml: %w (run `installer wizard` first)", err)
 			}
-			facts, err := readFactsOptional(filepath.Join(specDir, "facts.yaml"))
+			facts, err := readFactsOptional(filepath.Join(recordDir, "facts.yaml"))
 			if err != nil {
 				return err
 			}
@@ -95,7 +95,7 @@ wizard' first).`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&workDirFlag, "work-dir", ".", "working directory (reads ./out/manifests + ./out/spec)")
+	cmd.Flags().StringVar(&workDirFlag, "work-dir", ".", "working directory (reads ./out/manifests + ./out/record)")
 	return cmd
 }
 

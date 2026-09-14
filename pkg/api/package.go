@@ -106,7 +106,7 @@ type PackageSpec struct {
 
 	// Dependencies declares other installer packages this package composes
 	// with. Each entry pins an OCI ref + SemVer constraint; the resolver
-	// (Phase 4) walks the DAG and writes out/spec/lock.yaml. Parse-only in
+	// (Phase 4) walks the DAG and writes out/record/lock.yaml. Parse-only in
 	// Phase 3 — wizard, render, and upload ignore this field.
 	Dependencies []Dependency `yaml:"dependencies,omitempty" json:"dependencies,omitempty"`
 
@@ -314,7 +314,7 @@ type FunctionInvocation struct {
 
 // Collector declares a fact-collection executable bundled in the package. The
 // wizard runs it after answering inputs and writes its stdout (a YAML map) to
-// out/spec/facts.yaml. The script may also write .env.secret files into the
+// out/record/facts.yaml. The script may also write .env.secret files into the
 // package working copy at paths its kustomize secretGenerator references; the
 // installer never reads or uploads those files.
 //

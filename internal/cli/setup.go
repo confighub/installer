@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighub/installer/internal/cubctx"
 	"github.com/confighub/installer/internal/deps"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/render"
@@ -26,6 +25,9 @@ import (
 type flowOptions struct {
 	workDir string
 	pullRef string // empty means: do not pull; require an existing <work-dir>/package/.
+	// recoverSpace is the Space to recover a prior install from when the
+	// work-dir has none of its own.
+	recoverSpace string
 
 	// Wizard answer flags.
 	baseName       string
@@ -86,16 +88,11 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 
 	interactive := !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd()))
 
-	prior, source, err := wizard.LoadPriorState(ctx, absWork, func(msg string) {
+	prior, source, err := wizard.LoadPriorState(ctx, absWork, loaded.Package.Metadata.Name, installerRecordFetcher(opts.recoverSpace), func(msg string) {
 		fmt.Fprintln(os.Stderr, "warning:", msg)
 	})
 	if err != nil {
 		return fmt.Errorf("load prior state: %w", err)
-	}
-	if prior != nil && prior.Upload != nil {
-		if err := cubctx.CheckMatches(ctx, prior.Upload.Spec.OrganizationID, prior.Upload.Spec.Server); err != nil {
-			return err
-		}
 	}
 	if source != wizard.SourceNone {
 		fmt.Printf("Loaded prior install state from %s.\n", source)
@@ -119,9 +116,9 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Wizard wrote %s/spec/selection.yaml and inputs.yaml\n", outDir)
+	fmt.Printf("Wizard wrote %s/record/selection.yaml and inputs.yaml\n", outDir)
 	if res.Facts != nil {
-		fmt.Printf("Collector produced %d fact(s) in %s/spec/facts.yaml\n", len(res.Facts.Spec.Values), outDir)
+		fmt.Printf("Collector produced %d fact(s) in %s/record/facts.yaml\n", len(res.Facts.Spec.Values), outDir)
 	}
 	fmt.Printf("Base: %s; components: %v\n", res.Selection.Spec.Base, res.Selection.Spec.Components)
 	fmt.Printf("Namespace: %s\n", raw.Namespace)
@@ -160,7 +157,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		fmt.Printf("  pull-back: verified\n")
 	}
 
-	fmt.Printf("Next: %s upload --work-dir %s --space <slug>\n", InvocationName(), absWork)
+	fmt.Printf("Next: %s upload --work-dir %s\n", InvocationName(), absWork)
 	return nil
 }
 
@@ -357,7 +354,7 @@ func buildUpgradeAnswers(newPkg *api.Package, prior *wizard.PriorState, interact
 }
 
 // runDepsUpdate resolves the dependency DAG against the OCI registry
-// and writes <work-dir>/out/spec/lock.yaml. Honors the package's
+// and writes <work-dir>/out/record/lock.yaml. Honors the package's
 // optional-deps gated by whenComponent, using the supplied selection.
 func runDepsUpdate(ctx context.Context, workDir string, pkg *api.Package, sel *api.Selection) error {
 	res, err := deps.Resolve(ctx, pkg, deps.OCISource{}, deps.Options{Selection: sel})
@@ -453,7 +450,7 @@ this is a first install or a re-render against an existing work-dir
 
 Working directory:
   --work-dir <dir>   defaults to the current directory. Pull writes to
-                     <work-dir>/package/; spec docs to <work-dir>/out/spec/;
+                     <work-dir>/package/; spec docs to <work-dir>/out/record/;
                      manifests to <work-dir>/out/manifests/.
 
 Rendered OCI output:
@@ -473,10 +470,13 @@ Pull:
                      <ref> --work-dir <dir>).
 
 Auto-detection:
-  - <work-dir>/out/spec/upload.yaml exists → load prior install state
-    from the recorded ConfigHub Space.
-  - else <work-dir>/out/spec/{selection,inputs,facts}.yaml exist → load
-    prior locally.
+  - <work-dir>/out/record/{selection,inputs,facts}.yaml exist → load prior
+    install state from them.
+  - else an earlier upload of the package left an "installer" record Unit in
+    ConfigHub → load prior install state from it. This recovers a fresh
+    clone. --space names the Space to recover from; without it the
+    package's only install in the organization is used, and several
+    installs are refused.
   - else → fresh install.
 
 When prior state is loaded, setup runs the schema-diff machinery
@@ -499,6 +499,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	}
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
+	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization)")
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")

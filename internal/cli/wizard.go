@@ -18,9 +18,9 @@ func newWizardCmd() *cobra.Command {
 what namespace, etc.) into ConfigHub-bound documents inside the working
 dir:
 
-  <work-dir>/spec/selection.yaml   chosen base + components (closure-resolved)
-  <work-dir>/spec/inputs.yaml      validated input values (+ namespace)
-  <work-dir>/spec/facts.yaml       facts emitted by the package's collector,
+  <work-dir>/out/record/selection.yaml   chosen base + components (closure-resolved)
+  <work-dir>/out/record/inputs.yaml      validated input values (+ namespace)
+  <work-dir>/out/record/facts.yaml       facts emitted by the package's collector,
                                    if it declares one
 
 By default, wizard also runs render after the Q&A. Pass --render=false
@@ -48,9 +48,8 @@ out/secrets/ (never uploaded as a Unit).
 When stdin is a TTY the wizard runs interactively, prompting for base,
 component preset (minimal / default / all / selected), namespace, and
 any required inputs without defaults. If a prior install is recorded
-in the work-dir (out/spec/upload.yaml or out/spec/*.yaml), wizard
-re-enters from those choices using the same schema-diff logic setup
-uses.
+in the work-dir (out/record/*.yaml), wizard re-enters from those choices
+using the same schema-diff logic setup uses.
 
 Pass --non-interactive to script the wizard with --base, --components,
 --select, --input, and --namespace.`,

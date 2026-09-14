@@ -130,7 +130,7 @@ wrapper, or a symlink) it works against raw kustomize.
 <work-dir>/out/
 ├── manifests/                 # per-resource non-sensitive output
 ├── secrets/                   # per-resource sensitive output (unchanged)
-├── spec/                      # selection, inputs, facts, function-chain, manifest-index
+├── record/                    # selection, inputs, facts, function-chain, manifest-index
 └── compose/
     ├── kustomization.yaml     # synthesized: resources, transformers, validators, images
     ├── transformers.yaml             # resolved package-level ConfigHubTransformers

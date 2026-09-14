@@ -117,9 +117,9 @@ func testRenderedOCIOptions(t *testing.T) RenderedOCIOptions {
 	writeTestFile("out/manifests/deployment.yaml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app\n", 0o644)
 	writeTestFile("out/dependency/manifests/service.yaml", "apiVersion: v1\nkind: Service\nmetadata:\n  name: dependency\n", 0o644)
 	writeTestFile("out/secrets/secret.yaml", "apiVersion: v1\nkind: Secret\nmetadata:\n  name: private\n", 0o600)
-	writeTestFile("out/spec/selection.yaml", "kind: Selection\nspec:\n  base: default\n", 0o644)
-	writeTestFile("out/spec/inputs.yaml", "kind: Inputs\nspec:\n  namespace: demo\n  values:\n    token: do-not-publish\n", 0o644)
-	writeTestFile("out/spec/function-chain.yaml", "kind: FunctionChain\nspec:\n  groups: []\n", 0o644)
+	writeTestFile("out/record/selection.yaml", "kind: Selection\nspec:\n  base: default\n", 0o644)
+	writeTestFile("out/record/inputs.yaml", "kind: Inputs\nspec:\n  namespace: demo\n  values:\n    token: do-not-publish\n", 0o644)
+	writeTestFile("out/record/function-chain.yaml", "kind: FunctionChain\nspec:\n  groups: []\n", 0o644)
 
 	return RenderedOCIOptions{
 		WorkDir:         workDir,

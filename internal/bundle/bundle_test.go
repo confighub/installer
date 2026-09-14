@@ -56,7 +56,7 @@ func minimalPkg(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
-		"installer.yaml":                  installerYAML,
+		"installer.yaml":                   installerYAML,
 		"bases/default/kustomization.yaml": "resources:\n  - cm.yaml\n",
 		"bases/default/cm.yaml":            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n",
 	})
@@ -156,7 +156,7 @@ func TestBundleExcludesOutDir(t *testing.T) {
 	src := minimalPkg(t)
 	writeTree(t, src, map[string]string{
 		"out/manifests/deploy.yaml": "junk\n",
-		"out/spec/selection.yaml":   "junk\n",
+		"out/record/selection.yaml": "junk\n",
 	})
 	r, err := Bundle(src, filepath.Join(t.TempDir(), "p.tgz"))
 	if err != nil {
@@ -172,10 +172,10 @@ func TestBundleExcludesOutDir(t *testing.T) {
 func TestBundleHonoursInstallerIgnore(t *testing.T) {
 	src := minimalPkg(t)
 	writeTree(t, src, map[string]string{
-		".installerignore":      "*.bak\nlocal/\n",
-		"notes.bak":             "scratch\n",
-		"local/private.yaml":    "shh\n",
-		"bases/default/x.yaml":  "kept\n",
+		".installerignore":     "*.bak\nlocal/\n",
+		"notes.bak":            "scratch\n",
+		"local/private.yaml":   "shh\n",
+		"bases/default/x.yaml": "kept\n",
 	})
 	r, err := Bundle(src, filepath.Join(t.TempDir(), "p.tgz"))
 	if err != nil {
@@ -251,4 +251,3 @@ func equalBytes(a, b string) bool {
 	}
 	return bytes.Equal(x, y)
 }
-
