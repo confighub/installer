@@ -40,7 +40,7 @@ working interactive flow built on `survey/v2`.
   error)` shells out to `cub context get -o
   jq=".coordinate.organizationID"`. `CheckOrganization(ctx, want
   string) error` compares against the recorded value and returns a
-  formatted error naming both IDs and pointing at `cub context set` /
+  formatted error naming both IDs and pointing at `cub context use` /
   `cub auth login`. Used by `wizard`, `plan`, `update`, and
   `upgrade`.
 - Modify: `internal/upload/upload.go`
@@ -62,7 +62,7 @@ working interactive flow built on `survey/v2`.
 - Acceptance: `installer wizard ./examples/hello-app` (no flags) walks
   through prompts and emits the same files the non-interactive path
   produces. Re-running it offers "Re-use last choices?" and renders an
-  unchanged spec. Re-running it after `cub context set` to a different
+  unchanged spec. Re-running it after `cub context use` to a different
   org fails fast naming both org IDs.
 
 ## Phase B — `installer plan`
@@ -230,7 +230,7 @@ context. Each command starts by calling
 `cubctx.CheckOrganization(ctx, upload.Spec.OrganizationID)` (Phase A
 helper) and, if that passes, comparing `upload.Spec.Server` to the
 current server. Either mismatch fails fast with the recorded vs
-current values plus the `cub context set` / `cub auth login`
+current values plus the `cub context use` / `cub auth login`
 remediation. We do not silently switch contexts.
 
 ### Backwards compatibility

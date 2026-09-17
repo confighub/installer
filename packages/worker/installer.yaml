@@ -10,6 +10,10 @@ spec:
       path: bases/default
       default: true
       description: |
+        cub space that holds the BridgeWorker entity. cub has no default
+        space, so this is always given. It is independent of the destination
+        space passed to
+|
         ConfigHub bridge worker — Namespace, ServiceAccount, ClusterRoleBinding,
         Deployment, plus a kustomize secretGenerator that builds the
         confighub-worker-secret from a .env.secret file produced by the
@@ -45,8 +49,10 @@ spec:
         Deployment name.
     - name: space
       type: string
-      prompt: "ConfigHub space for the BridgeWorker (default: active context's space)"
+      required: true
+      prompt: ConfigHub space for the BridgeWorker
       description: |
+        cub space that holds the BridgeWorker entity. This is independent|
         cub space that holds the BridgeWorker entity. When empty (the
         default), the collector relies on the active context's default
         space. This is independent of the destination space passed to
