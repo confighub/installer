@@ -10,10 +10,6 @@ spec:
       path: bases/default
       default: true
       description: |
-        cub space that holds the BridgeWorker entity. cub has no default
-        space, so this is always given. It is independent of the destination
-        space passed to
-|
         ConfigHub bridge worker — Namespace, ServiceAccount, ClusterRoleBinding,
         Deployment, plus a kustomize secretGenerator that builds the
         confighub-worker-secret from a .env.secret file produced by the
