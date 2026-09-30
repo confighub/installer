@@ -82,7 +82,6 @@ PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-ghcr.io/confighubai/confighub-worker:v0.1
 # resolved TargetID as $SPACE's "TargetID" annotation.
 TARGET_SPACE="${SPACE}-targets"
 TARGET_SLUG=installer-test-target
-TARGET_WORKER_SLUG=installer-test-target-worker
 
 log()    { printf '\n=== %s ===\n' "$*" >&2; }
 note()   { printf '    %s\n' "$*" >&2; }
@@ -232,21 +231,11 @@ cub worker list --space "$SPACE" 2>/dev/null | awk '{print $1}' | grep -qx "$WOR
 
 # 5c. Create the cross-Space Target the first upload will bind Units to.
 #     It needs no live cluster — upload only binds Units (sets TargetID),
-#     it never applies — so a backing worker entity that merely *declares*
-#     Kubernetes/YAML support (no running process) plus a default
-#     Kubernetes Target with empty parameters is enough. Resolving its
-#     UUID up front lets later steps assert the recorded "TargetID"
-#     annotation and the per-Unit bindings.
+#     it never applies. Resolving its UUID up front lets later steps assert
+#     the recorded "TargetID" annotation and the per-Unit bindings.
 log "create cross-Space Target ($TARGET_SPACE/$TARGET_SLUG)"
 cub space create --quiet "$TARGET_SPACE" >/dev/null || fail "failed to create Target Space $TARGET_SPACE"
-# A Target needs a BridgeWorker that advertises the ConfigType. We don't
-# run a worker here (no cluster), so declare the supported ConfigType on
-# the worker entity directly via --from-stdin — enough for target-create
-# validation and for binding Units (upload binds, it never applies).
-printf '%s' '{"ProvidedInfo":{"BridgeWorkerInfo":{"SupportedConfigTypes":[{"ProviderType":"Kubernetes","ToolchainType":"Kubernetes/YAML"}]}}}' \
-  | cub worker create --space "$TARGET_SPACE" --from-stdin "$TARGET_WORKER_SLUG" >/dev/null \
-  || fail "failed to create Target worker $TARGET_SPACE/$TARGET_WORKER_SLUG"
-cub target create --space "$TARGET_SPACE" "$TARGET_SLUG" '{}' "$TARGET_WORKER_SLUG" >/dev/null \
+cub target create --space "$TARGET_SPACE" "$TARGET_SLUG" >/dev/null \
   || fail "failed to create Target $TARGET_SPACE/$TARGET_SLUG"
 TARGET_ID=$(cub target get --space "$TARGET_SPACE" "$TARGET_SLUG" -o jq=.Target.TargetID 2>/dev/null | tr -d '"')
 [[ -n "$TARGET_ID" && "$TARGET_ID" != "null" ]] || fail "could not resolve TargetID for $TARGET_SPACE/$TARGET_SLUG"
