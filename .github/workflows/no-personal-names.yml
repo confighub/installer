@@ -1,0 +1,27 @@
+name: no-personal-names
+
+# Committed files say "the team", "a colleague" or the issue number instead of
+# naming a person. The tree is clean; this keeps it clean by running the Go
+# test that holds the pattern on every pull request and push to main. The same
+# test is part of `go test ./...`, so `make test` and the release workflow run
+# it too.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-personal-names:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - run: go test -run "^TestNoPersonalNames$" -v ./internal/repohygiene
