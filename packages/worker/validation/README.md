@@ -14,15 +14,13 @@ re-pulling the image.
 
 ## Regenerate
 
-Bump the image tag and re-run:
+Run against an image built from the SDK's reference worker (`cub-worker-run`):
 
 ```bash
-IMAGE=ghcr.io/confighubai/confighub-worker:latest
+IMAGE=<your worker image>
 docker run --rm "$IMAGE" docgen command > command.yaml
 docker run --rm "$IMAGE" docgen env     > env.schema.json
 docker run --rm "$IMAGE" docgen runtime > runtime.yaml
 ```
 
-The same three commands work against any tag — pin to the tag this package's
-`transformers` is wired against (defaulted by `cub worker get-image`
-to match the server version).
+The same three commands work against any tag of such an image.

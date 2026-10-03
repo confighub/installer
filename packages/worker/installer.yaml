@@ -10,27 +10,26 @@ spec:
       path: bases/default
       default: true
       description: |
-        ConfigHub bridge worker — Namespace, ServiceAccount, ClusterRoleBinding,
+        ConfigHub worker — Namespace, ServiceAccount, ClusterRoleBinding,
         Deployment, plus a kustomize secretGenerator that builds the
         confighub-worker-secret from a .env.secret file produced by the
-        collector. Intended for installing the standard worker image
-        (ghcr.io/confighubai/confighub-worker); custom worker images can be
-        accommodated by editing the rendered Deployment after install or by
-        forking the package.
+        collector. You supply the image: ConfigHub does not publish one. The
+        port, probes and env the package sets are those of the SDK's reference
+        worker (cub-worker-run); an image built another way may need the
+        rendered Deployment edited after install.
 
   # The wizard runs ./collector.sh before render. It calls the active cub
   # context to discover:
   #   - the server URL (CONFIGHUB_URL)
-  #   - the version-matched worker image
   #   - the BridgeWorkerID (creates the worker on the fly if missing)
   # and writes confighub-worker-secret.env.secret into bases/default/ for the
   # secretGenerator to pick up. See the script for the contract.
   collector:
     command: ./collector.sh
     description: |
-      Fetches CONFIGHUB_URL and the default worker image from `cub`, ensures a
-      BridgeWorker entity exists for INSTALLER_INPUT_WORKER_SLUG in the active
-      space, and writes the worker secret to
+      Fetches CONFIGHUB_URL from `cub`, ensures a BridgeWorker entity exists
+      for INSTALLER_INPUT_WORKER_SLUG in the given space, passes the image
+      input through as a fact, and writes the worker secret to
       bases/default/confighub-worker-secret.env.secret for the kustomize
       secretGenerator.
 
@@ -53,15 +52,24 @@ spec:
         space passed to `installer upload --space`; the two may differ when
         the worker lives in a platform space but applies Units in
         env-specific spaces.
+    - name: image
+      type: string
+      required: true
+      prompt: Worker image
+      description: |
+        The worker image to run, as registry/name:tag. ConfigHub does not
+        publish a worker image; build one from the SDK and push it where
+        the cluster can pull it.
 
   validation:
     commandHelp: validation/command.yaml
     envSchema: validation/env.schema.json
     runtimeSpec: validation/runtime.yaml
     howToRegenerate: |
-      Pull the worker image and run its docgen commands:
+      Run the docgen commands of an image built from the SDK's reference
+      worker (cub-worker-run):
 
-        IMAGE=ghcr.io/confighubai/confighub-worker:latest
+        IMAGE=<your worker image>
         docker run --rm $IMAGE docgen command > validation/command.yaml
         docker run --rm $IMAGE docgen env     > validation/env.schema.json
         docker run --rm $IMAGE docgen runtime > validation/runtime.yaml

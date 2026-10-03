@@ -19,7 +19,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: worker
-          image: ghcr.io/confighubai/confighub-worker:latest
+          image: worker-image-placeholder
           imagePullPolicy: Always
           env:
             - name: NAMESPACE
