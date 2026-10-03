@@ -9,6 +9,7 @@
 #   INSTALLER_NAMESPACE            value of --namespace (informational; not used here)
 #   INSTALLER_INPUT_WORKER_SLUG    BridgeWorker slug
 #   INSTALLER_INPUT_SPACE          cub space that holds the BridgeWorker
+#   INSTALLER_INPUT_IMAGE          worker image to run (yours; ConfigHub ships none)
 #
 # Side effect: writes confighub-worker-secret.env.secret into bases/default/
 # so the kustomize secretGenerator there can read it. The file holds
@@ -18,7 +19,7 @@
 #
 #   bridgeWorkerID: <uuid>
 #   configHubURL:   https://hub.example.com
-#   image:          ghcr.io/confighubai/confighub-worker:vX.Y.Z
+#   image:          <INSTALLER_INPUT_IMAGE, passed through>
 
 set -euo pipefail
 
@@ -31,6 +32,9 @@ worker_slug="${INSTALLER_INPUT_WORKER_SLUG:-}"
 
 space="${INSTALLER_INPUT_SPACE:-}"
 [ -n "$space" ] || err "INSTALLER_INPUT_SPACE is required (pass --input space=<slug>); cub has no default space"
+
+image="${INSTALLER_INPUT_IMAGE:-}"
+[ -n "$image" ] || err "INSTALLER_INPUT_IMAGE is required (pass --input image=<registry/name:tag>); ConfigHub does not publish a worker image"
 
 # Find or create the BridgeWorker. `cub worker create --allow-exists` is the
 # idempotent path: existing workers are kept; new ones are created on the fly.
@@ -50,11 +54,9 @@ cub worker get-envs --no-export --space "$space" "$worker_slug" \
 worker_id=$(sed -n 's/^CONFIGHUB_WORKER_ID=//p' "$secret_file")
 [ -n "$worker_id" ] || err "CONFIGHUB_WORKER_ID missing from cub worker get-envs output"
 
-# Discover the active context's server URL and the server-version-matched image.
+# Discover the active context's server URL.
 configHubURL=$(cub context get -o jq=.coordinate.serverURL --quiet)
-image=$(cub worker get-image --space "$space")
 [ -n "$configHubURL" ] || err "could not read CONFIGHUB_URL from cub context"
-[ -n "$image" ] || err "cub worker get-image returned empty"
 
 # Emit facts on stdout for facts.yaml.
 cat <<EOF

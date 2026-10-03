@@ -18,6 +18,3 @@ secretGenerator:
   name: confighub-worker-secret
 generatorOptions:
   disableNameSuffixHash: true
-images:
-- name: ghcr.io/confighubai/confighub-worker
-  newTag: v0.1.42

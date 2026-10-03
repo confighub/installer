@@ -9,9 +9,9 @@
 # Flow:
 #
 #   setup --pull   — pulls worker, runs collector (writes facts), renders
-#   pin image      — edits facts.yaml to a known release tag, re-renders
-#                    via `installer render` (bypasses setup's collector,
-#                    which would overwrite facts back to :latest)
+#   pin image      — edits facts.yaml to another tag, re-renders via
+#                    `installer render` (bypasses setup's collector,
+#                    which would write the image input back into facts)
 #   make Target    — creates a Target in its own Space so the upload can
 #                    bind Units to it via cross-Space <space>/<target>
 #   upload         — first upload: Units, the AppConfig set, inferred Links,
@@ -49,11 +49,9 @@
 #   INSTALLER_UPLOAD_SPACE  — override the destination Space slug.
 #                              Default: installer-test-upload-<YYYYMMDD-HHMMSS>.
 #   INSTALLER_UPLOAD_IMAGE  — override the pinned worker image.
-#                              Default: ghcr.io/confighubai/confighub-worker:v0.1.44.
-#                              Local servers report :latest from
-#                              `cub worker get-image` (no release running),
-#                              so the test pins to a known release for a
-#                              stable rendered image string.
+#                              Default: registry.example.com/confighub-worker:v1.0.0.
+#                              The image is never pulled; the test only
+#                              asserts the string in rendered output.
 #   INSTALLER_UPLOAD_KEEP_WD=0
 #                            — also delete the local work-dir on success
 #                              (default 1: keep work-dir for inspection).
@@ -76,7 +74,9 @@ SPACE=${INSTALLER_UPLOAD_SPACE:-installer-test-upload-$(date -u +%Y%m%d-%H%M%S)}
 KEEP_WD=${INSTALLER_UPLOAD_KEEP_WD:-1}
 VERBOSE=${INSTALLER_UPLOAD_VERBOSE:-0}
 WORKER_SLUG=installer-test-worker
-PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-ghcr.io/confighubai/confighub-worker:v0.1.44}
+PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-registry.example.com/confighub-worker:v1.0.0}
+# What setup is given; the pin step below replaces it through facts.yaml.
+INITIAL_IMAGE=registry.example.com/confighub-worker:initial
 # A Target lives in its own Space so the first upload can bind Units to it
 # via the cross-Space <space>/<target> --target syntax and record the
 # resolved TargetID as $SPACE's "TargetID" annotation.
@@ -180,7 +180,8 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
   --non-interactive \
   --namespace "$SPACE" \
   --input worker_slug="$WORKER_SLUG" \
-  --input space="$SPACE" || fail "setup failed (see $WORK_TMP/setup.log)"
+  --input space="$SPACE" \
+  --input image="$INITIAL_IMAGE" || fail "setup failed (see $WORK_TMP/setup.log)"
 
 [[ -d "$WORK_TMP/out/manifests" ]] || fail "expected $WORK_TMP/out/manifests/"
 [[ -f "$WORK_TMP/out/record/facts.yaml" ]] || fail "expected facts.yaml after setup (worker collector should have run)"
@@ -189,10 +190,10 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
 # out/secrets/ (sensitive — never uploaded as a Unit).
 [[ -d "$WORK_TMP/out/secrets" ]] || fail "expected $WORK_TMP/out/secrets/ (rendered Secret routed off the upload path)"
 
-# 5. Pin the image to a known release tag by editing facts.yaml and
+# 5. Pin the image to another tag by editing facts.yaml and
 #    re-rendering via `installer render` (NOT setup, which would re-run
-#    the collector and revert image back to whatever the server
-#    reports — :latest, locally). This both demonstrates that .Facts
+#    the collector and revert image back to the image input). This both
+#    demonstrates that .Facts
 #    is a supported override point and gives us a stable image string
 #    to assert against downstream.
 log "pin worker image to $PINNED_IMAGE (edit facts.yaml + installer render)"

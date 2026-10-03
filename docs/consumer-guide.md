@@ -49,7 +49,7 @@ packages under `packages/` as starting points:
   resource templates with best-practice defaults pre-applied. Used
   by `installer new` to scaffold resources into your own packages
   (see [author guide](./author-guide.md#kubernetes-resources-package)).
-- `packages/worker/` — the ConfigHub bridge worker.
+- `packages/worker/` — a ConfigHub worker Deployment for an image you supply.
 
 These will move to a separate registry as the catalog grows. Once
 you have a candidate ref:
