@@ -4,8 +4,8 @@ metadata:
   name: hello-migrate
   namespace: confighubplaceholder
   labels:
-    app: hello-app
-    job: db-migrate
+    app.kubernetes.io/name: hello-app
+    app.kubernetes.io/component: db-migrate
 spec:
   backoffLimit: 3
   activeDeadlineSeconds: 600

@@ -4,11 +4,11 @@ metadata:
   name: hello-db
   namespace: confighubplaceholder
   labels:
-    app: hello-db
+    app.kubernetes.io/name: hello-db
 spec:
   clusterIP: None
   selector:
-    app: hello-db
+    app.kubernetes.io/name: hello-db
   ports:
     - port: 5432
       targetPort: 5432
@@ -19,17 +19,17 @@ metadata:
   name: hello-db
   namespace: confighubplaceholder
   labels:
-    app: hello-db
+    app.kubernetes.io/name: hello-db
 spec:
   serviceName: hello-db
   replicas: 3
   selector:
     matchLabels:
-      app: hello-db
+      app.kubernetes.io/name: hello-db
   template:
     metadata:
       labels:
-        app: hello-db
+        app.kubernetes.io/name: hello-db
     spec:
       containers:
         - name: postgres

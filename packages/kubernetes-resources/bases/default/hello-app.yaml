@@ -4,16 +4,16 @@ metadata:
   name: hello-app
   namespace: confighubplaceholder
   labels:
-    app: hello-app
+    app.kubernetes.io/name: hello-app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: hello-app
+      app.kubernetes.io/name: hello-app
   template:
     metadata:
       labels:
-        app: hello-app
+        app.kubernetes.io/name: hello-app
     spec:
       serviceAccountName: hello-app
       containers:
@@ -28,10 +28,10 @@ metadata:
   name: hello-app
   namespace: confighubplaceholder
   labels:
-    app: hello-app
+    app.kubernetes.io/name: hello-app
 spec:
   selector:
-    app: hello-app
+    app.kubernetes.io/name: hello-app
   ports:
     - port: 80
       targetPort: 8080

@@ -6,7 +6,11 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: nginx
+  # The IngressClass of the controller that serves this Ingress. Left as a
+  # placeholder because there is no safe default: the class depends on the
+  # controller each cluster runs (the community ingress-nginx controller has
+  # been retired). Set it per cluster, or consider the Gateway API instead.
+  ingressClassName: confighubplaceholder
   tls:
     - hosts:
         - hello.example.com

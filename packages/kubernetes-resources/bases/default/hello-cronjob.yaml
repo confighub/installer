@@ -4,8 +4,8 @@ metadata:
   name: hello-backup
   namespace: confighubplaceholder
   labels:
-    app: hello-app
-    job: backup
+    app.kubernetes.io/name: hello-app
+    app.kubernetes.io/component: backup
 spec:
   schedule: "0 2 * * *"
   concurrencyPolicy: Forbid
