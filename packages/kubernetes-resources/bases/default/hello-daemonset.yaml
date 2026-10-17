@@ -4,15 +4,15 @@ metadata:
   name: hello-exporter
   namespace: confighubplaceholder
   labels:
-    app: hello-exporter
+    app.kubernetes.io/name: hello-exporter
 spec:
   selector:
     matchLabels:
-      app: hello-exporter
+      app.kubernetes.io/name: hello-exporter
   template:
     metadata:
       labels:
-        app: hello-exporter
+        app.kubernetes.io/name: hello-exporter
     spec:
       containers:
         - name: node-exporter

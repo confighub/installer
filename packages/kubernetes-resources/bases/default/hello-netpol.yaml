@@ -17,7 +17,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: hello-app
+      app.kubernetes.io/name: hello-app
   policyTypes:
     - Ingress
     - Egress
@@ -31,7 +31,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app: hello-db
+              app.kubernetes.io/name: hello-db
       ports:
         - protocol: TCP
           port: 5432

@@ -7,4 +7,4 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels:
-      app: hello-app
+      app.kubernetes.io/name: hello-app

@@ -671,7 +671,12 @@ Ingress, NetworkPolicy pair, RBAC bundle, HPA, PDB — each with the
 recommended defaults pre-applied via per-type ConfigHub functions
 (resource requests, probes, securityContext,
 automountServiceAccountToken=false, pod-security labels on
-Namespace, etc.).
+Namespace, etc.). Resources select one another with the Kubernetes
+[recommended label](https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/)
+`app.kubernetes.io/name` rather than a bare `app` label. The
+Ingress's `ingressClassName` is `confighubplaceholder`, since the
+right class depends on the controller each cluster runs; set it
+before the Ingress is released.
 
 Once installed in your ConfigHub organization, `installer new
 <kind> <name>` clones any of these templates into your package's

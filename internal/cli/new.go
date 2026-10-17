@@ -81,15 +81,15 @@ func sortedKindNames() []string {
 
 func newNewCmd() *cobra.Command {
 	var (
-		image       string
-		port        int
-		replicas    int
-		pkgDir      string
-		outFile     string
-		stdoutOnly  bool
-		nsOverride  string
-		spaceSlug   string
-		updateKust  bool
+		image      string
+		port       int
+		replicas   int
+		pkgDir     string
+		outFile    string
+		stdoutOnly bool
+		nsOverride string
+		spaceSlug  string
+		updateKust bool
 	)
 	cmd := &cobra.Command{
 		Use:   "new <kind> <name>",
@@ -345,19 +345,26 @@ func mutateDoc(node *yaml.Node, opts customizeOpts) error {
 		stripConfighubAnnotations(md)
 	}
 
-	// spec.* customizations: replicas, selector matchLabels, template
-	// labels, container image / port.
+	// spec.* customizations: replicas, selectors, template labels,
+	// container image / port.
 	spec := mappingChild(root, "spec")
 	if spec != nil {
 		if opts.replicas > 0 {
 			setIntPath(spec, "replicas", opts.replicas)
 		}
-		// selector.matchLabels.app rename
+		// Selector renames: a workload's or PDB's selector.matchLabels,
+		// a Service's plain selector map, and a NetworkPolicy's
+		// podSelector.matchLabels.
 		if opts.origName != "" {
 			if sel := mappingChild(spec, "selector"); sel != nil {
 				if ml := mappingChild(sel, "matchLabels"); ml != nil {
-					renameStringPath(ml, "app", opts.origName, opts.newName)
+					renameNameLabels(ml, opts.origName, opts.newName)
+				} else {
+					renameNameLabels(sel, opts.origName, opts.newName)
 				}
+			}
+			if ps := mappingChild(spec, "podSelector"); ps != nil {
+				renameNameLabels(mappingChild(ps, "matchLabels"), opts.origName, opts.newName)
 			}
 			// template.metadata.labels.app rename + serviceAccountName
 			if tmpl := mappingChild(spec, "template"); tmpl != nil {
@@ -467,15 +474,28 @@ func renameStringPath(node *yaml.Node, key, origValue, newValue string) {
 	}
 }
 
-// renameLabelMap rewrites the value of `app: <orig>` to `app: <new>`
-// inside node.labels (if present). The `app` label is the convention
-// every kubernetes-resources example uses for cross-resource wiring.
+// nameLabelKeys are the label keys whose value names the resource,
+// and so is renamed along with it. The kubernetes-resources examples
+// use the recommended app.kubernetes.io/name label for cross-resource
+// wiring; the bare app label is renamed too, for templates uploaded
+// from an earlier version of the package.
+var nameLabelKeys = []string{"app.kubernetes.io/name", "app"}
+
+// renameLabelMap renames the name labels inside node.labels (if
+// present).
 func renameLabelMap(metadataNode *yaml.Node, origName, newName string) {
-	labels := mappingChild(metadataNode, "labels")
+	renameNameLabels(mappingChild(metadataNode, "labels"), origName, newName)
+}
+
+// renameNameLabels rewrites the value of each name label in a label
+// map or selector from origName to newName. No-op for a nil node.
+func renameNameLabels(labels *yaml.Node, origName, newName string) {
 	if labels == nil {
 		return
 	}
-	renameStringPath(labels, "app", origName, newName)
+	for _, key := range nameLabelKeys {
+		renameStringPath(labels, key, origName, newName)
+	}
 }
 
 // stripConfighubAnnotations removes any annotation key under the

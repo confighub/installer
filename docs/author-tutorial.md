@@ -267,7 +267,7 @@ metadata:
   namespace: confighubplaceholder
 spec:
   selector:
-    matchLabels: { app: statusboard }
+    matchLabels: { app.kubernetes.io/name: statusboard }
   endpoints:
     - port: web
 YAML
