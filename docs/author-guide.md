@@ -500,7 +500,7 @@ fetch is verified against it before render uses the bytes.
 ### `spec.collector`
 
 An executable bundled in the package that the wizard runs to discover
-install-time facts (server URL, image tag, worker IDs, etc.) and to
+install-time facts (server URL, image tag, etc.) and to
 materialize sensitive material as `.env.secret` files consumed by
 kustomize secretGenerator.
 
@@ -509,7 +509,7 @@ spec:
   collector:
     command: collector/collect.sh
     args: []
-    description: Discover the active cub server URL + bootstrap a worker secret.
+    description: Discover the active cub server URL + generate an app token.
 ```
 
 The wizard runs the command with the package root as the working
@@ -800,8 +800,8 @@ TransformInvocation. On resolution the function renders the ConfigMap
 into the placeholder so the runtime ConfigMap name flows through to
 the workload reference at apply time.
 
-Rendering runs as a built-in function on the server — no bridge
-worker, Target, or apply step is involved.
+Rendering runs as a built-in function on the server — no Target or
+apply step is involved.
 
 ### disableNameSuffixHash
 

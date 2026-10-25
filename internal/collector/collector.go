@@ -3,9 +3,8 @@
 
 // Package collector runs a package's bundled fact-collection script during
 // the wizard step. The script discovers install-time facts that depend on
-// runtime state — e.g., the active cub context's server URL, a freshly
-// fetched/created BridgeWorkerID, an image tag derived from the server's
-// version — and emits them as a YAML map on stdout.
+// runtime state — e.g., the active cub context's server URL or an image tag
+// derived from the server's version — and emits them as a YAML map on stdout.
 //
 // The collector may also produce .env.secret files inside the package
 // working copy at paths the package's kustomize secretGenerator references.

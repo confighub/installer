@@ -386,7 +386,7 @@ split into four ConfigHub objects:
   <space>/<carrier-name>-render`. On resolution the
   `render-configmap` function renders the AppConfig Unit's data into a
   Kubernetes ConfigMap and upserts it into the placeholder's Data — no
-  bridge, no worker, no apply — so the runtime ConfigMap name flows
+  apply — so the runtime ConfigMap name flows
   through to the workload's `volumeMounts` / `envFrom` reference.
   `--auto-update` keeps the placeholder in sync as the AppConfig Unit
   changes.
@@ -500,7 +500,7 @@ We test all of these against AppConfig-bearing ConfigMaps:
    placeholder Kubernetes/YAML ConfigMap Unit (slug matches the
    carrier name so intra-Space link inference works), and an Upsert
    link from placeholder → AppConfig Unit with the Invocation as its
-   TransformInvocation. No bridge worker required.
+   TransformInvocation.
 8. **Cleanup.** Remove the AppConfig roadmap bullet from
    README.md once 5–7 land.
 

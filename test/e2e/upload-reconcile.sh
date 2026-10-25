@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # upload-reconcile.sh — end-to-end smoke for `installer upload` against a
-# live ConfigHub server, driven by the worker package so the test
+# live ConfigHub server, driven by the collector-app example package so the test
 # exercises BOTH the standard Unit pathway and the AppConfig pathway
 # (render-configmap Invocation + AppConfig Unit + placeholder + Upsert
 # link).
 #
 # Flow:
 #
-#   setup --pull   — pulls worker, runs collector (writes facts), renders
+#   setup --pull   — pulls collector-app, runs collector (writes facts), renders
 #   pin image      — edits facts.yaml to another tag, re-renders via
 #                    `installer render` (bypasses setup's collector,
 #                    which would write the image input back into facts)
@@ -48,8 +48,8 @@
 # Configuration via env vars:
 #   INSTALLER_UPLOAD_SPACE  — override the destination Space slug.
 #                              Default: installer-test-upload-<YYYYMMDD-HHMMSS>.
-#   INSTALLER_UPLOAD_IMAGE  — override the pinned worker image.
-#                              Default: registry.example.com/confighub-worker:v1.0.0.
+#   INSTALLER_UPLOAD_IMAGE  — override the pinned image.
+#                              Default: registry.example.com/collector-app:v1.0.0.
 #                              The image is never pulled; the test only
 #                              asserts the string in rendered output.
 #   INSTALLER_UPLOAD_KEEP_WD=0
@@ -73,10 +73,10 @@ WORK_TMP=
 SPACE=${INSTALLER_UPLOAD_SPACE:-installer-test-upload-$(date -u +%Y%m%d-%H%M%S)}
 KEEP_WD=${INSTALLER_UPLOAD_KEEP_WD:-1}
 VERBOSE=${INSTALLER_UPLOAD_VERBOSE:-0}
-WORKER_SLUG=installer-test-worker
-PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-registry.example.com/confighub-worker:v1.0.0}
+APP_NAME=installer-test-app
+PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-registry.example.com/collector-app:v1.0.0}
 # What setup is given; the pin step below replaces it through facts.yaml.
-INITIAL_IMAGE=registry.example.com/confighub-worker:initial
+INITIAL_IMAGE=registry.example.com/collector-app:initial
 # A Target lives in its own Space so the first upload can bind Units to it
 # via the cross-Space <space>/<target> --target syntax and record the
 # resolved TargetID as $SPACE's "TargetID" annotation.
@@ -119,7 +119,7 @@ cleanup_msg() {
   printf '\n----- inspection state preserved -----\n'
   printf 'Space:    %s\n' "$SPACE"
   printf 'Work-dir: %s\n' "$WORK_TMP"
-  printf '\nClean up the Space (and everything in it — Units, Invocations, Links,\nthe BridgeWorker entity, ChangeSets) plus the Target Space with:\n  cub space delete --recursive %s\n  cub space delete --recursive %s\n' "$SPACE" "$TARGET_SPACE"
+  printf '\nClean up the Space (and everything in it — Units, Invocations, Links,\nChangeSets) plus the Target Space with:\n  cub space delete --recursive %s\n  cub space delete --recursive %s\n' "$SPACE" "$TARGET_SPACE"
   if [[ "$KEEP_WD" = "1" ]]; then
     printf 'Clean up the work-dir with:\n  rm -rf %s\n' "$WORK_TMP"
   fi
@@ -146,7 +146,7 @@ cub space list >/dev/null 2>&1 || fail "cub auth not configured (run \`cub auth 
 command -v kustomize >/dev/null 2>&1 || fail "kustomize not on PATH"
 note "cub OK, kustomize OK"
 note "destination Space: $SPACE"
-note "BridgeWorker slug: $WORKER_SLUG (created in the same Space for clean teardown)"
+note "app name:          $APP_NAME"
 note "pinned image:      $PINNED_IMAGE"
 
 # Refuse to clobber an existing Space (so re-runs don't accidentally
@@ -161,32 +161,29 @@ log "build installer"
 ( cd "$REPO_ROOT" && go build -o bin/installer ./cmd/installer )
 BIN="$REPO_ROOT/bin/installer"
 
-# 3. Pre-create the destination Space so the worker collector can
-#    create the BridgeWorker entity in it (--input space=$SPACE).
-#    Upload's auto-Space-create would otherwise race with the collector,
-#    which runs during setup BEFORE upload.
+# 3. Pre-create the destination Space, so the first upload labels an
+#    existing Space.
 log "pre-create destination Space"
 cub space create --quiet "$SPACE" >/dev/null
 
-# 4. setup --pull against the local worker package. The worker package
-#    declares an AppConfig/Env configMapGenerator (confighub-worker-env),
-#    so upload will exercise the AppConfig pathway in addition to the
-#    standard Unit pathway. The collector runs cub against the active
-#    context to create the BridgeWorker and populate facts.
+# 4. setup --pull against the local collector-app package. It declares an
+#    AppConfig/Env configMapGenerator (collector-app-env), so upload will
+#    exercise the AppConfig pathway in addition to the standard Unit
+#    pathway. The collector reads the active cub context to populate facts
+#    and writes a token for the package's secretGenerator.
 WORK_TMP=$(mktemp -d -t installer-upload-e2e.XXXXXX)
-log "setup --pull (worker package, exercises AppConfig)"
-run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
+log "setup --pull (collector-app package, exercises AppConfig)"
+run setup "$BIN" setup --pull "$REPO_ROOT/examples/collector-app" \
   --work-dir "$WORK_TMP" \
   --non-interactive \
   --namespace "$SPACE" \
-  --input worker_slug="$WORKER_SLUG" \
-  --input space="$SPACE" \
+  --input app_name="$APP_NAME" \
   --input image="$INITIAL_IMAGE" || fail "setup failed (see $WORK_TMP/setup.log)"
 
 [[ -d "$WORK_TMP/out/manifests" ]] || fail "expected $WORK_TMP/out/manifests/"
-[[ -f "$WORK_TMP/out/record/facts.yaml" ]] || fail "expected facts.yaml after setup (worker collector should have run)"
+[[ -f "$WORK_TMP/out/record/facts.yaml" ]] || fail "expected facts.yaml after setup (collector should have run)"
 
-# The worker package's secretGenerator emits the worker secret to
+# The package's secretGenerator emits the collector's token Secret to
 # out/secrets/ (sensitive — never uploaded as a Unit).
 [[ -d "$WORK_TMP/out/secrets" ]] || fail "expected $WORK_TMP/out/secrets/ (rendered Secret routed off the upload path)"
 
@@ -196,7 +193,7 @@ run setup "$BIN" setup --pull "$REPO_ROOT/packages/worker" \
 #    demonstrates that .Facts
 #    is a supported override point and gives us a stable image string
 #    to assert against downstream.
-log "pin worker image to $PINNED_IMAGE (edit facts.yaml + installer render)"
+log "pin image to $PINNED_IMAGE (edit facts.yaml + installer render)"
 note "collector-reported image was:"
 grep -E '^[[:space:]]+image:' "$WORK_TMP/out/record/facts.yaml" | sed 's/^/      /'
 # Use python for a safe in-place YAML update — preserves other fact keys.
@@ -219,16 +216,12 @@ grep -q "image: $PINNED_IMAGE" "$DEP_FILE" \
   || fail "rendered Deployment $(basename "$DEP_FILE") does not reference pinned image $PINNED_IMAGE"
 note "rendered Deployment now references $PINNED_IMAGE"
 
-# The AppConfig ConfigMap (confighub-worker-env) should be present in
+# The AppConfig ConfigMap (collector-app-env) should be present in
 # rendered manifests — upload will split it into a render-configmap
 # Invocation + AppConfig Unit + placeholder.
 appcfg_cm=$(grep -l "installer.confighub.com/toolchain: AppConfig/Env" "$WORK_TMP/out/manifests"/*.yaml | head -1)
 [[ -n "$appcfg_cm" ]] || fail "expected at least one AppConfig-tagged ConfigMap among rendered manifests"
 note "AppConfig carrier ConfigMap: $(basename "$appcfg_cm")"
-
-# Confirm the BridgeWorker entity was created by the collector during setup.
-cub worker list --space "$SPACE" 2>/dev/null | awk '{print $1}' | grep -qx "$WORKER_SLUG" \
-  || fail "collector did not create BridgeWorker '$WORKER_SLUG' in Space $SPACE"
 
 # 5c. Create the cross-Space Target the first upload will bind Units to.
 #     It needs no live cluster — upload only binds Units (sets TargetID),
@@ -268,12 +261,12 @@ grep -qE "^Applied: [1-9][0-9]* created, 0 updated, 0 emptied, 0 revived, 0 adop
 [[ ! -e "$WORK_TMP/out/record/upload.yaml" ]] || fail "upload must not write a local upload.yaml"
 
 # 6a. Standard-Unit assertions. Every resource is its own Unit, named for the
-#     resource: the worker Deployment keeps its bare name.
+#     resource: the Deployment keeps its bare name.
 unit_count=$(cub unit list --space "$SPACE" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')
 note "Units in $SPACE after first upload: $unit_count"
 [[ "$unit_count" -ge 6 ]] || fail "expected at least 6 Units in $SPACE, got $unit_count"
-cub unit get --space "$SPACE" "$WORKER_SLUG" >/dev/null 2>&1 \
-  || fail "expected the worker Deployment's Unit to be named $WORKER_SLUG"
+cub unit get --space "$SPACE" "$APP_NAME" >/dev/null 2>&1 \
+  || fail "expected the Deployment's Unit to be named $APP_NAME"
 
 # 6b. The installer record: one untargeted AppConfig/YAML Unit, a single
 #     document using the configHub schema paths.
@@ -292,11 +285,11 @@ note "installer record: AppConfig/YAML, configSchema InstallerRecord, untargeted
 #     namespace, and an untargeted AppConfig Unit.
 invocation_count=$(cub invocation list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /-render/' | wc -l | tr -d ' ')
 [[ "$invocation_count" -ge 1 ]] || fail "expected at least one render-configmap Invocation in $SPACE (got $invocation_count)"
-cub unit data --space "$SPACE" confighub-worker-env-rendered 2>/dev/null > "$WORK_TMP/rendered.txt"
-grep -q "kind: ConfigMap" "$WORK_TMP/rendered.txt" || fail "placeholder confighub-worker-env-rendered should contain a rendered ConfigMap"
+cub unit data --space "$SPACE" collector-app-env-rendered 2>/dev/null > "$WORK_TMP/rendered.txt"
+grep -q "kind: ConfigMap" "$WORK_TMP/rendered.txt" || fail "placeholder collector-app-env-rendered should contain a rendered ConfigMap"
 grep -q "^  namespace: $SPACE$" "$WORK_TMP/rendered.txt" || fail "rendered ConfigMap should be in namespace $SPACE (see $WORK_TMP/rendered.txt)"
-appcfg_tid=$(unit_jq confighub-worker-env .Unit.TargetID)
-[[ -z "$appcfg_tid" || "$appcfg_tid" == "null" ]] || fail "AppConfig Unit confighub-worker-env should have no Target, got '$appcfg_tid'"
+appcfg_tid=$(unit_jq collector-app-env .Unit.TargetID)
+[[ -z "$appcfg_tid" || "$appcfg_tid" == "null" ]] || fail "AppConfig Unit collector-app-env should have no Target, got '$appcfg_tid'"
 note "rendered ConfigMap present in the placeholder, in namespace $SPACE; AppConfig Unit untargeted"
 
 link_count=$(cub link list --space "$SPACE" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')
@@ -317,11 +310,11 @@ log "metadata assertions: Space labels/annotations, Unit labels/annotations, Tar
 [[ "$(space_jq '.Space.Annotations.TargetID')" == "$TARGET_ID" ]] || fail "Space TargetID annotation != $TARGET_ID (got '$(space_jq '.Space.Annotations.TargetID')')"
 note "Space carries Component=my-component, Variant=base, Namespace, Layer/Environment/Region/Owner, tier, note, TargetID"
 
-[[ "$(unit_jq "$WORKER_SLUG" .Unit.Labels.UploadSource)" == "confighub-worker" ]] || fail "Unit $WORKER_SLUG should be owned by the package (UploadSource=confighub-worker)"
-[[ "$(unit_jq "$WORKER_SLUG" '.Unit.Labels["managed-by"]')" == "installer-e2e" ]] || fail "Unit $WORKER_SLUG managed-by label != installer-e2e (--unit-label)"
-[[ "$(unit_jq "$WORKER_SLUG" '.Unit.Annotations["install-note"]')" == "hello" ]] || fail "Unit $WORKER_SLUG install-note annotation != hello (--unit-annotation)"
-[[ "$(unit_jq "$WORKER_SLUG" .Unit.TargetID)" == "$TARGET_ID" ]] || fail "Unit $WORKER_SLUG TargetID != $TARGET_ID (cross-Space --target binding)"
-note "Unit $WORKER_SLUG: UploadSource=confighub-worker, managed-by=installer-e2e, install-note=hello, TargetID=$TARGET_ID"
+[[ "$(unit_jq "$APP_NAME" .Unit.Labels.UploadSource)" == "collector-app" ]] || fail "Unit $APP_NAME should be owned by the package (UploadSource=collector-app)"
+[[ "$(unit_jq "$APP_NAME" '.Unit.Labels["managed-by"]')" == "installer-e2e" ]] || fail "Unit $APP_NAME managed-by label != installer-e2e (--unit-label)"
+[[ "$(unit_jq "$APP_NAME" '.Unit.Annotations["install-note"]')" == "hello" ]] || fail "Unit $APP_NAME install-note annotation != hello (--unit-annotation)"
+[[ "$(unit_jq "$APP_NAME" .Unit.TargetID)" == "$TARGET_ID" ]] || fail "Unit $APP_NAME TargetID != $TARGET_ID (cross-Space --target binding)"
+note "Unit $APP_NAME: UploadSource=collector-app, managed-by=installer-e2e, install-note=hello, TargetID=$TARGET_ID"
 
 # 7. plan against the unchanged work-dir → No changes.
 log "installer plan (clean) — expect No changes"
@@ -335,11 +328,11 @@ grep -q "^No changes\\.$" "$WORK_TMP/plan-clean.log" \
 #    Unit and is rendered into the placeholder; the placeholder itself is
 #    never a planned write.
 log "AppConfig round-trip: edit the env carrier + render + upload"
-appcfg_in_pkg="$WORK_TMP/package/bases/default/confighub-worker.env"
-[[ -f "$appcfg_in_pkg" ]] || fail "expected $appcfg_in_pkg in pulled worker package"
-sed -i.bak 's/^CONFIGHUB_WORKER_HTTP_SERVER_PORT=.*/CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093/' "$appcfg_in_pkg"
+appcfg_in_pkg="$WORK_TMP/package/bases/default/collector-app.env"
+[[ -f "$appcfg_in_pkg" ]] || fail "expected $appcfg_in_pkg in pulled collector-app package"
+sed -i.bak 's/^HTTP_PORT=.*/HTTP_PORT=8081/' "$appcfg_in_pkg"
 rm -f "$appcfg_in_pkg.bak"
-grep -q '^CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093$' "$appcfg_in_pkg" \
+grep -q '^HTTP_PORT=8081$' "$appcfg_in_pkg" \
   || fail "failed to flip port in $appcfg_in_pkg"
 
 run render-appcfg "$BIN" render --work-dir "$WORK_TMP" || fail "render after AppConfig edit failed (see $WORK_TMP/render-appcfg.log)"
@@ -347,25 +340,25 @@ run render-appcfg "$BIN" render --work-dir "$WORK_TMP" || fail "render after App
 run plan-appcfg "$BIN" plan --work-dir "$WORK_TMP" --space "$SPACE" || fail "plan after AppConfig edit failed (see $WORK_TMP/plan-appcfg.log)"
 grep -q "^Plan: 0 to create, 1 to update, 0 to empty, 0 to revive, 0 to adopt\\.$" "$WORK_TMP/plan-appcfg.log" \
   || fail "plan after AppConfig edit should report exactly 1 update (see $WORK_TMP/plan-appcfg.log)"
-grep -qE "^  Update +confighub-worker-env$" "$WORK_TMP/plan-appcfg.log" \
-  || fail "plan after AppConfig edit should name the AppConfig Unit confighub-worker-env (see $WORK_TMP/plan-appcfg.log)"
+grep -qE "^  Update +collector-app-env$" "$WORK_TMP/plan-appcfg.log" \
+  || fail "plan after AppConfig edit should name the AppConfig Unit collector-app-env (see $WORK_TMP/plan-appcfg.log)"
 
 run upload-appcfg "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" --yes || fail "upload after AppConfig edit failed (see $WORK_TMP/upload-appcfg.log)"
 grep -q "^Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-appcfg.log" \
   || fail "upload after AppConfig edit should report exactly 1 update (see $WORK_TMP/upload-appcfg.log)"
 
-cub unit data --space "$SPACE" confighub-worker-env > "$WORK_TMP/confighub-worker-env.after.txt"
-grep -q "^CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093$" "$WORK_TMP/confighub-worker-env.after.txt" \
-  || fail "AppConfig Unit confighub-worker-env did not pick up the new PORT (see $WORK_TMP/confighub-worker-env.after.txt)"
+cub unit data --space "$SPACE" collector-app-env > "$WORK_TMP/collector-app-env.after.txt"
+grep -q "^HTTP_PORT=8081$" "$WORK_TMP/collector-app-env.after.txt" \
+  || fail "AppConfig Unit collector-app-env did not pick up the new PORT (see $WORK_TMP/collector-app-env.after.txt)"
 rendered_ok=
 for _ in $(seq 1 30); do
-  if cub unit data --space "$SPACE" confighub-worker-env-rendered 2>/dev/null | grep -q 'CONFIGHUB_WORKER_HTTP_SERVER_PORT: "9093"'; then
+  if cub unit data --space "$SPACE" collector-app-env-rendered 2>/dev/null | grep -q 'HTTP_PORT: "8081"'; then
     rendered_ok=1; break
   fi
   sleep 1
 done
-[[ -n "$rendered_ok" ]] || fail "placeholder confighub-worker-env-rendered was not re-rendered with the new PORT"
-note "AppConfig Unit and its rendered ConfigMap now have CONFIGHUB_WORKER_HTTP_SERVER_PORT=9093"
+[[ -n "$rendered_ok" ]] || fail "placeholder collector-app-env-rendered was not re-rendered with the new PORT"
+note "AppConfig Unit and its rendered ConfigMap now have HTTP_PORT=8081"
 
 # 9. Upload again — converges; a bundle with an AppConfig carrier writes nothing.
 log "installer upload (unchanged) — re-run is a no-op"
@@ -428,15 +421,15 @@ PY
 run plan-edited "$BIN" plan --work-dir "$WORK_TMP" --space "$SPACE" || fail "plan after edit failed (see $WORK_TMP/plan-edited.log)"
 grep -q "^Plan: 0 to create, 1 to update, 0 to empty, 0 to revive, 0 to adopt\\.$" "$WORK_TMP/plan-edited.log" \
   || fail "plan after edit should report exactly 1 update (see $WORK_TMP/plan-edited.log)"
-grep -qE "^  Update +$WORKER_SLUG$" "$WORK_TMP/plan-edited.log" \
-  || fail "plan after edit should name $WORKER_SLUG (see $WORK_TMP/plan-edited.log)"
+grep -qE "^  Update +$APP_NAME$" "$WORK_TMP/plan-edited.log" \
+  || fail "plan after edit should name $APP_NAME (see $WORK_TMP/plan-edited.log)"
 
 # 11. Upload — merges the edit.
 log "installer upload (Deployment marker) — applies 1 update"
 run upload-edited "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" --yes || fail "upload failed (see $WORK_TMP/upload-edited.log)"
 grep -q "^Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-edited.log" \
   || fail "upload should apply 1 update (see $WORK_TMP/upload-edited.log)"
-cub unit data --space "$SPACE" "$WORKER_SLUG" > "$WORK_TMP/deployment.after.txt"
+cub unit data --space "$SPACE" "$APP_NAME" > "$WORK_TMP/deployment.after.txt"
 grep -q "installer-test-marker" "$WORK_TMP/deployment.after.txt" \
   || fail "Deployment Unit is missing the injected marker label (see $WORK_TMP/deployment.after.txt)"
 note "Deployment Unit now has the installer-test-marker label"
@@ -499,10 +492,10 @@ note "Unit $DEL_SLUG still exists and no longer contains the ClusterRoleBinding"
 
 # 14. A fresh work-dir recovers the install from the installer record: setup
 #     with no --namespace or --input re-enters the prior choices. --space names
-#     the install, since the organization may hold other installs of the worker.
+#     the install, since the organization may hold other installs of the package.
 log "setup in a fresh work-dir recovers prior state from the installer record"
 RECOVER_WD="$WORK_TMP/recovered"
-run setup-recover "$BIN" setup --pull "$REPO_ROOT/packages/worker" --work-dir "$RECOVER_WD" --non-interactive --space "$SPACE" \
+run setup-recover "$BIN" setup --pull "$REPO_ROOT/examples/collector-app" --work-dir "$RECOVER_WD" --non-interactive --space "$SPACE" \
   || fail "setup in a fresh work-dir failed (see $WORK_TMP/setup-recover.log)"
 grep -q "Loaded prior install state from confighub" "$WORK_TMP/setup-recover.log" \
   || fail "setup should load prior state from ConfigHub (see $WORK_TMP/setup-recover.log)"
@@ -512,8 +505,8 @@ note "fresh work-dir recovered namespace and inputs from the installer record"
 
 log "summary"
 note "Space:           $SPACE"
-note "BridgeWorker:    $WORKER_SLUG (in Space $SPACE)"
-note "Worker image:    $PINNED_IMAGE (pinned via facts.yaml override)"
+note "App:             $APP_NAME"
+note "Image:           $PINNED_IMAGE (pinned via facts.yaml override)"
 note "Work-dir:        $WORK_TMP"
 note ""
 note "Final Unit list:"

@@ -1,3 +1,0 @@
-# The collector writes the worker's id/secret into this file at wizard time.
-# Never commit it.
-bases/default/confighub-worker-secret.env.secret

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: confighubplaceholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: confighubplaceholder
+  template:
+    metadata:
+      labels:
+        app: confighubplaceholder
+    spec:
+      serviceAccountName: collector-app
+      containers:
+        - name: app
+          image: app-image-placeholder
+          envFrom:
+            - configMapRef:
+                name: collector-app-env
+            - secretRef:
+                name: collector-app-secret

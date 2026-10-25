@@ -42,14 +42,13 @@ configured separately).
 ## Find a package
 
 Today, package discovery is convention-based — you find a package by
-its OCI ref (`oci://host/repo:tag`). The installer repo ships two
-packages under `packages/` as starting points:
+its OCI ref (`oci://host/repo:tag`). The installer repo ships
+packages under `packages/` as starting points, among them:
 
 - `packages/kubernetes-resources/` — eleven canonical Kubernetes
   resource templates with best-practice defaults pre-applied. Used
   by `installer new` to scaffold resources into your own packages
   (see [author guide](./author-guide.md#kubernetes-resources-package)).
-- `packages/worker/` — a ConfigHub worker Deployment for an image you supply.
 
 These will move to a separate registry as the catalog grows. Once
 you have a candidate ref:
@@ -178,8 +177,7 @@ tagged with `installer.confighub.com/toolchain`, e.g.
 separate AppConfig Unit holding the raw config body, a
 `render-configmap` Invocation, and a placeholder Kubernetes/YAML Unit
 wired by an Upsert link that renders the ConfigMap into the
-placeholder. No bridge worker is required — rendering runs as a
-built-in function on the server.
+placeholder. Rendering runs as a built-in function on the server.
 
 ## Where to make changes
 
@@ -405,8 +403,8 @@ filtered to components that still exist.
 
 If the package declares a collector, setup re-runs it on every
 invocation. This is the right behavior when cluster state has
-changed in a way the collector picks up (a worker was rotated, the
-cub server moved, etc.):
+changed in a way the collector picks up (a credential was rotated,
+the cub server moved, etc.):
 
 ```bash
 installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
