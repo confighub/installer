@@ -1,0 +1,77 @@
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: collector-app
+installerMetadata:
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: |
+        A Deployment with a collector, an AppConfig/Env carrier and a
+        generated Secret: Namespace, ServiceAccount, ClusterRoleBinding,
+        Deployment. Drives test/e2e/upload-reconcile.sh.
+
+  collector:
+    command: ./collector.sh
+    description: |
+      Reads the server URL from the active cub context, passes the image
+      input through as a fact, and writes a random token to
+      bases/default/collector-app-secret.env.secret for the kustomize
+      secretGenerator.
+
+  inputs:
+    - name: app_name
+      type: string
+      required: true
+      prompt: App name
+      description: Name of the Deployment.
+    - name: image
+      type: string
+      required: true
+      prompt: Image
+      description: The image to run, as registry/name:tag.
+
+  transformers:
+    # Cluster-scoped resources don't get a metadata.namespace from
+    # set-namespace below, so their names encode the namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      description: Set the Namespace metadata.name.
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}"]
+
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'rbac.authorization.k8s.io/v1/ClusterRoleBinding'"
+      description: Set the ClusterRoleBinding metadata.name.
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}-collector-app-view"]
+
+    - toolchain: Kubernetes/YAML
+      description: Per-install customization of the workload.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+        - name: set-default-names
+          args: ["{{ .Inputs.app_name }}"]
+        - name: set-container-image
+          args: ["app", "{{ .Facts.image }}"]
+        - name: set-pod-container-security-context-defaults
+
+    - toolchain: AppConfig/Env
+      description: Set CONFIGHUB_URL on the env ConfigMap.
+      invocations:
+        - name: set-string-path
+          args: ["CollectorApp", "CONFIGHUB_URL", "{{ .Facts.configHubURL }}"]
+
+  validators:
+    - toolchain: Kubernetes/YAML
+      description: Default validators applied at the end of every render.
+      invocations:
+        - name: vet-schemas
+        - name: vet-merge-keys
+        - name: vet-format

@@ -62,7 +62,7 @@ type PackageSpec struct {
 	Inputs []Input `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 
 	// Collector is an executable bundled in the package that the wizard runs
-	// to discover install-time facts (server URL, image tag, worker IDs, etc.)
+	// to discover install-time facts (server URL, image tag, etc.)
 	// and to produce sensitive material as .env.secret files consumed by
 	// kustomize secretGenerator. See Transformers for how facts are
 	// referenced.
@@ -345,14 +345,14 @@ type Collector struct {
 // what env vars the workload accepts and what runtime expectations it has
 // without re-pulling the image.
 type Validation struct {
-	// CommandHelp is a YAML file produced by `cub-worker-run docgen command`
+	// CommandHelp is a YAML file produced by `<image> docgen command`
 	// (Cobra command tree).
 	CommandHelp string `yaml:"commandHelp,omitempty" json:"commandHelp,omitempty"`
 	// EnvSchema is a JSON Schema describing accepted env vars, produced by
-	// `cub-worker-run docgen env`.
+	// `<image> docgen env`.
 	EnvSchema string `yaml:"envSchema,omitempty" json:"envSchema,omitempty"`
 	// RuntimeSpec is the runtime spec YAML produced by
-	// `cub-worker-run docgen runtime` (ports, paths, probes).
+	// `<image> docgen runtime` (ports, paths, probes).
 	RuntimeSpec string `yaml:"runtimeSpec,omitempty" json:"runtimeSpec,omitempty"`
 	// HowToRegenerate is human-readable shell text shown by `installer doc`.
 	HowToRegenerate string `yaml:"howToRegenerate,omitempty" json:"howToRegenerate,omitempty"`

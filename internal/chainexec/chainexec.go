@@ -17,13 +17,12 @@ import (
 
 	"github.com/confighub/installer/pkg/api"
 	fapi "github.com/confighub/sdk/core/function/api"
-	"github.com/confighub/sdk/core/workerapi"
 	funcimpl "github.com/confighub/sdk/function-impl"
 )
 
 // RunChain executes the resolved FunctionChain against the input YAML stream.
 // Each group fires one FunctionInvocationRequest; the response's ConfigData
-// feeds the next group. Mirrors invokeLocalFunctions in cub's worker_install.
+// feeds the next group.
 func RunChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]byte, error) {
 	executor := funcimpl.NewStandardExecutor(nil, true)
 	registered := executor.RegisteredFunctions()
@@ -32,8 +31,9 @@ func RunChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 	// the conversion happens here rather than in every one of them.
 	data := string(input)
 	for i, group := range chain.Spec.Groups {
-		toolchain := workerapi.ToolchainType(group.Toolchain)
-		fns, ok := registered[toolchain]
+		var fctx fapi.FunctionContext
+		setToolchain(&fctx.ToolchainType, group.Toolchain)
+		fns, ok := registered[fctx.ToolchainType]
 		if !ok {
 			return nil, fmt.Errorf("group %d: no functions registered for toolchain %q", i, group.Toolchain)
 		}
@@ -55,7 +55,7 @@ func RunChain(ctx context.Context, chain *api.FunctionChain, input []byte) ([]by
 		}
 
 		req := &fapi.FunctionInvocationRequest{
-			FunctionContext: fapi.FunctionContext{ToolchainType: toolchain},
+			FunctionContext: fctx,
 			ConfigData:      data,
 			FunctionInvocationOptions: fapi.FunctionInvocationOptions{
 				WhereResource: group.WhereResource,
@@ -101,8 +101,9 @@ func RunValidators(ctx context.Context, groups []api.FunctionGroup, data []byte)
 
 	var failures []ValidatorFailure
 	for i, group := range groups {
-		toolchain := workerapi.ToolchainType(group.Toolchain)
-		fns, ok := registered[toolchain]
+		var fctx fapi.FunctionContext
+		setToolchain(&fctx.ToolchainType, group.Toolchain)
+		fns, ok := registered[fctx.ToolchainType]
 		if !ok {
 			return nil, fmt.Errorf("validators group %d: no functions registered for toolchain %q", i, group.Toolchain)
 		}
@@ -127,7 +128,7 @@ func RunValidators(ctx context.Context, groups []api.FunctionGroup, data []byte)
 			})
 		}
 		req := &fapi.FunctionInvocationRequest{
-			FunctionContext: fapi.FunctionContext{ToolchainType: toolchain},
+			FunctionContext: fctx,
 			ConfigData:      string(data),
 			FunctionInvocationOptions: fapi.FunctionInvocationOptions{
 				WhereResource: group.WhereResource,
@@ -236,7 +237,7 @@ func FormatValidatorFailures(failures []ValidatorFailure) string {
 // becomes a positional argument with Value=<arg>.
 //
 // Mirrors the parser in public/cmd/cub/function_do.go so chain templates can
-// use the same `--liveness-path=/internal/ok` style as worker_install.go.
+// use the same `--liveness-path=/internal/ok` style as `cub function do`.
 func ParseFunctionArguments(args []string) ([]fapi.FunctionArgument, error) {
 	out := make([]fapi.FunctionArgument, 0, len(args))
 	namedMode := false
@@ -254,4 +255,11 @@ func ParseFunctionArguments(args []string) ([]fapi.FunctionArgument, error) {
 		out = append(out, fapi.FunctionArgument{Value: a})
 	}
 	return out, nil
+}
+
+// setToolchain stores a toolchain name in the SDK's toolchain type. The type
+// is inferred from dst, so this package does not import the SDK package that
+// declares it.
+func setToolchain[T ~string](dst *T, toolchain string) {
+	*dst = T(toolchain)
 }

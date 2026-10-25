@@ -282,11 +282,11 @@ installed, the same commands work via `cub installer ...`.
 ├── pkg/api/                    # Package, Selection, Inputs, FunctionChain,
 │                               # Lock schemas
 ├── packages/                   # "published" packages bundled in this repo
-│   ├── kubernetes-resources/   # 11 canonical resource templates with
-│   │                           # per-type defaults (used by `installer new`)
-│   └── worker/                 # ConfigHub bridge worker
+│   └── kubernetes-resources/   # 11 canonical resource templates with
+│                               # per-type defaults (used by `installer new`)
 ├── examples/                   # test fixtures for the e2e + unit tests
 │   ├── hello-app/              # single-package end-to-end test package
+│   ├── collector-app/          # collector + AppConfig package for upload-reconcile.sh
 │   ├── example-base/           # multi-package: shared base
 │   └── example-stack/          # multi-package: depends on example-base
 ├── docs/                       # design + implementation plans (see below)
@@ -358,7 +358,7 @@ day-2 flow against the live server:
 setup --pull (edited source) → upload → setup --set-image → upload →
 setup (override carries forward) → upload (no-op) → --set-image preflight
 rejection`. Spaces created with the `installer-e2e-*` prefix are cleaned on
-exit. `test/e2e/upload-reconcile.sh` drives the worker package, which has an
+exit. `test/e2e/upload-reconcile.sh` drives `examples/collector-app`, which has an
 AppConfig carrier and a collector, through upload, re-upload, emptying, a
 DestroyGate refusal, and recovering a fresh work-dir from ConfigHub.
 
