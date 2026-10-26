@@ -5,8 +5,8 @@ go 1.25.0
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/confighub/sdk/core v0.8.32
-	github.com/confighub/sdk/function-impl v0.8.32
+	github.com/confighub/sdk/core v0.9.5
+	github.com/confighub/sdk/function-impl v0.9.5
 	github.com/google/uuid v1.6.0
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00
 	github.com/opencontainers/go-digest v1.0.0
@@ -34,15 +34,15 @@ require (
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
-	github.com/confighub/sdk/configkit/appyamlkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/envkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/inikit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/jsonkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/k8skit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/propkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/textkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/tomlkit v0.8.32 // indirect
-	github.com/confighub/sdk/configkit/yqkit v0.8.32 // indirect
+	github.com/confighub/sdk/configkit/appyamlkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/envkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/inikit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/jsonkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/k8skit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/propkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/textkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/tomlkit v0.9.5 // indirect
+	github.com/confighub/sdk/configkit/yqkit v0.9.5 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
@@ -140,6 +140,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	k8s.io/kubectl v0.33.1 // indirect
+	k8s.io/pod-security-admission v0.33.1 // indirect
 	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.19.0 // indirect
