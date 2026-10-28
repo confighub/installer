@@ -257,7 +257,6 @@ func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) 
 		Variant:       f.variant,
 		SpaceLabels:   map[string]string{},
 		TargetIDs:     map[string]goclientnew.UUID{},
-		SourceRef:     workDir,
 		ClientVersion: version.Version,
 	}
 	for label, value := range map[string]string{

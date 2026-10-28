@@ -137,7 +137,6 @@ func TestBuildRequest(t *testing.T) {
 		Variant:     "base",
 		SpaceLabels: map[string]string{"Environment": "Prod"},
 		TargetIDs:   map[string]goclientnew.UUID{"web-space": target},
-		SourceRef:   "/work",
 	}
 
 	req, err := BuildRequest(parent, packages, opts)
@@ -164,8 +163,13 @@ func TestBuildRequest(t *testing.T) {
 	if strings.Join(c.DependsOn, ",") != "db" {
 		t.Errorf("the parent depends on its dependency's component: %v", c.DependsOn)
 	}
-	if req.Source == nil || req.Source.Client != "installer" || req.Source.Ref != "/work" {
-		t.Errorf("source = %+v", req.Source)
+	// The source is the package, so a Unit's description names what it came
+	// from rather than a work-dir on the operator's machine.
+	if req.Source == nil || req.Source.Client != "installer" || req.Source.Ref != "web@1.2.3" {
+		t.Errorf("source = %+v, want installer's web@1.2.3", req.Source)
+	}
+	if req.ChangeDescription != "installer upload of web@1.2.3" {
+		t.Errorf("change description = %q", req.ChangeDescription)
 	}
 
 	depReq, err := BuildRequest(dep, packages, opts)
@@ -178,6 +182,9 @@ func TestBuildRequest(t *testing.T) {
 	}
 	if len(d.DependsOn) != 0 || d.TargetID != nil {
 		t.Errorf("dependency = %+v", d)
+	}
+	if depReq.Source == nil || depReq.Source.Ref != "db@1.2.3" {
+		t.Errorf("a dependency's source is its own package: %+v", depReq.Source)
 	}
 }
 

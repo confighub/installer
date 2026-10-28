@@ -33,9 +33,7 @@ type RequestOptions struct {
 	TargetIDs map[string]goclientnew.UUID
 	// ChangeSetID is an existing ChangeSet every package's writes join, so one
 	// restore reverts the whole install. Nil gives each Space its own.
-	ChangeSetID *goclientnew.UUID
-	// SourceRef is recorded as each Space's ExternalSourceRef.
-	SourceRef     string
+	ChangeSetID   *goclientnew.UUID
 	ClientVersion string
 }
 
@@ -98,14 +96,18 @@ func BuildRequest(pkg Package, packages []Package, opts RequestOptions) (goclien
 		}
 	}
 
+	// The package, as <name>@<version>, is where the Units' content comes
+	// from: ConfigHub records it as the Space's ExternalSourceRef and names it
+	// in the description of each Unit an upload updates or empties.
+	source := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
 	return goclientnew.UploadRequest{
 		Files:                files,
 		Components:           []goclientnew.UploadComponentRequest{component},
 		ChangeSetID:          opts.ChangeSetID,
-		ChangeSetDescription: fmt.Sprintf("installer upload of %s@%s", pkg.Name, pkg.Version),
-		ChangeDescription:    fmt.Sprintf("installer upload of %s@%s", pkg.Name, pkg.Version),
+		ChangeSetDescription: "installer upload of " + source,
+		ChangeDescription:    "installer upload of " + source,
 		Source: &goclientnew.UploadSourceInfo{
-			Ref:           opts.SourceRef,
+			Ref:           source,
 			Client:        "installer",
 			ClientVersion: opts.ClientVersion,
 		},
