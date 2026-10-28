@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -72,7 +73,57 @@ func ParsePackage(data []byte) (*Package, error) {
 	if err := validateConflictReplaces(&p); err != nil {
 		return nil, err
 	}
+	if err := validateComponentGroups(&p); err != nil {
+		return nil, err
+	}
 	return &p, nil
+}
+
+// validateComponentGroups enforces structural rules on spec.componentGroups:
+// names are required and unique, every member is a declared Component that
+// belongs to no other group, and at most one member is a default, since the
+// default preset would otherwise select two alternatives.
+func validateComponentGroups(p *Package) error {
+	if len(p.Spec.ComponentGroups) == 0 {
+		return nil
+	}
+	components := make(map[string]*Component, len(p.Spec.Components))
+	for i := range p.Spec.Components {
+		components[p.Spec.Components[i].Name] = &p.Spec.Components[i]
+	}
+	groupNames := map[string]struct{}{}
+	memberOf := map[string]string{}
+	for i, g := range p.Spec.ComponentGroups {
+		where := fmt.Sprintf("spec.componentGroups[%d]", i)
+		if g.Name == "" {
+			return fmt.Errorf("%s: name is required", where)
+		}
+		if _, dup := groupNames[g.Name]; dup {
+			return fmt.Errorf("%s: duplicate group name %q", where, g.Name)
+		}
+		groupNames[g.Name] = struct{}{}
+		if len(g.Components) < 2 {
+			return fmt.Errorf("%s (%s): a group needs at least two components", where, g.Name)
+		}
+		var defaults []string
+		for _, m := range g.Components {
+			c, ok := components[m]
+			if !ok {
+				return fmt.Errorf("%s (%s): component %q is not declared in spec.components", where, g.Name, m)
+			}
+			if other, in := memberOf[m]; in {
+				return fmt.Errorf("%s (%s): component %q is already in group %q", where, g.Name, m, other)
+			}
+			memberOf[m] = g.Name
+			if c.Default {
+				defaults = append(defaults, m)
+			}
+		}
+		if len(defaults) > 1 {
+			return fmt.Errorf("%s (%s): only one member may set default: true, but %s do", where, g.Name, strings.Join(defaults, " and "))
+		}
+	}
+	return nil
 }
 
 // validateDependencies enforces structural rules on spec.dependencies:

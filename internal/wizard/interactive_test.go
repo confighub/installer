@@ -53,6 +53,33 @@ func TestResolvePreset(t *testing.T) {
 	}
 }
 
+func TestResolvePresetAllTakesOneMemberPerGroup(t *testing.T) {
+	pkg := &api.Package{
+		Spec: api.PackageSpec{
+			Components: []api.Component{
+				{Name: "argocd"},
+				{Name: "flux", Default: true},
+				{Name: "s3"},
+				{Name: "gcs"},
+				{Name: "monitoring"},
+			},
+			ComponentGroups: []api.ComponentGroup{
+				{Name: "controller", Components: []string{"argocd", "flux"}, Required: true},
+				{Name: "storage", Components: []string{"s3", "gcs"}},
+			},
+		},
+	}
+	got, err := ResolvePreset(pkg, PresetAll)
+	if err != nil {
+		t.Fatalf("ResolvePreset: %v", err)
+	}
+	// The default member of a group, else its first.
+	want := []string{"flux", "s3", "monitoring"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v want %v", got, want)
+	}
+}
+
 func TestDefaultBaseName(t *testing.T) {
 	pkg := &api.Package{
 		Spec: api.PackageSpec{

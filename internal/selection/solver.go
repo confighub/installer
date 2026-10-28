@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 // Package selection resolves a user's raw component picks against the package
-// manifest: closes the set under Requires, rejects Conflicts, validates
-// against the chosen Base via ValidForBases, and picks a Base when the user
-// did not specify one. Output is a Selection ready to drive render.
+// manifest: closes the set under Requires, selects the default member of each
+// required ComponentGroup left empty, rejects Conflicts and two members of one
+// group, validates against the chosen Base via ValidForBases, and picks a Base
+// when the user did not specify one. Output is a Selection ready to drive
+// render.
 package selection
 
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/confighub/installer/pkg/api"
 )
@@ -30,21 +33,36 @@ func Resolve(pkg *api.Package, baseName string, picks []string) (*api.Selection,
 
 	byName := indexComponents(pkg)
 
-	// Closure under Requires (BFS from picks).
 	selected := map[string]struct{}{}
-	queue := append([]string(nil), picks...)
-	for len(queue) > 0 {
-		name := queue[0]
-		queue = queue[1:]
-		if _, ok := selected[name]; ok {
-			continue
+	if err := closeUnderRequires(pkg, byName, selected, picks); err != nil {
+		return nil, err
+	}
+	// A required group nothing selected a member of gets its default
+	// member, and what that requires. Each pass adds a member to a group
+	// that had none, so this ends.
+	for {
+		added, err := selectGroupDefaults(pkg, byName, selected)
+		if err != nil {
+			return nil, err
 		}
-		c, ok := byName[name]
-		if !ok {
-			return nil, fmt.Errorf("unknown component %q (declared in %s)", name, pkg.Metadata.Name)
+		if len(added) == 0 {
+			break
 		}
-		selected[name] = struct{}{}
-		queue = append(queue, c.Requires...)
+		if err := closeUnderRequires(pkg, byName, selected, added); err != nil {
+			return nil, err
+		}
+	}
+	for _, g := range pkg.Spec.ComponentGroups {
+		var members []string
+		for _, m := range g.Components {
+			if _, ok := selected[m]; ok {
+				members = append(members, m)
+			}
+		}
+		if len(members) > 1 {
+			return nil, fmt.Errorf("components %s are alternatives in group %q; select one",
+				strings.Join(quoteAll(members), " and "), g.Name)
+		}
 	}
 
 	// ValidForBases check.
@@ -96,6 +114,66 @@ func Resolve(pkg *api.Package, baseName string, picks []string) (*api.Selection,
 			Components:     out,
 		},
 	}, nil
+}
+
+// closeUnderRequires adds names, and everything they require, to selected.
+func closeUnderRequires(pkg *api.Package, byName map[string]*api.Component, selected map[string]struct{}, names []string) error {
+	queue := append([]string(nil), names...)
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		if _, ok := selected[name]; ok {
+			continue
+		}
+		c, ok := byName[name]
+		if !ok {
+			return fmt.Errorf("unknown component %q (declared in %s)", name, pkg.Metadata.Name)
+		}
+		selected[name] = struct{}{}
+		queue = append(queue, c.Requires...)
+	}
+	return nil
+}
+
+// selectGroupDefaults selects the default member of each required group
+// that has no selected member, and returns the members it selected. A
+// required group with no default member is an error naming the choices.
+func selectGroupDefaults(pkg *api.Package, byName map[string]*api.Component, selected map[string]struct{}) ([]string, error) {
+	var added []string
+	for _, g := range pkg.Spec.ComponentGroups {
+		if !g.Required {
+			continue
+		}
+		def := ""
+		have := false
+		for _, m := range g.Components {
+			if _, ok := selected[m]; ok {
+				have = true
+				break
+			}
+			if c := byName[m]; c != nil && c.Default {
+				def = m
+			}
+		}
+		if have {
+			continue
+		}
+		if def == "" {
+			return nil, fmt.Errorf("group %q needs one of components %s; select one",
+				g.Name, strings.Join(quoteAll(g.Components), ", "))
+		}
+		selected[def] = struct{}{}
+		added = append(added, def)
+	}
+	return added, nil
+}
+
+func quoteAll(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = fmt.Sprintf("%q", n)
+	}
+	return out
 }
 
 func chooseBase(pkg *api.Package, requested string) (string, error) {

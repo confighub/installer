@@ -178,7 +178,7 @@ func askComponents(pkg *api.Package, prior *PriorState, opts AskOptions) (string
 		Description: func(value string, _ int) string {
 			switch value {
 			case PresetMinimal:
-				return "just the base; nothing optional"
+				return "just the base, and the default of each required group"
 			case PresetDefault:
 				return "components the package marks default"
 			case PresetAll:
@@ -231,16 +231,34 @@ func defaultComponents(pkg *api.Package) []string {
 	return out
 }
 
+// allComponents is every component, except that of a group's alternatives
+// it takes only the default member, or the first when none is the default:
+// the members of a group can't be installed together.
 func allComponents(pkg *api.Package) []string {
 	out := make([]string, 0, len(pkg.Spec.Components))
 	for _, c := range pkg.Spec.Components {
+		if g := pkg.ComponentGroupOf(c.Name); g != nil && groupChoice(pkg, g) != c.Name {
+			continue
+		}
 		out = append(out, c.Name)
 	}
 	return out
 }
 
+// groupChoice is the member of g the all preset takes: its default member, or
+// its first.
+func groupChoice(pkg *api.Package, g *api.ComponentGroup) string {
+	for _, c := range pkg.Spec.Components {
+		if c.Default && pkg.ComponentGroupOf(c.Name) == g {
+			return c.Name
+		}
+	}
+	return g.Components[0]
+}
+
+// askComponentMultiSelect asks one question per component group, a choice
+// among its members, then a multi-select of the components in no group.
 func askComponentMultiSelect(pkg *api.Package, prior *PriorState, opts AskOptions) ([]string, error) {
-	names := allComponents(pkg)
 	descrs := map[string]string{}
 	for _, c := range pkg.Spec.Components {
 		descrs[c.Name] = c.Description
@@ -249,8 +267,8 @@ func askComponentMultiSelect(pkg *api.Package, prior *PriorState, opts AskOption
 	if prior != nil && prior.Selection != nil {
 		// Preserve only those that still exist in the new package.
 		valid := map[string]struct{}{}
-		for _, n := range names {
-			valid[n] = struct{}{}
+		for _, c := range pkg.Spec.Components {
+			valid[c.Name] = struct{}{}
 		}
 		for _, n := range prior.Selection.Spec.Components {
 			if _, ok := valid[n]; ok {
@@ -260,20 +278,90 @@ func askComponentMultiSelect(pkg *api.Package, prior *PriorState, opts AskOption
 	} else {
 		def = defaultComponents(pkg)
 	}
+	isDefault := map[string]bool{}
+	for _, n := range def {
+		isDefault[n] = true
+	}
+
 	var picked []string
-	q := &survey.MultiSelect{
-		Message: "Pick components:",
-		Options: names,
+	for i := range pkg.Spec.ComponentGroups {
+		g := &pkg.Spec.ComponentGroups[i]
+		choice, err := askComponentGroup(g, isDefault, descrs, opts)
+		if err != nil {
+			return nil, err
+		}
+		if choice != "" {
+			picked = append(picked, choice)
+		}
+	}
+
+	var names, ungroupedDefault []string
+	for _, c := range pkg.Spec.Components {
+		if pkg.ComponentGroupOf(c.Name) != nil {
+			continue
+		}
+		names = append(names, c.Name)
+		if isDefault[c.Name] {
+			ungroupedDefault = append(ungroupedDefault, c.Name)
+		}
+	}
+	if len(names) > 0 {
+		var rest []string
+		q := &survey.MultiSelect{
+			Message: "Pick components:",
+			Options: names,
+			Default: ungroupedDefault,
+			Description: func(value string, _ int) string {
+				return descrs[value]
+			},
+		}
+		if err := ask(q, &rest, opts); err != nil {
+			return nil, err
+		}
+		picked = append(picked, rest...)
+	}
+	sort.Strings(picked)
+	return picked, nil
+}
+
+// noComponent is the choice of no member in a group that isn't required.
+const noComponent = "(none)"
+
+// askComponentGroup asks which of a group's members to install, defaulting to
+// the one already chosen. It returns "" for none.
+func askComponentGroup(g *api.ComponentGroup, isDefault map[string]bool, descrs map[string]string, opts AskOptions) (string, error) {
+	options := append([]string(nil), g.Components...)
+	def := options[0]
+	if !g.Required {
+		options = append(options, noComponent)
+		def = noComponent
+	}
+	for _, m := range g.Components {
+		if isDefault[m] {
+			def = m
+			break
+		}
+	}
+	message := g.Name + ":"
+	if g.Description != "" {
+		message = g.Name + " (" + g.Description + "):"
+	}
+	var choice string
+	q := &survey.Select{
+		Message: message,
+		Options: options,
 		Default: def,
 		Description: func(value string, _ int) string {
 			return descrs[value]
 		},
 	}
-	if err := ask(q, &picked, opts); err != nil {
-		return nil, err
+	if err := ask(q, &choice, opts); err != nil {
+		return "", err
 	}
-	sort.Strings(picked)
-	return picked, nil
+	if choice == noComponent {
+		return "", nil
+	}
+	return choice, nil
 }
 
 func askNamespace(prior *PriorState, opts AskOptions) (string, error) {

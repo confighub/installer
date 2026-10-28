@@ -355,3 +355,62 @@ func TestMarshalRoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 }
+
+func TestParsePackageComponentGroups(t *testing.T) {
+	withGroups := func(groups string) string {
+		return strings.Replace(validPackage, "  inputs:", groups+"  inputs:", 1)
+	}
+	if _, err := api.ParsePackage([]byte(withGroups(`  componentGroups:
+    - name: pair
+      components: [foo, bar]
+      required: true
+`))); err != nil {
+		t.Fatalf("valid group rejected: %v", err)
+	}
+	cases := map[string]struct{ groups, want string }{
+		"no name": {`  componentGroups:
+    - components: [foo, bar]
+`, "name is required"},
+		"one member": {`  componentGroups:
+    - name: pair
+      components: [foo]
+`, "at least two components"},
+		"undeclared member": {`  componentGroups:
+    - name: pair
+      components: [foo, baz]
+`, `component "baz" is not declared`},
+		"member of two groups": {`  componentGroups:
+    - name: one
+      components: [foo, bar]
+    - name: two
+      components: [bar, foo]
+`, `component "bar" is already in group "one"`},
+		"duplicate name": {`  componentGroups:
+    - name: one
+      components: [foo, bar]
+    - name: one
+      components: [foo, bar]
+`, `duplicate group name "one"`},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := api.ParsePackage([]byte(withGroups(tc.groups)))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want one containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestParsePackageRejectsTwoDefaultsInAGroup(t *testing.T) {
+	bad := strings.Replace(validPackage, "    - name: bar\n      path: components/bar\n",
+		"    - name: bar\n      path: components/bar\n      default: true\n", 1)
+	bad = strings.Replace(bad, "  inputs:", `  componentGroups:
+    - name: pair
+      components: [foo, bar]
+  inputs:`, 1)
+	_, err := api.ParsePackage([]byte(bad))
+	if err == nil || !strings.Contains(err.Error(), "only one member may set default: true, but foo and bar do") {
+		t.Fatalf("error = %v, want one naming both defaults", err)
+	}
+}
