@@ -107,3 +107,72 @@ func TestResolveDeterministicOrder(t *testing.T) {
 			a.Spec.Components, b.Spec.Components)
 	}
 }
+
+// mkGroupPkg declares a required group of controllers, argocd its default,
+// and an optional group of storage backends with no default.
+func mkGroupPkg() *api.Package {
+	return &api.Package{
+		Metadata: api.Metadata{Name: "p"},
+		Spec: api.PackageSpec{
+			Bases: []api.Base{{Name: "default", Path: "bases/default", Default: true}},
+			Components: []api.Component{
+				{Name: "argocd", Path: "components/argocd", Default: true},
+				{Name: "flux", Path: "components/flux"},
+				{Name: "flux-notifications", Path: "components/flux-notifications", Requires: []string{"flux"}},
+				{Name: "s3", Path: "components/s3"},
+				{Name: "gcs", Path: "components/gcs"},
+				{Name: "monitoring", Path: "components/monitoring"},
+			},
+			ComponentGroups: []api.ComponentGroup{
+				{Name: "controller", Components: []string{"argocd", "flux"}, Required: true},
+				{Name: "storage", Components: []string{"s3", "gcs"}},
+			},
+		},
+	}
+}
+
+func TestResolveComponentGroups(t *testing.T) {
+	cases := []struct {
+		name  string
+		picks []string
+		want  string // the resolved components, or the error's substring
+		err   bool
+	}{
+		{"nothing picked selects the required group's default", nil, "argocd", false},
+		{"another pick still gets the default", []string{"monitoring"}, "argocd,monitoring", false},
+		{"picking a member replaces the default", []string{"flux"}, "flux", false},
+		{"a member reached through requires counts", []string{"flux-notifications"}, "flux,flux-notifications", false},
+		{"an optional group may stay empty", []string{"s3"}, "argocd,s3", false},
+		{"two members of a group", []string{"argocd", "flux"}, `"argocd" and "flux" are alternatives in group "controller"`, true},
+		{"two members of an optional group", []string{"s3", "gcs"}, `group "storage"`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel, err := selection.Resolve(mkGroupPkg(), "", tc.picks)
+			if tc.err {
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("error = %v, want one containing %q", err, tc.want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if got := strings.Join(sel.Spec.Components, ","); got != tc.want {
+				t.Errorf("components = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveRequiredGroupWithoutDefault(t *testing.T) {
+	pkg := mkGroupPkg()
+	pkg.Spec.Components[0].Default = false
+	_, err := selection.Resolve(pkg, "", nil)
+	if err == nil || !strings.Contains(err.Error(), `group "controller" needs one of components "argocd", "flux"`) {
+		t.Fatalf("error = %v, want one naming the group's components", err)
+	}
+	if _, err := selection.Resolve(pkg, "", []string{"flux"}); err != nil {
+		t.Fatalf("an explicit member should satisfy the group: %v", err)
+	}
+}

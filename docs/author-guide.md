@@ -229,6 +229,42 @@ spec:
               args: ['.spec.endpoints[].interval = "{{ .Inputs.scrape_interval }}"']
   ```
 
+### `spec.componentGroups`
+
+Alternatives: components that implement one thing differently, such as
+the GitOps controller a bot drives, and can't be installed together.
+
+```yaml
+spec:
+  components:
+    - name: argocd
+      path: components/argocd
+      default: true
+    - name: flux
+      path: components/flux
+    - name: sveltos
+      path: components/sveltos
+  componentGroups:
+    - name: controller
+      description: The GitOps controller to drive.
+      components: [argocd, flux, sveltos]
+      required: true
+```
+
+- Selecting two members of a group is an error at solve time, so the
+  members need no `conflicts:` with one another.
+- `required: true` means exactly one member, not at most one. When
+  nothing selects a member — the `minimal` preset, or `--select` of
+  other components — the solver selects the member with
+  `default: true`, and what it `requires:`. A required group without a
+  default member makes the operator pick one.
+- The `all` preset takes only one member of each group: the default
+  member, or the first.
+- The interactive wizard's `selected` mode asks one question per
+  group, then offers the other components as a multi-select.
+- A component belongs to at most one group, and at most one member of
+  a group may set `default: true`.
+
 ### `spec.inputs`
 
 Wizard prompts. Referenced in `spec.transformers` (and

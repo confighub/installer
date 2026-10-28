@@ -115,6 +115,21 @@ func printPackageDoc(p *api.Package) {
 		fmt.Println()
 	}
 
+	if len(p.Spec.ComponentGroups) > 0 {
+		fmt.Println("Component groups:")
+		for _, g := range p.Spec.ComponentGroups {
+			choose := "at most one of"
+			if g.Required {
+				choose = "exactly one of"
+			}
+			fmt.Printf("  - %s: %s %s\n", g.Name, choose, strings.Join(g.Components, ", "))
+			if g.Description != "" {
+				fmt.Printf("      %s\n", g.Description)
+			}
+		}
+		fmt.Println()
+	}
+
 	if len(p.Spec.Dependencies) > 0 {
 		fmt.Println("Dependencies:")
 		for _, d := range p.Spec.Dependencies {

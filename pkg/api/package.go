@@ -38,6 +38,10 @@ type PackageSpec struct {
 	// closed under Requires.
 	Components []Component `yaml:"components,omitempty" json:"components,omitempty"`
 
+	// ComponentGroups are sets of alternative Components, of which at most
+	// one may be selected, and exactly one when the group is Required.
+	ComponentGroups []ComponentGroup `yaml:"componentGroups,omitempty" json:"componentGroups,omitempty"`
+
 	// ExternalRequires lists preconditions the cluster must satisfy. Evaluated
 	// at install-time by `installer preflight` and surfaced in the wizard.
 	ExternalRequires []ExternalRequire `yaml:"externalRequires,omitempty" json:"externalRequires,omitempty"`
@@ -174,6 +178,38 @@ type Component struct {
 	// to PackageSpec.Validators when this component is selected; same
 	// "Mutating=false only" contract.
 	Validators []FunctionGroup `yaml:"validators,omitempty" json:"validators,omitempty"`
+}
+
+// ComponentGroup names alternative Components: implementations of one thing,
+// such as the controller a bot drives, that cannot be installed together.
+// Selecting two of its members is an error, so they need no Conflicts with
+// one another. When the group is Required and nothing selects a member, the
+// solver selects the member marked Default, so every preset (minimal
+// included) and every explicit selection yields a working install.
+type ComponentGroup struct {
+	// Name identifies the group in errors, `installer doc` and the wizard.
+	Name string `yaml:"name" json:"name"`
+	// Description is shown by `installer doc` and the wizard.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Components names the members. A Component belongs to at most one group.
+	Components []string `yaml:"components" json:"components"`
+	// Required means exactly one member must be selected rather than at most
+	// one. A required group needs a member with Default: true, or the
+	// operator must always pick one.
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+}
+
+// ComponentGroupOf returns the group the named Component belongs to, or nil.
+func (p *Package) ComponentGroupOf(component string) *ComponentGroup {
+	for i := range p.Spec.ComponentGroups {
+		g := &p.Spec.ComponentGroups[i]
+		for _, m := range g.Components {
+			if m == component {
+				return g
+			}
+		}
+	}
+	return nil
 }
 
 // ExternalRequireKind enumerates the typed precondition categories observed
