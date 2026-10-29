@@ -237,6 +237,18 @@ func ParseInputs(data []byte) (*Inputs, error) {
 	return &i, nil
 }
 
+// ParseSource parses source.yaml bytes into Source.
+func ParseSource(data []byte) (*Source, error) {
+	var s Source
+	if err := yaml.Unmarshal(data, &s); err != nil {
+		return nil, fmt.Errorf("parse Source: %w", err)
+	}
+	if s.Kind != "" && s.Kind != KindSource {
+		return nil, fmt.Errorf("unexpected kind %q (want %q)", s.Kind, KindSource)
+	}
+	return &s, nil
+}
+
 // ParseFacts parses facts.yaml bytes into Facts.
 func ParseFacts(data []byte) (*Facts, error) {
 	var f Facts

@@ -5,7 +5,9 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -157,6 +159,9 @@ When the upload would empty any Unit it lists them and asks first, unless
 				upload.Report(os.Stdout, result, false)
 				failed = failed || upload.Failed(result)
 				results = append(results, result)
+				if err := hideRecord(ctx, prepared.client, pkg); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not hide the installer record in Space %s: %v\n", pkg.SpaceSlug, err)
+				}
 				printRevert(ctx, prepared.client, pkg, result)
 			}
 			fmt.Printf("\n%s\n", upload.Summarize(results).Applied())
@@ -193,8 +198,8 @@ func printRevert(ctx context.Context, c *cubapi.Client, pkg upload.Package, resu
 			if cs, err := cubapi.ResolveChangeSet(ctx, c, cubapi.RefFromID(*s.ChangeSetID), cubapi.ResolveOpts{}); err == nil && cs.ChangeSet != nil {
 				ref = cs.ChangeSet.Slug
 			}
-			fmt.Printf("\nRevert this upload of %s with:\n  cub unit update --patch --space %s --restore Before:ChangeSet:%s --where \"Labels.UploadSource = '%s'\"\n",
-				s.SpaceSlug, s.SpaceSlug, ref, pkg.Name)
+			fmt.Printf("\nRevert this upload of %s with:\n  cub unit update --patch --space %s --restore Before:ChangeSet:%s --where \"Labels.UploadSource = '%s'\" --include-hidden=%s\n",
+				s.SpaceSlug, s.SpaceSlug, ref, pkg.Name, upload.RecordHiddenReason)
 		}
 	}
 }
@@ -503,21 +508,61 @@ func validateSpaceAnnotationFlags(vals []string) error {
 	return nil
 }
 
+// hideRecord hides the installer record Unit an upload of pkg wrote, as a dot
+// file is hidden: it is there for the installer to re-enter the install, and
+// users rarely need to see it among the package's Units. A record already
+// hidden, for this reason or another someone gave it, is left alone.
+func hideRecord(ctx context.Context, c *cubapi.Client, pkg upload.Package) error {
+	space, err := existingSpace(ctx, c, pkg.SpaceSlug)
+	if err != nil || space == nil {
+		return err
+	}
+	where := cubapi.Where{}.
+		Eq("SpaceID", space.SpaceID.String()).
+		Eq("Labels.UploadSource", pkg.Name).
+		Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
+	units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{IncludeHidden: "*"})
+	if err != nil {
+		return err
+	}
+	for _, u := range units {
+		if u.Unit.HiddenReason != "" {
+			continue
+		}
+		body, err := json.Marshal(map[string]string{"HiddenReason": upload.RecordHiddenReason})
+		if err != nil {
+			return err
+		}
+		res, err := c.API.PatchUnitWithBodyWithResponse(ctx, u.Unit.SpaceID, u.Unit.UnitID, nil,
+			"application/merge-patch+json", bytes.NewReader(body))
+		if cubapi.IsAPIError(err, res) {
+			return cubapi.InterpretErrorGeneric(err, res)
+		}
+	}
+	return nil
+}
+
 // installerRecordFetcher returns a wizard.RecordFetcher that reads the
 // installer record an earlier upload wrote: the Unit keyed
-// AppConfig/YAML/installer that the package's uploads own. With space set it
-// reads the record in that Space. Without, it looks across the organization
-// and uses the one it finds, refusing when several installs of the package
-// exist, since picking one could re-enter someone else's.
+// AppConfig/YAML/installer that the package's uploads own, which is hidden.
+// With space set it reads the record in that Space, of whichever package
+// owns it when packageName is empty. Without, it looks across the
+// organization and uses the one it finds, refusing when several installs of
+// the package exist, since picking one could re-enter someone else's.
 func installerRecordFetcher(space string) func(ctx context.Context, packageName string) ([]byte, error) {
 	return func(ctx context.Context, packageName string) ([]byte, error) {
 		c, err := confighub.Client(ctx)
 		if err != nil {
 			return nil, err
 		}
+		if packageName == "" && space == "" {
+			return nil, fmt.Errorf("a Space or a package name is needed to find an installer record")
+		}
 		where := cubapi.Where{}.
-			Eq("Labels.UploadSource", packageName).
 			Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
+		if packageName != "" {
+			where = where.Eq("Labels.UploadSource", packageName)
+		}
 		if space != "" {
 			found, err := existingSpace(ctx, c, space)
 			if err != nil {
@@ -528,7 +573,7 @@ func installerRecordFetcher(space string) func(ctx context.Context, packageName 
 			}
 			where = where.Eq("SpaceID", found.SpaceID.String())
 		}
-		units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID"})
+		units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID", IncludeHidden: upload.RecordHiddenReason})
 		if err != nil {
 			return nil, err
 		}
@@ -537,6 +582,9 @@ func installerRecordFetcher(space string) func(ctx context.Context, packageName 
 			return nil, nil
 		case 1:
 		default:
+			if space != "" {
+				return nil, fmt.Errorf("Space %s holds installer records of %d packages; pass --pull <ref> to say which package", space, len(units))
+			}
 			var spaces []string
 			for _, u := range units {
 				if u.Space != nil {

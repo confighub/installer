@@ -29,7 +29,9 @@ the user do X," that doc says why.
   so most users press Enter through it.
 - Re-running anything starts from prior choices: the work-dir's own
   `out/record/` files, or, for a fresh clone, the installer record an
-  earlier upload left in ConfigHub.
+  earlier upload left in ConfigHub. The record also says where the package
+  was pulled from, so an install can be changed from ConfigHub alone,
+  with no work-dir kept anywhere.
 - Image upgrades — the most common day-2 change — are one flag away.
 - No new heavy TUI dependency that breaks on terminals where capability
   detection hangs.
@@ -338,7 +340,10 @@ decide the Spaces, and prints the images the render runs after each Space.
    exists in ConfigHub → use the selection, inputs, facts, and package
    definition it holds. `setup --space <slug>` names the Space to recover
    from; without it, setup looks for the package's install across the
-   organization and refuses when it finds more than one.
+   organization and refuses when it finds more than one. In a work-dir
+   with no package, `setup --space <slug>` needs no `--pull`: it pulls the
+   package from the ref the record says it came from, pinned to the
+   digest it resolved to.
 3. Else: fresh wizard.
 
 When prior state is loaded and the wizard is running interactively, it

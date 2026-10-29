@@ -29,6 +29,7 @@ const (
 	KindFunctionChain = "FunctionChain"
 	KindFacts         = "Facts"
 	KindLock          = "Lock"
+	KindSource        = "Source"
 )
 
 // Metadata is the common metadata block on every installer doc. The shape

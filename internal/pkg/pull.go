@@ -118,7 +118,56 @@ func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
 	// to be tidy.
 	_ = os.RemoveAll(stage)
 	stageCleanedUp = true
+
+	if err := writeSource(ctx, ref, absWork); err != nil {
+		return "", err
+	}
 	return finalDest, nil
+}
+
+// SourceFile is the record file, in <workDir>/out/record/, that says where
+// the work-dir's package was pulled from.
+const SourceFile = "source.yaml"
+
+// writeSource records where the package was pulled from in
+// <workDir>/out/record/source.yaml, which upload carries in the installer
+// record. A local path is made absolute, and an oci:// reference is pinned to
+// the digest it resolved to.
+func writeSource(ctx context.Context, ref, workDir string) error {
+	spec := api.SourceSpec{Ref: ref}
+	switch {
+	case strings.HasPrefix(ref, "oci://"):
+		digest, err := ResolveManifestDigest(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("resolve the digest of %s: %w", ref, err)
+		}
+		spec.Digest = digest
+	default:
+		abs, err := filepath.Abs(strings.TrimPrefix(ref, "file://"))
+		if err != nil {
+			return err
+		}
+		spec.Ref = abs
+	}
+	loaded, err := Load(filepath.Join(workDir, "package"))
+	if err != nil {
+		return err
+	}
+	src := api.Source{
+		APIVersion: api.APIVersion,
+		Kind:       api.KindSource,
+		Metadata:   api.Metadata{Name: loaded.Package.Metadata.Name + "-source"},
+		Spec:       spec,
+	}
+	data, err := api.MarshalYAML(src)
+	if err != nil {
+		return err
+	}
+	recordDir := filepath.Join(workDir, "out", api.RecordDir)
+	if err := os.MkdirAll(recordDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(recordDir, SourceFile), data, 0o644)
 }
 
 func pullLocal(src, dest string) (string, error) {

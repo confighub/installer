@@ -40,8 +40,9 @@ persists, and it must be sufficient to re-derive the rendered output
 without consulting the cluster or ConfigHub.
 
 Upload extends this: each package's `installer` record Unit in ConfigHub
-holds the same record, so the wizard can re-enter from ConfigHub if the
-local work-dir is lost.
+holds the same record, plus where the package was pulled from, so the
+wizard can re-enter from ConfigHub alone. That is why it is uploaded: the
+work-dir needn't be kept in git or anywhere else.
 
 How to apply: any new state the installer learns about an install goes
 into a spec doc. Anything not in the spec must be derivable from it

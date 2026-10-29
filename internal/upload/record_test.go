@@ -46,7 +46,13 @@ spec:
 		writeFile(t, filepath.Join(recordDir, file), string(data))
 	}
 	if isParent {
-		data, err := api.MarshalYAML(api.Lock{APIVersion: api.APIVersion, Kind: api.KindLock,
+		data, err := api.MarshalYAML(api.Source{APIVersion: api.APIVersion, Kind: api.KindSource,
+			Spec: api.SourceSpec{Ref: "oci://reg/" + name + ":1.2.3", Digest: "sha256:def"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(recordDir, "source.yaml"), string(data))
+		data, err = api.MarshalYAML(api.Lock{APIVersion: api.APIVersion, Kind: api.KindLock,
 			Spec: api.LockSpec{Package: api.LockedPackage{Name: name, Version: "1.2.3"},
 				Resolved: []api.LockedDependency{{Name: "db", Ref: "oci://reg/db:1.0.0", Digest: "sha256:abc"}}}})
 		if err != nil {
@@ -115,6 +121,9 @@ func TestBuildRecord(t *testing.T) {
 	}
 	if prior.Lock == nil || len(prior.Lock.Spec.Resolved) != 1 {
 		t.Errorf("lock = %+v", prior.Lock)
+	}
+	if prior.Source == nil || prior.Source.PinnedRef() != "oci://reg/web:1.2.3@sha256:def" {
+		t.Errorf("the record should say where the package came from, pinned to its digest; source = %+v", prior.Source)
 	}
 }
 

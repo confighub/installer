@@ -22,17 +22,24 @@ const (
 	RecordConfigName = "installer"
 	// RecordSchema is the record's configHub.configSchema.
 	RecordSchema = "InstallerRecord"
+	// RecordHiddenReason is the HiddenReason the record's Unit is given, so
+	// that, like a dot file, it stays out of lists and bulk operations unless
+	// they ask for it with include_hidden.
+	RecordHiddenReason = "InstallerRecord"
 )
 
 // Record is the installer's record of one package's render, uploaded as a
-// single AppConfig/YAML document: the package definition, the user's selection
-// and inputs, the collected facts, and, for the parent, the lock. It uses the
+// single AppConfig/YAML document: the package definition, where it was pulled
+// from, the user's selection and inputs, the collected facts, and, for the
+// parent, the lock. It is enough to re-enter the install without the work-dir
+// it was rendered in, so the work-dir needn't be kept anywhere else. It uses the
 // AppConfig/YAML schema's reserved configHub paths rather than KRM apiVersion,
 // kind, and metadata, so it is application configuration no Kubernetes function
 // or Trigger touches, and the wizard reads it back to re-enter a prior install.
 type Record struct {
 	ConfigHub RecordMeta         `yaml:"configHub"`
 	Package   RecordPackage      `yaml:"package"`
+	Source    *api.SourceSpec    `yaml:"source,omitempty"`
 	Selection *api.SelectionSpec `yaml:"selection,omitempty"`
 	Inputs    *api.InputsSpec    `yaml:"inputs,omitempty"`
 	Facts     *api.FactsSpec     `yaml:"facts,omitempty"`
@@ -57,8 +64,8 @@ type RecordPackage struct {
 var specsNamingThePackage = []string{"selection", "inputs", "facts"}
 
 // BuildRecord reads pkg's installer.yaml and record directory and returns the
-// record document. facts.yaml is optional, as is lock.yaml, which only the
-// parent has.
+// record document. source.yaml, which a pull writes, and facts.yaml are
+// optional, as is lock.yaml, which only the parent has.
 func BuildRecord(pkg Package) ([]byte, error) {
 	data, err := os.ReadFile(filepath.Join(pkg.PackageDir, "installer.yaml"))
 	if err != nil {
@@ -86,6 +93,15 @@ func BuildRecord(pkg Package) ([]byte, error) {
 		return nil, fmt.Errorf("parse inputs.yaml: %w", err)
 	} else {
 		rec.Inputs = &in.Spec
+	}
+	if data, ok, err := readOptional(pkg.RecordDir, "source.yaml"); err != nil {
+		return nil, err
+	} else if ok {
+		src, err := api.ParseSource(data)
+		if err != nil {
+			return nil, fmt.Errorf("parse source.yaml: %w", err)
+		}
+		rec.Source = &src.Spec
 	}
 	if data, ok, err := readOptional(pkg.RecordDir, "facts.yaml"); err != nil {
 		return nil, err
@@ -136,6 +152,7 @@ func marshalRecord(rec Record) ([]byte, error) {
 // own document types.
 type PriorDocuments struct {
 	Package   *api.Package
+	Source    *api.SourceSpec
 	Selection *api.Selection
 	Inputs    *api.Inputs
 	Facts     *api.Facts
@@ -161,6 +178,7 @@ func ParseRecord(data []byte) (*PriorDocuments, error) {
 			InstallerMetadata: rec.Package.InstallerMetadata,
 			Spec:              rec.Package.Spec,
 		},
+		Source: rec.Source,
 	}
 	if rec.Selection != nil {
 		spec := *rec.Selection
