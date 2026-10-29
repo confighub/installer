@@ -787,6 +787,7 @@ configMapGenerator:
     files:
       - application.properties
     options:
+      disableNameSuffixHash: true
       annotations:
         installer.confighub.com/toolchain: AppConfig/Properties
 
@@ -845,15 +846,57 @@ apply step is involved.
 
 ### disableNameSuffixHash
 
-Kustomize hashes `configMapGenerator` names by default
-(`my-app-config-h7df9k2`), which means each config change rolls a
-new ConfigMap and rolls any consuming workload that references it.
-Setting `disableNameSuffixHash: true` keeps a stable name; the
-installer maps that into a mutable ConfigMap mode (`RevisionHistoryLimit=0`)
-on the renderer Target at upload time so day-2 edits update in
-place. Use the default (hashed names) when you want
-versioned, immutable ConfigMaps; use `disableNameSuffixHash: true`
-when you want hash-annotation-driven rolling restarts.
+Whether the generator hashes the ConfigMap's name decides how
+ConfigHub renders it after upload, and how a change to it reaches
+the pods. Set `disableNameSuffixHash: true` unless you need the
+previous versions of the ConfigMap kept.
+
+**Stable name (`disableNameSuffixHash: true`).** The installer marks
+the ConfigMap mutable, and the upload's Invocation runs
+`render-configmap --immutable=false`. ConfigHub renders one
+ConfigMap, named like the generator, and updates it in place on
+every change to the AppConfig Unit. Workloads reference it by that
+name. The rendered ConfigMap carries a `confighub.com/Hash`
+annotation with its content's hash. To roll the pods when the
+content changes, give the pod template a `confighub.com/Hash`
+annotation set to `confighubplaceholder`. ConfigHub fills it with
+the ConfigMap's hash, and fills it again on every change:
+
+```yaml
+# bases/default/deployment.yaml
+spec:
+  template:
+    metadata:
+      annotations:
+        confighub.com/Hash: confighubplaceholder
+    spec:
+      containers:
+        - name: app
+          envFrom:
+            - configMapRef:
+                name: app-env
+```
+
+Without the annotation, the ConfigMap is still updated in place,
+but the pods don't restart: ones that read it as environment
+variables keep the values they started with. A pod template holds one
+`confighub.com/Hash`, so it rolls on changes to one rendered
+ConfigMap.
+
+**Hashed name (the kustomize default).** The installer marks the
+ConfigMap immutable, and the Invocation runs
+`render-configmap --immutable=true`. Every change to the AppConfig
+Unit renders a new immutable ConfigMap, named after the AppConfig
+Unit with a hash of the content appended, and the newest is
+annotated `confighub.com/RenderRevision: Latest`. The old ConfigMaps
+stay in the rendered Unit. The upload registers nothing to remove
+them, so bound them with a `prune-configmaps` Mutation Trigger on
+the Space. In ConfigHub, a workload follows the new name only where
+its reference is `confighubplaceholder`, which Needs/Provides fills
+in.
+
+ConfigHub's [AppConfig guide](https://docs.confighub.com/guide/app-config/#deploying-as-a-kubernetes-configmap)
+describes both modes in full.
 
 ### secretGenerator
 
