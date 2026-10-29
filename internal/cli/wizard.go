@@ -73,6 +73,5 @@ Pass --non-interactive to script the wizard with --base, --components,
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
 	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); set in the chosen base's images: block before render, as `kustomize edit set image` would. The base's kustomization.yaml must declare an `images:` block.")
 	cmd.Flags().BoolVar(&opts.runRender, "render", true, "render after the wizard writes spec docs; pass --render=false to skip and run installer render later")
-	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }

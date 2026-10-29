@@ -41,7 +41,6 @@ type flowOptions struct {
 
 	// Render controls.
 	runRender bool
-	clean     bool
 	outputOCI string
 }
 
@@ -134,7 +133,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		}
 	}
 
-	if err := runRenderInWorkDir(ctx, absWork, loaded, res, opts.clean); err != nil {
+	if err := runRenderInWorkDir(ctx, absWork, loaded, res); err != nil {
 		return err
 	}
 
@@ -370,14 +369,9 @@ func runDepsUpdate(ctx context.Context, workDir string, pkg *api.Package, sel *a
 
 // runRenderInWorkDir runs render.Render (and the per-dep renderer for
 // multi-package installs) against the work-dir's package + spec.
-func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded, res *wizard.Result, clean bool) error {
+func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded, res *wizard.Result) error {
 	outDir := filepath.Join(workDir, "out")
 	manifestsDir := filepath.Join(outDir, "manifests")
-	if clean {
-		if err := render.CleanRenderedOutput(outDir); err != nil {
-			return err
-		}
-	}
 	r, err := render.Render(ctx, render.Options{
 		Loaded:    loaded,
 		Selection: res.Selection,
@@ -508,7 +502,6 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
 	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); set in the chosen base's images: block before render, as `kustomize edit set image` would. The base's kustomization.yaml must declare an `images:` block.")
-	cmd.Flags().BoolVar(&opts.clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	cmd.Flags().StringVar(&opts.outputOCI, "output-oci", "", "write rendered manifests to a local OCI layout path or push them to oci://host/repo:tag")
 	return cmd
 }

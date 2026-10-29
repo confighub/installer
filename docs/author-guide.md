@@ -903,11 +903,6 @@ running may use. The upload turns the workload's reference into a
 named placeholder for the AppConfig Unit, and ConfigHub fills it
 with the newest rendered name, so the pods roll on every change.
 
-Re-render with `installer render --clean` (or `setup --clean`) after
-changing the content. Without it, the ConfigMap under its previous
-hashed name stays in `out/manifests/` beside the new one, and the
-upload refuses the AppConfig as defined twice.
-
 Old renders accumulate until a `prune-configmaps` Mutation Trigger
 in the Space retires them. The Trigger is also what moves workloads
 to a new render: it withdraws the older renders from Needs/Provides,

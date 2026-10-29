@@ -123,7 +123,7 @@ installer setup [--pull <ref>] [--work-dir <dir>] [wizard flags] [render flags]
   separate `installer pull` invocation).
 - Supports every flag the granular `wizard` and `render` commands
   accept: `--namespace`, `--select`, `--input`, `--non-interactive`,
-  `--components`, `--set-image`, `--reuse`, `--base`, `--clean`.
+  `--components`, `--set-image`, `--reuse`, `--base`.
 - **Auto-detects install vs upgrade** by checking for prior state:
   - `<work-dir>/out/record/{selection,inputs}.yaml` exist → load prior
     locally.
@@ -212,12 +212,19 @@ rather than carry forward silently.
 ### `installer render`
 
 ```bash
-installer render [--work-dir <dir>] [--clean]
+installer render [--work-dir <dir>]
 ```
 
 Reads `<work-dir>/package/` + `<work-dir>/out/record/` and produces
 `<work-dir>/out/manifests/`. Deterministic — same package + same spec
 + same collector output = byte-identical rendered Units.
+
+`out/manifests/` and `out/secrets/` hold exactly what the render
+produced, so a resource the package no longer renders, such as a
+ConfigMap under its previous hashed name, doesn't linger. A `Kptfile`
+in `out/manifests/` is kept. The render writes to a temporary directory
+and swaps it in, so a render that fails leaves the previous output as it
+was.
 
 ### `installer upload`
 

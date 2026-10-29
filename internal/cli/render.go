@@ -18,10 +18,7 @@ import (
 )
 
 func newRenderCmd() *cobra.Command {
-	var (
-		workDir string
-		clean   bool
-	)
+	var workDir string
 	cmd := &cobra.Command{
 		Use:   "render",
 		Short: "Render selection + inputs into per-resource Kubernetes YAML",
@@ -59,12 +56,6 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			inputs, err := readInputs(filepath.Join(recordDir, "inputs.yaml"))
 			if err != nil {
 				return err
-			}
-
-			if clean {
-				if err := render.CleanRenderedOutput(outDir); err != nil {
-					return err
-				}
 			}
 
 			facts, err := readFactsOptional(filepath.Join(recordDir, "facts.yaml"))
@@ -127,7 +118,6 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/record, writes ./out/manifests)")
-	cmd.Flags().BoolVar(&clean, "clean", false, "remove previously rendered out/manifests/ (preserving any kpt Kptfile) and out/secrets/ before rendering")
 	return cmd
 }
 
