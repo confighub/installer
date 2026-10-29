@@ -36,9 +36,9 @@ func main() {
 		return
 	}
 
-	cmd := cli.NewRoot()
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	// Execute prints the error itself, with a usage hint where cobra has
+	// one, so only the exit status is left to set here.
+	if err := cli.NewRoot().Execute(); err != nil {
 		os.Exit(1)
 	}
 }
