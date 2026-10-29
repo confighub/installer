@@ -126,7 +126,7 @@ func decodeIfAppConfigConfigMap(doc *yaml.Node, wantToolchain string) (*appConfi
 	if shape.Kind != "ConfigMap" {
 		return nil, false, nil
 	}
-	if shape.Metadata.Annotations["confighub.com/toolchain"] != wantToolchain {
+	if shape.Metadata.Annotations[api.AnnotationToolchain] != wantToolchain {
 		return nil, false, nil
 	}
 	return &shape, true, nil
@@ -139,19 +139,19 @@ func decodeIfAppConfigConfigMap(doc *yaml.Node, wantToolchain string) (*appConfi
 // file mode), so we trust the annotations here and surface a clear
 // error if either is missing.
 func extractAppConfigBody(shape *appConfigCarrierShape) ([]byte, error) {
-	mode := shape.Metadata.Annotations["confighub.com/appconfig-mode"]
+	mode := shape.Metadata.Annotations[api.AnnotationAppConfigMode]
 	switch mode {
-	case "file":
-		key := shape.Metadata.Annotations["confighub.com/appconfig-source-key"]
+	case api.AppConfigModeFile:
+		key := shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey]
 		if key == "" {
-			return nil, fmt.Errorf("file mode missing confighub.com/appconfig-source-key")
+			return nil, fmt.Errorf("file mode missing %s", api.AnnotationAppConfigSourceKey)
 		}
 		body, ok := shape.Data[key]
 		if !ok {
 			return nil, fmt.Errorf("data[%q] not present", key)
 		}
 		return []byte(body), nil
-	case "env":
+	case api.AppConfigModeEnv:
 		keys := make([]string, 0, len(shape.Data))
 		for k := range shape.Data {
 			keys = append(keys, k)
@@ -163,6 +163,6 @@ func extractAppConfigBody(shape *appConfigCarrierShape) ([]byte, error) {
 		}
 		return buf.Bytes(), nil
 	default:
-		return nil, fmt.Errorf("unknown confighub.com/appconfig-mode %q", mode)
+		return nil, fmt.Errorf("unknown %s %q", api.AnnotationAppConfigMode, mode)
 	}
 }

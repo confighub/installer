@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/confighub/installer/pkg/api"
 )
 
 // TestTransformer_AppConfigAnnotationInjection_FileMode verifies the
@@ -42,12 +44,12 @@ functionConfig:
 		t.Fatalf("runTransformer: %v", err)
 	}
 	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMode] != appConfigModeFile {
-		t.Errorf("appconfig-mode: want %q, got %q", appConfigModeFile, cm.Metadata.Annotations[annoMode])
+	if cm.Metadata.Annotations[api.AnnotationAppConfigMode] != api.AppConfigModeFile {
+		t.Errorf("appconfig-mode: want %q, got %q", api.AppConfigModeFile, cm.Metadata.Annotations[api.AnnotationAppConfigMode])
 	}
-	if cm.Metadata.Annotations[annoSourceKey] != "application.properties" {
+	if cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey] != "application.properties" {
 		t.Errorf("appconfig-source-key: want application.properties, got %q",
-			cm.Metadata.Annotations[annoSourceKey])
+			cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey])
 	}
 }
 
@@ -102,13 +104,13 @@ functionConfig:
 				t.Fatalf("runTransformer: %v", err)
 			}
 			cm := firstConfigMap(t, out)
-			if cm.Metadata.Annotations[annoMutable] != tc.wantMutable {
+			if cm.Metadata.Annotations[api.AnnotationAppConfigMutable] != tc.wantMutable {
 				t.Errorf("appconfig-mutable: want %q, got %q",
-					tc.wantMutable, cm.Metadata.Annotations[annoMutable])
+					tc.wantMutable, cm.Metadata.Annotations[api.AnnotationAppConfigMutable])
 			}
-			if cm.Metadata.Annotations[annoName] != tc.wantName {
+			if cm.Metadata.Annotations[api.AnnotationAppConfigName] != tc.wantName {
 				t.Errorf("appconfig-name: want %q, got %q",
-					tc.wantName, cm.Metadata.Annotations[annoName])
+					tc.wantName, cm.Metadata.Annotations[api.AnnotationAppConfigName])
 			}
 		})
 	}
@@ -141,12 +143,12 @@ functionConfig:
 		t.Fatalf("runTransformer: %v", err)
 	}
 	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMode] != appConfigModeEnv {
-		t.Errorf("appconfig-mode: want %q, got %q", appConfigModeEnv, cm.Metadata.Annotations[annoMode])
+	if cm.Metadata.Annotations[api.AnnotationAppConfigMode] != api.AppConfigModeEnv {
+		t.Errorf("appconfig-mode: want %q, got %q", api.AppConfigModeEnv, cm.Metadata.Annotations[api.AnnotationAppConfigMode])
 	}
-	if _, present := cm.Metadata.Annotations[annoSourceKey]; present {
+	if _, present := cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey]; present {
 		t.Errorf("env mode should not carry a source-key annotation, got %q",
-			cm.Metadata.Annotations[annoSourceKey])
+			cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey])
 	}
 }
 
@@ -176,7 +178,7 @@ functionConfig:
 	if err == nil {
 		t.Fatal("expected error for ambiguous file-mode ConfigMap")
 	}
-	if !strings.Contains(err.Error(), annoSourceKey) {
+	if !strings.Contains(err.Error(), api.AnnotationAppConfigSourceKey) {
 		t.Errorf("error should point at the missing source-key annotation: %v", err)
 	}
 }
