@@ -358,6 +358,20 @@ done
 [[ -n "$rendered_ok" ]] || fail "placeholder collector-app-env-rendered was not re-rendered with the new PORT"
 note "AppConfig Unit and its rendered ConfigMap now have HTTP_PORT=8081"
 
+# The Deployment rolls with the ConfigMap: its pod template's
+# confighub.com/Hash follows the rendered ConfigMap's.
+cm_hash=$(cub unit data --space "$SPACE" collector-app-env-rendered | sed -n 's/^    confighub.com\/Hash: "\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' | head -1)
+[[ -n "$cm_hash" ]] || fail "rendered ConfigMap has no confighub.com/Hash annotation"
+hash_ok=
+for _ in $(seq 1 30); do
+  if cub unit data --space "$SPACE" "$APP_NAME" 2>/dev/null | grep -qE "^ +confighub.com/Hash: \"?${cm_hash}\"?$"; then
+    hash_ok=1; break
+  fi
+  sleep 1
+done
+[[ -n "$hash_ok" ]] || fail "Deployment $APP_NAME's pod template confighub.com/Hash is not the rendered ConfigMap's ($cm_hash)"
+note "Deployment $APP_NAME's pod template carries the rendered ConfigMap's hash $cm_hash"
+
 # 9. Upload again — converges; a bundle with an AppConfig carrier writes nothing.
 log "installer upload (unchanged) — re-run is a no-op"
 run upload-converge-1 "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" || fail "converge upload failed (see $WORK_TMP/upload-converge-1.log)"
