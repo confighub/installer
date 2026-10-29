@@ -775,7 +775,7 @@ format too.
 ### Author contract
 
 Annotate the `configMapGenerator` entry with
-`installer.confighub.com/toolchain` pointing at the matching
+`confighub.com/toolchain` pointing at the matching
 AppConfig toolchain. The installer reads the annotation off the
 rendered ConfigMap (kustomize copies generator annotations onto the
 output), so the contract is "tag once, here":
@@ -789,7 +789,7 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
 
   - name: app-env
     envs:
@@ -797,7 +797,7 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
 ```
 
 Supported toolchain values:
@@ -813,18 +813,18 @@ At render time, the `installer transformer` plugin (which kustomize
 invokes as an exec transformer) recognizes ConfigMaps carrying the
 toolchain annotation and:
 
-- Derives the carrier shape (`installer.confighub.com/appconfig-mode`:
+- Derives the carrier shape (`confighub.com/appconfig-mode`:
   `file` if the generator used `files:`, `env` if it used `envs:`) by
   inspecting `data:`. For file mode it also records
-  `installer.confighub.com/appconfig-source-key` — the `data:` key
+  `confighub.com/appconfig-source-key` — the `data:` key
   whose value is the raw config file body. And it records
-  `installer.confighub.com/appconfig-mutable`: `false` when the
+  `confighub.com/appconfig-mutable`: `false` when the
   generator hashes the ConfigMap's name, `true` when it doesn't (see
   [disableNameSuffixHash](#disablenamesuffixhash)). kustomize appends
   the hash after the transformer runs, and marks a ConfigMap it will
   hash with `internal.config.kubernetes.io/needsHashSuffix: enabled`,
   which is what the transformer reads. For such a ConfigMap it also
-  records `installer.confighub.com/appconfig-name`, the name before
+  records `confighub.com/appconfig-name`, the name before
   the hash. Authors can pre-set the mode, source key and mutability
   annotations to override the inference.
 - Routes any `AppConfig/*` function group in `spec.transformers` to
@@ -928,7 +928,7 @@ describes both modes in full.
 
 ### secretGenerator
 
-`secretGenerator` is not tagged with installer annotations. Secrets
+`secretGenerator` is not tagged with AppConfig annotations. Secrets
 flow through the existing sensitive-resource pathway: rendered to
 `out/secrets/`, never uploaded as Units. The roadmap for a better
 secrets story is tracked separately.

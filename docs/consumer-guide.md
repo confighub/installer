@@ -172,7 +172,7 @@ installer upload --space-pattern '{{.PackageName}}-prod'
 ```
 
 If the package ships application-config files (a `configMapGenerator`
-tagged with `installer.confighub.com/toolchain`, e.g.
+tagged with `confighub.com/toolchain`, e.g.
 `AppConfig/Properties` or `AppConfig/Env`), the upload also creates a
 separate AppConfig Unit holding the raw config body, a
 `render-configmap` Invocation, and a placeholder Kubernetes/YAML Unit

@@ -381,14 +381,14 @@ configMapGenerator:
       - app.env
     options:
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
   - name: app-props
     files:
       - app.properties
     options:
       disableNameSuffixHash: true
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
 `)
 	writeFile(t, filepath.Join(pkgDir, "bases/default/app.env"), "GREETING=hello\n")
 	writeFile(t, filepath.Join(pkgDir, "bases/default/app.properties"), "port=5432\n")
@@ -467,16 +467,16 @@ spec:
 		t.Fatalf("want ConfigMaps app-env-<hash> and app-props, got %v", filenames(result.Manifests))
 	}
 
-	if got := hashed.Metadata.Annotations["installer.confighub.com/appconfig-mutable"]; got != "false" {
+	if got := hashed.Metadata.Annotations["confighub.com/appconfig-mutable"]; got != "false" {
 		t.Errorf("a ConfigMap whose name kustomize hashes should be immutable, got appconfig-mutable %q", got)
 	}
-	if got := hashed.Metadata.Annotations["installer.confighub.com/appconfig-name"]; got != "app-env" {
+	if got := hashed.Metadata.Annotations["confighub.com/appconfig-name"]; got != "app-env" {
 		t.Errorf("a hashed ConfigMap should record its name before the hash, got appconfig-name %q", got)
 	}
-	if got := stable.Metadata.Annotations["installer.confighub.com/appconfig-mutable"]; got != "true" {
+	if got := stable.Metadata.Annotations["confighub.com/appconfig-mutable"]; got != "true" {
 		t.Errorf("a ConfigMap under a stable name should be mutable, got appconfig-mutable %q", got)
 	}
-	if got, ok := stable.Metadata.Annotations["installer.confighub.com/appconfig-name"]; ok {
+	if got, ok := stable.Metadata.Annotations["confighub.com/appconfig-name"]; ok {
 		t.Errorf("a ConfigMap under a stable name should record no other name, got appconfig-name %q", got)
 	}
 	if _, ok := hashed.Metadata.Annotations["internal.config.kubernetes.io/needsHashSuffix"]; ok {

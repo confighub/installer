@@ -217,7 +217,7 @@ note "rendered Deployment now references $PINNED_IMAGE"
 # The AppConfig ConfigMap (collector-app-env) should be present in
 # rendered manifests — upload will split it into a render-configmap
 # Invocation + AppConfig Unit + placeholder.
-appcfg_cm=$(grep -l "installer.confighub.com/toolchain: AppConfig/Env" "$WORK_TMP/out/manifests"/*.yaml | head -1)
+appcfg_cm=$(grep -l "confighub.com/toolchain: AppConfig/Env" "$WORK_TMP/out/manifests"/*.yaml | head -1)
 [[ -n "$appcfg_cm" ]] || fail "expected at least one AppConfig-tagged ConfigMap among rendered manifests"
 note "AppConfig carrier ConfigMap: $(basename "$appcfg_cm")"
 

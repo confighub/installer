@@ -11,7 +11,7 @@ configMapGenerator:
   name: collector-app-env
   options:
     annotations:
-      installer.confighub.com/toolchain: AppConfig/Env
+      confighub.com/toolchain: AppConfig/Env
 secretGenerator:
 - envs:
   - collector-app-secret.env.secret

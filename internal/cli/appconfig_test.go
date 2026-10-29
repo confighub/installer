@@ -13,7 +13,7 @@ import (
 
 // TestTransformer_AppConfigAnnotationInjection_FileMode verifies the
 // pre-pass infers appconfig-mode=file and the unique source-key for a
-// ConfigMap with one data: file under installer.confighub.com/toolchain.
+// ConfigMap with one data: file under confighub.com/toolchain.
 // No function group is declared; the transformer's only job here is the
 // canonical-annotation pass.
 func TestTransformer_AppConfigAnnotationInjection_FileMode(t *testing.T) {
@@ -26,7 +26,7 @@ items:
       name: app-config
       namespace: demo
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       application.properties: |
         a=1
@@ -74,7 +74,7 @@ func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromHashing(t *
 		{
 			name: "author's mode wins, and the name is still recorded",
 			annotations: "        internal.config.kubernetes.io/needsHashSuffix: enabled\n" +
-				"        installer.confighub.com/appconfig-mutable: \"true\"\n",
+				"        confighub.com/appconfig-mutable: \"true\"\n",
 			wantMutable: "true",
 			wantName:    "app-config",
 		},
@@ -88,7 +88,7 @@ items:
     metadata:
       name: app-config
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
 ` + tc.annotations + `    data:
       application.properties: a=1
 functionConfig:
@@ -126,7 +126,7 @@ items:
     metadata:
       name: app-env
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
     data:
       FOO: bar
       BAZ: qux
@@ -162,7 +162,7 @@ items:
     metadata:
       name: app-config
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       first.properties: a=1
       second.properties: b=2
@@ -194,7 +194,7 @@ items:
       name: app-config
       namespace: demo
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       application.properties: |
         configHub.configSchema=AppProperties

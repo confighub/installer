@@ -22,11 +22,11 @@ import (
 // ConfigMap's data: shape (authors can pre-set them to override the
 // inference).
 const (
-	annoToolchain = "installer.confighub.com/toolchain"
-	annoMode      = "installer.confighub.com/appconfig-mode"
-	annoSourceKey = "installer.confighub.com/appconfig-source-key"
-	annoMutable   = "installer.confighub.com/appconfig-mutable"
-	annoName      = "installer.confighub.com/appconfig-name"
+	annoToolchain = "confighub.com/toolchain"
+	annoMode      = "confighub.com/appconfig-mode"
+	annoSourceKey = "confighub.com/appconfig-source-key"
+	annoMutable   = "confighub.com/appconfig-mutable"
+	annoName      = "confighub.com/appconfig-name"
 
 	// annoNeedsHashSuffix is the build annotation kustomize puts on a resource a
 	// generator made without disableNameSuffixHash. The transformer runs before
@@ -80,7 +80,7 @@ type appConfigCarrier struct {
 }
 
 // injectAppConfigAnnotations walks the ResourceList for ConfigMaps tagged
-// with installer.confighub.com/toolchain. For each it derives the
+// with confighub.com/toolchain. For each it derives the
 // appconfig-mode (file/env, by inspecting data:) and, when in file mode,
 // the appconfig-source-key (the single data: key, or the explicit override
 // the author already wrote). The resolved annotations are re-injected onto
@@ -121,7 +121,7 @@ func injectAppConfigAnnotations(list *resourceList) error {
 }
 
 // decodeIfConfigMapWithToolchain returns the decoded shape only when the
-// item is a ConfigMap carrying installer.confighub.com/toolchain. Cheap
+// item is a ConfigMap carrying confighub.com/toolchain. Cheap
 // fast-path: we Decode into a tiny header first to filter, then re-decode
 // the full shape only for matches.
 func decodeIfConfigMapWithToolchain(item *yaml.Node) (*configMapShape, bool, error) {

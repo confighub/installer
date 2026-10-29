@@ -108,20 +108,20 @@ configMapGenerator:
       - app.env
     options:
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
   - name: other-env
     envs:
       - other.env
     options:
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
   - name: app-props
     files:
       - app.properties
     options:
       disableNameSuffixHash: true
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
 EOF
 printf 'GREETING=hello\n' >"$PKG/bases/default/app.env"
 printf 'OTHER=other\n' >"$PKG/bases/default/other.env"
@@ -192,9 +192,9 @@ app_cm=$(rendered app-env)
 other_cm=$(rendered other-env)
 [[ -n "$app_cm" && -n "$other_cm" ]] || fail "expected hashed ConfigMaps app-env-<hash> and other-env-<hash> in $WD/out/manifests"
 app_file="$WD/out/manifests/configmap-$NAMESPACE-$app_cm.yaml"
-grep -q 'installer.confighub.com/appconfig-mutable: "false"' "$app_file" || fail "$app_cm should be marked immutable"
-grep -q 'installer.confighub.com/appconfig-name: app-env' "$app_file" || fail "$app_cm should record its name before the hash"
-grep -q 'installer.confighub.com/appconfig-mutable: "true"' "$WD/out/manifests/configmap-$NAMESPACE-app-props.yaml" \
+grep -q 'confighub.com/appconfig-mutable: "false"' "$app_file" || fail "$app_cm should be marked immutable"
+grep -q 'confighub.com/appconfig-name: app-env' "$app_file" || fail "$app_cm should record its name before the hash"
+grep -q 'confighub.com/appconfig-mutable: "true"' "$WD/out/manifests/configmap-$NAMESPACE-app-props.yaml" \
   || fail "app-props should be marked mutable"
 grep -q "name: $app_cm\$" "$WD/out/manifests/deployment-$NAMESPACE-app.yaml" \
   || fail "the rendered Deployment should refer to $app_cm, as kustomize rewrote it"
