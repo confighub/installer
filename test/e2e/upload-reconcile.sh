@@ -63,7 +63,6 @@
 #
 # Requirements:
 #   - go and a working build environment
-#   - kustomize on PATH
 #   - cub on PATH, authenticated against the server you want to test
 
 set -euo pipefail
@@ -143,8 +142,7 @@ trap cleanup_on_exit EXIT
 log "preflight"
 command -v cub >/dev/null 2>&1 || fail "cub not on PATH"
 cub space list >/dev/null 2>&1 || fail "cub auth not configured (run \`cub auth login\`)"
-command -v kustomize >/dev/null 2>&1 || fail "kustomize not on PATH"
-note "cub OK, kustomize OK"
+note "cub OK"
 note "destination Space: $SPACE"
 note "app name:          $APP_NAME"
 note "pinned image:      $PINNED_IMAGE"

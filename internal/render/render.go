@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/confighub/installer/internal/kustomize"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/pkg/api"
 )
@@ -75,8 +76,8 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		transformerBin = exe
 	}
 
-	// 0. Apply per-image overrides (if any) by running `kustomize edit
-	//    set image` against the chosen base's kustomization.yaml. The
+	// 0. Apply per-image overrides (if any) to the chosen base's
+	//    kustomization.yaml, as `kustomize edit set image` would. The
 	//    chosen base must declare an `images:` block; render fails fast
 	//    otherwise.
 	if err := applyImageOverrides(opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides); err != nil {
@@ -112,9 +113,9 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	rendered, err := runKustomize(composeDir)
+	rendered, err := kustomize.BuildYAML(composeDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kustomize build %s: %w", composeDir, err)
 	}
 
 	// 3. Run validators in-process against kustomize's output. Each

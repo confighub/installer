@@ -378,8 +378,9 @@ the recommended path depends on how often the override is expected:
 - **Occasional override (mirror, patch bump)** — package author
   declares a kustomize `images:` transformer in the chosen base.
   Operator passes `--set-image name=ref` (repeatable) to `installer
-  setup` or `installer wizard`; the installer runs `kustomize edit set
-  image` against the package's working copy before render. The
+  setup` or `installer wizard`; before render, the installer sets the
+  image in the `images:` block of the package's working copy, as
+  `kustomize edit set image` would. The
   `--set-image` value is recorded in `out/record/inputs.yaml` under
   `spec.imageOverrides` so the next setup carries it forward without
   the operator re-typing it.

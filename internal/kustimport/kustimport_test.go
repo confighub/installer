@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"sigs.k8s.io/kustomize/api/types"
+
+	"github.com/confighub/installer/internal/kustomize"
 )
 
 func writeFiles(t *testing.T, root string, files map[string]string) {
@@ -60,11 +62,11 @@ spec:
 // of the comparison Import itself makes.
 func requireSameBuild(t *testing.T, source, dest string) {
 	t.Helper()
-	want, err := build(source)
+	want, err := kustomize.Build(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := build(dest)
+	got, err := kustomize.Build(dest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,20 +270,5 @@ func TestImportRefusesNonEmptyDest(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dest, "keep.yaml")); got != "x: 1\n" {
 		t.Errorf("dest was modified: %q", got)
-	}
-}
-
-func TestParseImage(t *testing.T) {
-	for ref, want := range map[string]types.Image{
-		"nginx":                    {Name: "nginx"},
-		"nginx:1.27":               {Name: "nginx", NewTag: "1.27"},
-		"localhost:5000/app":       {Name: "localhost:5000/app"},
-		"localhost:5000/app:v1":    {Name: "localhost:5000/app", NewTag: "v1"},
-		"ghcr.io/a/b@sha256:abc":   {Name: "ghcr.io/a/b", Digest: "sha256:abc"},
-		"ghcr.io/a/b:v1@sha256:ab": {Name: "ghcr.io/a/b", NewTag: "v1", Digest: "sha256:ab"},
-	} {
-		if got := parseImage(ref); got != want {
-			t.Errorf("parseImage(%q) = %+v, want %+v", ref, got, want)
-		}
 	}
 }

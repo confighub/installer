@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,9 +89,6 @@ func writeDepPackage(t *testing.T, destDir string) string {
 }
 
 func TestRenderDependencies(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
 	ctx := context.Background()
 	work := t.TempDir()
 
@@ -184,9 +180,6 @@ func TestRenderDependencies(t *testing.T) {
 }
 
 func TestRenderDependenciesNamespaceFallbackToParent(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
 	ctx := context.Background()
 	work := t.TempDir()
 
@@ -234,9 +227,6 @@ func TestRenderDependenciesNamespaceFallbackToParent(t *testing.T) {
 // every output file is byte-identical across runs — the acceptance criterion
 // for Phase 5.
 func TestRenderDependenciesDeterministic(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
 	ctx := context.Background()
 	parentInputs := &api.Inputs{
 		APIVersion: api.APIVersion,

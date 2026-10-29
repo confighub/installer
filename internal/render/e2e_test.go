@@ -4,6 +4,7 @@
 package render_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/confighub/installer/internal/kustomize"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/render"
 	"github.com/confighub/installer/internal/selection"
@@ -20,13 +22,7 @@ import (
 
 // TestEndToEnd_HelloApp drives the example package through wizard → render
 // and checks the rendered output looks correct.
-//
-// Requires the kustomize binary on PATH; skipped if missing.
 func TestEndToEnd_HelloApp(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
-
 	repoRoot, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +107,69 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 	}
 }
 
+// TestComposeBuildsWithKustomizeBinary checks that out/compose/ still
+// reproduces the render with a standalone kustomize, which runs the
+// installer transformer as an exec plugin through the wrapper script. Render
+// itself builds with kustomize's Go API, so only this test exercises the
+// binary. Skipped when kustomize is not on PATH.
+func TestComposeBuildsWithKustomizeBinary(t *testing.T) {
+	if _, err := exec.LookPath("kustomize"); err != nil {
+		t.Skip("kustomize not on PATH")
+	}
+	repoRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := ipkg.Load(filepath.Join(repoRoot, "examples/hello-app"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	outDir := filepath.Join(t.TempDir(), "out")
+	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{
+		Namespace:          "demo",
+		SelectedComponents: []string{"monitoring"},
+	}, loaded.Root, outDir)
+	if err != nil {
+		t.Fatalf("wizard.Run: %v", err)
+	}
+	if _, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+		Loaded:    loaded,
+		Selection: wres.Selection,
+		Inputs:    wres.Inputs,
+	}, outDir); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	composeDir := filepath.Join(outDir, "compose")
+	cmd := exec.Command("kustomize", "build", "--enable-exec", "--enable-alpha-plugins", composeDir)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("kustomize build %s: %v\n%s", composeDir, err, stderr.String())
+	}
+	got := string(out)
+	// hello-app's base has no namespace: fields and a Namespace named
+	// hello-app; only the transformer's set-namespace changes either.
+	if !strings.Contains(got, "kind: Deployment") || !strings.Contains(got, "namespace: demo") {
+		t.Errorf("the transformer's set-namespace did not apply:\n%s", got)
+	}
+	if !strings.Contains(got, "kind: Namespace\nmetadata:\n  name: demo\n") {
+		t.Errorf("the transformer did not rename the Namespace to demo:\n%s", got)
+	}
+
+	// A kustomize release other than the one built in may build
+	// differently, so a mismatch is reported but does not fail the test.
+	builtIn, err := kustomize.BuildYAML(composeDir)
+	if err != nil {
+		t.Fatalf("built-in kustomize build: %v", err)
+	}
+	if !bytes.Equal(out, builtIn) {
+		version, _ := exec.Command("kustomize", "version").Output()
+		t.Logf("kustomize %s builds out/compose/ differently from the built-in kustomize", strings.TrimSpace(string(version)))
+	}
+}
+
 func filenames(files []render.File) []string {
 	out := make([]string, len(files))
 	for i, f := range files {
@@ -123,13 +182,7 @@ func filenames(files []render.File) []string {
 // and verifies the trickier bits a real package exercises: CRDs stay
 // cluster-scoped, RBAC subjects pick up the target namespace, and the
 // operator image is rewritten.
-//
-// Requires the kustomize binary on PATH; skipped if missing.
 func TestEndToEnd_KubeRay(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
-
 	repoRoot, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -222,13 +275,7 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 // TestEndToEnd_GAIE drives the gaie package through wizard → render with the
 // sample-pool component selected. Verifies the four CRDs stay cluster-scoped
 // and that the sample custom resources land in the chosen namespace.
-//
-// Requires the kustomize binary on PATH; skipped if missing.
 func TestEndToEnd_GAIE(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
-
 	repoRoot, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)

@@ -11,7 +11,6 @@
 #
 # Requirements:
 #   - go and a working build environment
-#   - kustomize on PATH (render shells out to it)
 #
 # Exit codes:
 #   0  pipeline succeeded

@@ -91,8 +91,9 @@ Working:
   merged, dropped ones are emptied, and an unchanged work-dir writes
   nothing. Every upload is create-or-update, so the first and every later
   one run the same way. `installer plan` is the same requests as a dry run.
-- **Image overrides.** `installer setup --set-image` applies
-  `kustomize edit set image` before render. Overrides round-trip via
+- **Image overrides.** `installer setup --set-image` sets the image
+  in the chosen base's `images:` block before render, as
+  `kustomize edit set image` would. Overrides round-trip via
   `Inputs.Spec.ImageOverrides` and carry forward across re-renders /
   upgrades. The chosen base must declare an `images:` block; render
   fails fast otherwise.
@@ -107,10 +108,11 @@ make build       # writes bin/installer
 
 The binary is named `installer` so the cub plugin protocol exposes it as
 `cub installer ...` (cub names plugins after the entrypoint basename in
-`cub-plugin.yaml`). `installer` shells out to `kustomize` for
-`kustomize build`. Install it from
-[kubernetes-sigs/kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/)
-or `brew install kustomize`.
+`cub-plugin.yaml`). Kustomize is built in: `installer` runs it through
+kustomize's Go API, so neither authors nor operators need the
+`kustomize` binary. Its version is the `sigs.k8s.io/kustomize/api`
+module in `go.mod`, which follows the ConfigHub SDK's Kubernetes
+dependencies rather than the latest kustomize release.
 
 ## Quick start
 
@@ -185,9 +187,11 @@ After `setup` (or `wizard` + `render`), the working dir looks like:
         └── manifest-index.yaml   # filename → kind/name/namespace
 ```
 
-`out/compose/` is durable, not a temp dir. You can `cd out/compose &&
-kustomize build --enable-exec --enable-alpha-plugins .` to reproduce
-the render byte-for-byte outside the installer.
+`out/compose/` is durable, not a temp dir. With a `kustomize` binary,
+`cd out/compose && kustomize build --enable-exec --enable-alpha-plugins .`
+reproduces the render outside the installer, byte-for-byte unless that
+kustomize release builds differently from the one built into the
+installer.
 
 The two record docs (`selection.yaml`, `inputs.yaml`) are the load-bearing inputs
 to re-render: edit them, re-run `installer render`, get a deterministic new set
@@ -272,7 +276,9 @@ installed, the same commands work via `cub installer ...`.
 │   │                           # prior-state load, schema diff for upgrades
 │   ├── collector/              # in-package fact collectors run by the wizard
 │   ├── render/                 # kustomize compose + chain execution + split,
-│   │                           # --set-image (kustomize edit) + image extraction
+│   │                           # --set-image + image extraction
+│   ├── kustomize/              # kustomize build and set image, in-process
+│   ├── kustimport/             # `init --source`: localize an existing kustomization
 │   ├── deps/                   # SemVer resolver + lock writer
 │   ├── upload/                 # discover packages + Spaces, build the installer
 │   │                           # record and upload requests, report results,

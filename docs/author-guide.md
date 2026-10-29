@@ -678,9 +678,9 @@ what isn't.
    references your chosen base + components, resolves your
    `spec.transformers` / `spec.validators` against `.Inputs` /
    `.Selection` / `.Package` / `.Namespace` / `.Facts`, writes them as
-   KRM function configs, and runs
-   `kustomize build --enable-exec --enable-alpha-plugins`. Kustomize
-   invokes the `installer transformer` subcommand as an exec plugin
+   KRM function configs, and builds it with the kustomize built into
+   the installer, as `kustomize build --enable-exec
+   --enable-alpha-plugins` would. Kustomize invokes the `installer transformer` subcommand as an exec plugin
    to run each function group in process; the result lands as one
    resource per file in `out/manifests/`. For multi-package installs,
    each dep is rendered into its own subtree under `out/<dep-name>/`.

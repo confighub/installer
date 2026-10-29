@@ -21,7 +21,7 @@ For the doctrine the installer is anchored to, see
 ## Prerequisites
 
 - `installer` binary on PATH (or invoke `bin/installer` from a clone).
-- `kustomize` on PATH.
+  Kustomize is built in; you don't need the `kustomize` binary.
 - `cub` on PATH and signed in (`cub auth login`).
 - The `kubernetes-resources` package bootstrapped in your
   organization (one-time setup, see below).
@@ -223,7 +223,8 @@ images:
     newTag: plain-text
 ```
 
-Or use `kustomize edit set image` from the base directory:
+Or, if you have the `kustomize` binary, use `kustomize edit set image`
+from the base directory:
 
 ```bash
 ( cd bases/default && kustomize edit set image nginxdemos/hello=nginxdemos/hello:plain-text )
