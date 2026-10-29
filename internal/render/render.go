@@ -51,9 +51,11 @@ type Result struct {
 // chain and validators), and writes per-resource files plus the spec docs
 // to outDir.
 //
-// outDir is created if missing. Existing files in outDir/manifests are
-// overwritten; files not produced by this render are NOT removed (callers
-// who want a clean slate should remove manifests/ first). out/compose/ is
+// outDir is created if missing. out/manifests/ and out/secrets/ are replaced
+// by what this render produces, keeping a Kptfile in out/manifests/, so a
+// resource the package no longer renders doesn't linger as a stale file.
+// Neither changes until kustomize and the validators have succeeded, and a
+// write that fails leaves each as it was. out/compose/ is
 // always cleared and rewritten so the on-disk kustomization tree reflects
 // the current render exactly.
 func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
@@ -147,9 +149,6 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	manifestsDir := filepath.Join(outDir, "manifests")
 	secretsDir := filepath.Join(outDir, "secrets")
 	recordDir := filepath.Join(outDir, api.RecordDir)
-	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
-		return nil, err
-	}
 	if err := os.MkdirAll(recordDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -161,23 +160,15 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	if err := os.WriteFile(gitignore, []byte("# Rendered secrets must never be committed.\nsecrets/\n"), 0o644); err != nil {
 		return nil, err
 	}
-	if len(secrets) > 0 {
-		if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-			return nil, err
-		}
+	// out/manifests/ exists after every render, empty when it produced nothing.
+	if err := replaceDir(manifestsDir, manifests, 0o755, 0o644, keptInManifests); err != nil {
+		return nil, err
 	}
-
-	for _, f := range manifests {
-		path := filepath.Join(manifestsDir, f.Filename)
-		if err := os.WriteFile(path, f.Body, 0o644); err != nil {
-			return nil, fmt.Errorf("write %s: %w", path, err)
-		}
+	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
+		return nil, err
 	}
-	for _, f := range secrets {
-		path := filepath.Join(secretsDir, f.Filename)
-		if err := os.WriteFile(path, f.Body, 0o600); err != nil {
-			return nil, fmt.Errorf("write %s: %w", path, err)
-		}
+	if err := replaceDir(secretsDir, secrets, 0o700, 0o600, nil); err != nil {
+		return nil, err
 	}
 
 	// Persist spec docs alongside the rendered output: selection, inputs,

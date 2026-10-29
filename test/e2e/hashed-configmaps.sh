@@ -19,10 +19,10 @@
 #                    of the Deployment's references resolves to the ConfigMap
 #                    ConfigHub renders from the generator it referred to; the
 #                    one to the stable-name ConfigMap is left alone
-#   edit + upload  — changing one generator's content and rendering with
-#                    --clean, which changes its hashed name, updates its
-#                    AppConfig Unit; the new render
-#                    is added beside the old one, and with the Space's
+#   edit + upload  — changing one generator's content, which changes its
+#                    hashed name, and rendering replaces the file under the
+#                    old name; upload updates its AppConfig Unit; the new
+#                    render is added beside the old one, and with the Space's
 #                    prune-configmaps Trigger only the reference to that
 #                    generator moves to it
 #   re-run         — an unchanged upload writes nothing
@@ -223,10 +223,9 @@ note "the Deployment refers to $app_render, $other_render, app-props"
 
 log "edit app.env + render + upload: the AppConfig Unit is updated and the reference follows"
 printf 'GREETING=bye\n' >"$WD/package/bases/default/app.env"
-# --clean, or the ConfigMap under its previous hashed name stays in
-# out/manifests/ beside the new one, and upload refuses the AppConfig defined twice.
-run render-edit "$BIN" render --work-dir "$WD" --clean || fail "render failed (see $WORK_TMP/render-edit.log)"
+run render-edit "$BIN" render --work-dir "$WD" || fail "render failed (see $WORK_TMP/render-edit.log)"
 [[ "$(rendered app-env)" != "$app_cm" ]] || fail "kustomize should have given app-env a new hashed name"
+[[ "$(rendered app-env | wc -l | tr -d ' ')" == 1 ]] || fail "the re-render should replace $app_cm rather than leave it beside the new one"
 run upload-edit "$BIN" upload --work-dir "$WD" --space "$SPACE" --yes || fail "upload failed (see $WORK_TMP/upload-edit.log)"
 grep -q "^Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-edit.log" \
   || fail "the edit should update one Unit, app-env, and create none (see $WORK_TMP/upload-edit.log)"

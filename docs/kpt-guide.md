@@ -108,10 +108,11 @@ the inventory it won't prune deleted resources.) See
 
 ```bash
 # 1. Re-render the base (new package version, new inputs, image bump…).
-#    --clean prunes resources dropped by the upgrade while PRESERVING the
-#    base package's Kptfile, so out/manifests stays a valid kpt package.
-installer setup --pull <new-ref> --work-dir my-workdir --clean
-#    (or, to re-render in place without re-pulling: installer render --clean)
+#    Rendering replaces out/manifests, so resources dropped by the upgrade
+#    go, while the base package's Kptfile is kept and out/manifests stays a
+#    valid kpt package.
+installer setup --pull <new-ref> --work-dir my-workdir
+#    (or, to re-render in place without re-pulling: installer render)
 git add . && git commit -m "render <pkg>@<new-version>"
 
 # 2. Merge the new render into your post-install clone.

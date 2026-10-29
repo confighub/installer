@@ -485,4 +485,38 @@ spec:
 	if !strings.Contains(deployment, "name: "+hashed.Metadata.Name) {
 		t.Errorf("the Deployment should refer to the hashed name %s, as kustomize rewrote it:\n%s", hashed.Metadata.Name, deployment)
 	}
+
+	// A content change gives the ConfigMap a new hashed name. A re-render
+	// replaces the file under the old name rather than leaving it beside the
+	// new one, and keeps a Kptfile it didn't write.
+	manifestsDir := filepath.Join(outDir, "manifests")
+	writeFile(t, filepath.Join(manifestsDir, "Kptfile"), "apiVersion: kpt.dev/v1\nkind: Kptfile\n")
+	writeFile(t, filepath.Join(pkgDir, "bases/default/app.env"), "GREETING=bye\n")
+	if _, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+		Loaded:    loaded,
+		Selection: wres.Selection,
+		Inputs:    wres.Inputs,
+	}, outDir); err != nil {
+		t.Fatalf("Render after the content change: %v", err)
+	}
+	entries, err := os.ReadDir(manifestsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hashedFiles []string
+	kptfile := false
+	for _, e := range entries {
+		switch {
+		case strings.Contains(e.Name(), "-app-env-"):
+			hashedFiles = append(hashedFiles, e.Name())
+		case e.Name() == "Kptfile":
+			kptfile = true
+		}
+	}
+	if len(hashedFiles) != 1 || strings.Contains(hashedFiles[0], hashed.Metadata.Name) {
+		t.Errorf("want one app-env ConfigMap, under a new hashed name rather than %s, got %v", hashed.Metadata.Name, hashedFiles)
+	}
+	if !kptfile {
+		t.Errorf("a re-render should keep the Kptfile in out/manifests/")
+	}
 }
