@@ -35,8 +35,8 @@ type RawAnswers struct {
 	Namespace string
 	// ImageOverrides is the map from --set-image name=ref. Merged with
 	// PriorImageOverrides (this run's overrides win on conflict) and
-	// persisted into Inputs.Spec.ImageOverrides so render can apply
-	// `kustomize edit set image` for each entry before kustomize build.
+	// persisted into Inputs.Spec.ImageOverrides so render can set each
+	// entry in the base's images: block before the kustomize build.
 	ImageOverrides map[string]string
 	// PriorImageOverrides is the carry-forward set from a prior
 	// install's Inputs.Spec.ImageOverrides. Wizard merges it under

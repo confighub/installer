@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/kustomize"
 	"github.com/confighub/installer/internal/userconfig"
 )
 
@@ -523,32 +524,8 @@ func stripConfighubAnnotations(metadataNode *yaml.Node) {
 	annots.Content = kept
 }
 
-// appendToKustomization edits bases/default/kustomization.yaml to
-// include filename in its resources: list. Idempotent — does
-// nothing if filename is already listed. Uses `kustomize edit add
-// resource` if the binary is on PATH; otherwise edits the YAML
-// directly.
+// appendToKustomization adds filename to the resources: list of
+// baseDir's kustomization.yaml, unless it is already listed.
 func appendToKustomization(baseDir, filename string) error {
-	kustPath := filepath.Join(baseDir, "kustomization.yaml")
-	data, err := os.ReadFile(kustPath)
-	if err != nil {
-		return err
-	}
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return err
-	}
-	resources, _ := doc["resources"].([]any)
-	for _, r := range resources {
-		if s, ok := r.(string); ok && s == filename {
-			return nil // already present
-		}
-	}
-	resources = append(resources, filename)
-	doc["resources"] = resources
-	out, err := yaml.Marshal(doc)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(kustPath, out, 0o644)
+	return kustomize.AddResource(filepath.Join(baseDir, "kustomization.yaml"), filename)
 }

@@ -10,7 +10,6 @@
 # Requirements:
 #   - go and a working build environment
 #   - docker (registry:2 is pulled on demand)
-#   - kustomize on PATH (render shells out to it)
 #
 # Optional:
 #   - cub on PATH and authenticated (INSTALLER_E2E_CONFIGHUB=1 runs

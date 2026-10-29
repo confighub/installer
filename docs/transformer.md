@@ -139,9 +139,12 @@ wrapper, or a symlink) it works against raw kustomize.
     └── components/<name>/...  # pre-resolved component-scoped configs (if any)
 ```
 
-`Render` rewrites `out/compose/` on every render. Same render is
-reproducible by anyone with `installer-transformer.sh` on PATH (or
-present alongside the kustomization in `out/compose/`):
+`Render` builds `out/compose/` with kustomize's Go API, so the installer
+needs no `kustomize` binary, and rewrites it on every render. Same render
+is reproducible with a `kustomize` binary by anyone with
+`installer-transformer.sh` on PATH (or present alongside the
+kustomization in `out/compose/`), byte-for-byte unless that kustomize
+release builds differently from the one built into the installer:
 
 ```
 cd <work-dir>/out/compose
@@ -478,9 +481,10 @@ We test all of these against AppConfig-bearing ConfigMaps:
 3. **Kustomize-driven render with durable `out/compose/`. ✅**
    Single path: `Render` generates `out/compose/{kustomization,
    transformers, validators}.yaml` and a one-line
-   `installer-transformer.sh` wrapper, then invokes `kustomize
-   build --enable-exec --enable-alpha-plugins`. No legacy
-   fallback; the in-process chain code path is gone.
+   `installer-transformer.sh` wrapper, then builds it with kustomize,
+   as `kustomize build --enable-exec --enable-alpha-plugins` does
+   (in-process, through kustomize's Go API). No legacy fallback; the
+   in-process chain code path is gone.
 4. **Component-scoped transformer mixins. ✅** Added optional
    `transformers:` and `validators:` to each entry in
    `spec.components`. Resolved alongside the package-wide chain in

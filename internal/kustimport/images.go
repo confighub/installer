@@ -5,8 +5,8 @@ package kustimport
 
 import (
 	"sort"
-	"strings"
 
+	"sigs.k8s.io/kustomize/api/pkg/util"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/types"
 )
@@ -26,7 +26,8 @@ func seedImages(m resmap.ResMap) []types.Image {
 			continue
 		}
 		for _, ref := range containerImages(obj) {
-			img := parseImage(ref)
+			name, tag, digest := util.SplitImageName(ref)
+			img := types.Image{Name: name, NewTag: tag, Digest: digest}
 			prev, ok := byName[img.Name]
 			if !ok {
 				byName[img.Name] = &img
@@ -75,20 +76,4 @@ func containerImages(obj any) []string {
 		}
 	}
 	return out
-}
-
-// parseImage splits an image reference into the images: entry that restates
-// it: the name, plus the tag and digest when present.
-func parseImage(ref string) types.Image {
-	var img types.Image
-	if i := strings.Index(ref, "@"); i >= 0 {
-		ref, img.Digest = ref[:i], ref[i+1:]
-	}
-	// A colon after the last slash starts the tag; one before it is a
-	// registry port.
-	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-		ref, img.NewTag = ref[:i], ref[i+1:]
-	}
-	img.Name = ref
-	return img
 }

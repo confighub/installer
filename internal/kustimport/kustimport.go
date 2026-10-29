@@ -9,8 +9,6 @@ package kustimport
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -20,14 +18,12 @@ import (
 	"strings"
 
 	"sigs.k8s.io/kustomize/api/konfig"
-	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/krusty/localizer"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 
-	"github.com/confighub/installer/internal/chainexec"
-	"github.com/confighub/installer/pkg/api"
+	"github.com/confighub/installer/internal/kustomize"
 )
 
 // Result describes an imported base.
@@ -110,7 +106,7 @@ func Import(source, scope, dest string) (*Result, error) {
 		return nil, err
 	}
 
-	want, err := build(src)
+	want, err := kustomize.Build(src)
 	if err != nil {
 		return nil, fmt.Errorf("build %s: %w", src, err)
 	}
@@ -140,11 +136,11 @@ func Import(source, scope, dest string) (*Result, error) {
 		}
 		res.Images = seedImages(want)
 	}
-	if err := setImages(kustPath, res.Images); err != nil {
+	if err := kustomize.WriteImages(kustPath, res.Images); err != nil {
 		return nil, err
 	}
 
-	got, err := build(root)
+	got, err := kustomize.Build(root)
 	if err != nil {
 		return nil, fmt.Errorf("build the imported copy: %w", err)
 	}
@@ -338,41 +334,6 @@ resources:
 - %s
 `, filepath.ToSlash(target))
 	return os.WriteFile(path, []byte(body), 0o644)
-}
-
-// setImages writes images into the kustomization's images: block with the
-// set-yq function, which leaves the rest of the file, comments included, as
-// it was.
-func setImages(path string, images []types.Image) error {
-	if len(images) == 0 {
-		return nil
-	}
-	list, err := json.Marshal(images)
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	chain := &api.FunctionChain{Spec: api.FunctionChainSpec{Groups: []api.FunctionGroup{{
-		Toolchain:   "AppConfig/YAML",
-		Invocations: []api.FunctionInvocation{{Name: "set-yq", Args: []string{".images = " + string(list)}}},
-	}}}}
-	out, err := chainexec.RunChain(context.Background(), chain, data)
-	if err != nil {
-		return fmt.Errorf("set images in %s: %w", path, err)
-	}
-	return os.WriteFile(path, out, 0o644)
-}
-
-// build runs kustomize the way installer render does, with exec KRM
-// functions enabled.
-func build(dir string) (resmap.ResMap, error) {
-	opts := krusty.MakeDefaultOptions()
-	opts.PluginConfig = types.EnabledPluginConfig(types.BploUseStaticallyLinked)
-	opts.PluginConfig.FnpLoadingOptions.EnableExec = true
-	return krusty.MakeKustomizer(opts).Run(filesys.MakeFsOnDisk(), dir)
 }
 
 func sameOutput(want, got resmap.ResMap) error {

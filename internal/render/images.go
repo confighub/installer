@@ -4,33 +4,30 @@
 package render
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/confighub/installer/internal/kustomize"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/pkg/api"
 )
 
-// applyImageOverrides runs `kustomize edit set image <name>=<ref>` for
-// each entry in overrides against the chosen base's
-// kustomization.yaml. Mutates the package working copy in place; the
-// next `installer pull` / `installer upgrade` re-fetches and starts
-// clean, so the mutation is non-persistent at the package source
-// level. Allowed by Principle 1's carve-out for the installer's own
+// applyImageOverrides sets each entry in overrides in the chosen base's
+// kustomization.yaml, as `kustomize edit set image <name>=<ref>` would.
+// Mutates the package working copy in place; the next `installer pull` /
+// `installer upgrade` re-fetches and starts clean, so the mutation is
+// non-persistent at the package source level. Allowed by Principle 1's carve-out for the installer's own
 // `--set-image` mutations.
 //
 // Pre-flight: the chosen base's kustomization.yaml must declare an
 // `images:` block. If it does not, returns an error pointing the
 // operator at the recommended alternatives. The check exists because
-// `kustomize edit set image` would otherwise silently inject an
-// `images:` block on a package whose author did not intend image
-// overrides.
+// setting an image would otherwise silently inject an `images:` block
+// on a package whose author did not intend image overrides.
 //
 // No-op when overrides is empty.
 func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[string]string) error {
@@ -48,24 +45,13 @@ func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[
 		return err
 	}
 
-	// Sort keys so the kustomize edit invocations (and any resulting
-	// kustomization.yaml diff) are deterministic across runs.
-	names := make([]string, 0, len(overrides))
-	for n := range overrides {
-		names = append(names, n)
+	args := make([]string, 0, len(overrides))
+	for name, ref := range overrides {
+		args = append(args, name+"="+ref)
 	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		ref := overrides[name]
-		cmd := exec.Command("kustomize", "edit", "set", "image", name+"="+ref)
-		cmd.Dir = baseDir
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("kustomize edit set image %s=%s in %s: %w\n%s",
-				name, ref, baseDir, err, stderr.String())
-		}
+	sort.Strings(args)
+	if err := kustomize.SetImages(kustPath, args); err != nil {
+		return fmt.Errorf("--set-image in %s: %w", baseDir, err)
 	}
 	return nil
 }

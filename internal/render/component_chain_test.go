@@ -6,7 +6,6 @@ package render_test
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,14 +27,10 @@ import (
 // namespace AND the annotation; omitting it should produce only the
 // namespace.
 func TestComponentScopedTransformers(t *testing.T) {
-	if _, err := exec.LookPath("kustomize"); err != nil {
-		t.Skip("kustomize not on PATH")
-	}
-
 	for _, tc := range []struct {
-		name              string
-		selectAnnotate    bool
-		expectAnnotation  bool
+		name             string
+		selectAnnotate   bool
+		expectAnnotation bool
 	}{
 		{name: "annotate selected", selectAnnotate: true, expectAnnotation: true},
 		{name: "annotate not selected", selectAnnotate: false, expectAnnotation: false},

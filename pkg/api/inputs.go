@@ -32,9 +32,9 @@ type InputsSpec struct {
 	// ImageOverrides maps kustomize image transformer name → image
 	// reference (e.g., "hello" → "hello:v2"). Populated by the
 	// `--set-image` flag on `installer wizard` / `installer upgrade`.
-	// At render time the installer runs `kustomize edit set image
-	// <name>=<ref>` for each entry against the chosen base's
-	// kustomization.yaml, before invoking `kustomize build`. The
+	// At render time the installer sets each entry in the chosen base's
+	// kustomization.yaml, as `kustomize edit set image <name>=<ref>`
+	// would, before the kustomize build. The
 	// package's chosen base must declare an `images:` block in its
 	// kustomization.yaml; render fails fast otherwise.
 	//

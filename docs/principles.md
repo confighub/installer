@@ -28,8 +28,9 @@ How to apply: if you find yourself reaching for `kustomize edit` against
 a package directory or hand-editing a `bases/*/kustomization.yaml`,
 stop. Either declare an input for it (and let the package's
 `transformers` consume it), or do it post-install in ConfigHub.
-The one allowed package-file mutation is `kustomize edit set image`
-applied by the installer itself behind `--set-image` (see Principle 4).
+The one allowed package-file mutation is the installer's own update of
+the base's `images:` block behind `--set-image`, the equivalent of
+`kustomize edit set image` (see Principle 4).
 
 ## 2. Spec files are the round-trippable source of truth
 
@@ -109,8 +110,8 @@ recommended pattern, in order of decreasing user friction:
 1. **Package author declares a kustomize `images:` transformer** in the
    chosen base's `kustomization.yaml`. Operators override at install or
    upgrade time with `installer setup --set-image name=ref` (which
-   runs `kustomize edit set image` against the package's working copy
-   before render). Operators override post-install with `cub function
+   updates the `images:` block in the package's working copy before
+   render, as `kustomize edit set image` would). Operators override post-install with `cub function
 do set-container-image` on the uploaded Unit. This is the default
    recommendation.
 2. **Package author declares image inputs and a `set-container-image`

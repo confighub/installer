@@ -32,7 +32,7 @@ function executor SDK. Output goes to <work-dir>/out/manifests/ as one YAML
 file per resource. The resolved function-chain.yaml and a manifest-index.yaml
 are written to <work-dir>/out/record/.
 
-The kustomize binary must be on PATH.
+Kustomize is built into the installer; the kustomize binary is not needed.
 
 Render is deterministic: the same package + selection + inputs always produce
 identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
