@@ -11,6 +11,10 @@ spec:
     metadata:
       labels:
         app: confighubplaceholder
+      annotations:
+        # ConfigHub fills this with the hash of the collector-app-env
+        # ConfigMap it renders, so a change to it rolls the pods.
+        confighub.com/Hash: confighubplaceholder
     spec:
       serviceAccountName: collector-app
       containers:

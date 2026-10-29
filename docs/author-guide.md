@@ -819,10 +819,11 @@ toolchain annotation and:
   `installer.confighub.com/appconfig-source-key` — the `data:` key
   whose value is the raw config file body. And it records
   `installer.confighub.com/appconfig-mutable` (`true` or `false`)
-  by matching the rendered ConfigMap name against kustomize's
-  `-<10-char hash>` suffix — present iff `disableNameSuffixHash`
-  was its default of `false`. Authors can pre-set any of the three
-  annotations to override the inference.
+  by matching the ConfigMap name against kustomize's
+  `-<10-char hash>` suffix. kustomize appends that suffix only after
+  the transformer runs, so the inference always finds a stable name
+  (see [disableNameSuffixHash](#disablenamesuffixhash)). Authors can
+  pre-set any of the three annotations to override the inference.
 - Routes any `AppConfig/*` function group in `spec.transformers` to
   the matching ConfigMap: extract the raw config from `data:`, run
   the function in the AppConfig toolchain, write the mutated content
@@ -848,8 +849,7 @@ apply step is involved.
 
 Whether the generator hashes the ConfigMap's name decides how
 ConfigHub renders it after upload, and how a change to it reaches
-the pods. Set `disableNameSuffixHash: true` unless you need the
-previous versions of the ConfigMap kept.
+the pods. Set `disableNameSuffixHash: true`.
 
 **Stable name (`disableNameSuffixHash: true`).** The installer marks
 the ConfigMap mutable, and the upload's Invocation runs
@@ -883,17 +883,15 @@ variables keep the values they started with. A pod template holds one
 `confighub.com/Hash`, so it rolls on changes to one rendered
 ConfigMap.
 
-**Hashed name (the kustomize default).** The installer marks the
-ConfigMap immutable, and the Invocation runs
-`render-configmap --immutable=true`. Every change to the AppConfig
-Unit renders a new immutable ConfigMap, named after the AppConfig
-Unit with a hash of the content appended, and the newest is
-annotated `confighub.com/RenderRevision: Latest`. The old ConfigMaps
-stay in the rendered Unit. The upload registers nothing to remove
-them, so bound them with a `prune-configmaps` Mutation Trigger on
-the Space. In ConfigHub, a workload follows the new name only where
-its reference is `confighubplaceholder`, which Needs/Provides fills
-in.
+**Hashed name (the kustomize default)** isn't supported yet.
+kustomize appends the hash after the installer's transformer has
+run, so the installer sees no suffix and marks the ConfigMap
+mutable: ConfigHub renders it in place, as for a stable name, but
+under the name kustomize hashed. Marking it immutable with
+`installer.confighub.com/appconfig-mutable: "false"` doesn't help:
+ConfigHub appends a hash of its own to the rendered name, and the
+workload's reference keeps kustomize's name, which no ConfigMap
+has.
 
 ConfigHub's [AppConfig guide](https://docs.confighub.com/guide/app-config/#deploying-as-a-kubernetes-configmap)
 describes both modes in full.

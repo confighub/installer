@@ -371,8 +371,8 @@ split into four ConfigHub objects:
     pre-pass infers this from kustomize's hash-suffix convention; see
     "Author contract" above), otherwise `--immutable=true`. Mutable
     ConfigMaps update in place with a stable name; immutable ones (the
-    kustomize default) get hashed names and accumulate as revisions
-    (bound via a separate `prune-configmaps` trigger if desired).
+    kustomize default) get a hashed name per render, and the Upsert
+    link replaces the previous render with the new one.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>-rendered`). Body is empty at creation; populated by
   the Upsert link below. Inherits the upload-wide `--target` flag
@@ -510,8 +510,6 @@ We test all of these against AppConfig-bearing ConfigMaps:
 
 ## Open questions
 
-- `RevisionHistoryLimit` default for the immutable (hashed-name)
-  case. 10? 5? Match the cub default. Decide before phase 7.
 - Whether component-supplied transformer configs should be
   template-resolved at compose time (current plan) or via a small
   vars-KRM function injected upstream in the transformers list.
