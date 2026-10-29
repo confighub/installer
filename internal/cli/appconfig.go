@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -17,17 +16,6 @@ import (
 	"github.com/confighub/installer/internal/chainexec"
 	"github.com/confighub/installer/pkg/api"
 )
-
-// kustomizeHashSuffix matches kustomize's configMapGenerator hash suffix:
-// `-` followed by exactly 10 lowercase-alphanumeric chars at end-of-name.
-// Anchored to the end so author-chosen names like `my-app-v1` aren't
-// misdetected. When matched on the rendered ConfigMap, the carrier was
-// generated with disableNameSuffixHash=false (kustomize default) →
-// immutable mode → ConfigMap rolls on every content change. When not
-// matched, the name is stable → mutable mode → ConfigMap is updated in
-// place. Authors can override the inference by pre-setting
-// installer.confighub.com/appconfig-mutable explicitly.
-var kustomizeHashSuffix = regexp.MustCompile(`-[a-z0-9]{10}$`)
 
 // AppConfig annotation keys. `toolchain` is the only one authors write by
 // hand; mode and source-key are derived by the transformer from the carrier
@@ -38,6 +26,13 @@ const (
 	annoMode      = "installer.confighub.com/appconfig-mode"
 	annoSourceKey = "installer.confighub.com/appconfig-source-key"
 	annoMutable   = "installer.confighub.com/appconfig-mutable"
+	annoName      = "installer.confighub.com/appconfig-name"
+
+	// annoNeedsHashSuffix is the build annotation kustomize puts on a resource a
+	// generator made without disableNameSuffixHash. The transformer runs before
+	// kustomize appends the hash, so the name it sees is the name before the hash,
+	// and this annotation is what says a hash is coming.
+	annoNeedsHashSuffix = "internal.config.kubernetes.io/needsHashSuffix"
 
 	appConfigModeFile = "file"
 	appConfigModeEnv  = "env"
@@ -205,16 +200,19 @@ func validateAndFillAnnotations(shape *configMapShape) (bool, error) {
 		}
 	}
 
-	// Mutability is inferred from kustomize's hash-suffix convention on
-	// the rendered name unless the author pre-set the annotation. The
-	// inference works because kustomize appends `-<10-char hash>` exactly
-	// when disableNameSuffixHash is false (the generator default).
+	// A generator that hashes the ConfigMap's name asks for a new ConfigMap on
+	// every change to its content, which is what immutable mode renders, so
+	// that is the mode unless the author set one. The hash is kustomize's, and
+	// ConfigHub renders the ConfigMap under a hash of its own, so the name
+	// before kustomize's is recorded: upload names the AppConfig after it,
+	// keeping it the same across changes to the content.
+	hashed := shape.Metadata.Annotations[annoNeedsHashSuffix] == "enabled"
 	if _, set := shape.Metadata.Annotations[annoMutable]; !set {
-		if kustomizeHashSuffix.MatchString(shape.Metadata.Name) {
-			shape.Metadata.Annotations[annoMutable] = "false"
-		} else {
-			shape.Metadata.Annotations[annoMutable] = "true"
-		}
+		shape.Metadata.Annotations[annoMutable] = fmt.Sprintf("%t", !hashed)
+		changed = true
+	}
+	if hashed && shape.Metadata.Annotations[annoName] != shape.Metadata.Name {
+		shape.Metadata.Annotations[annoName] = shape.Metadata.Name
 		changed = true
 	}
 	return changed, nil

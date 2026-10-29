@@ -51,17 +51,33 @@ functionConfig:
 	}
 }
 
-// TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName
-// verifies the mutability inference: a stable name (no kustomize hash
-// suffix) yields mutable=true, a hashed name yields mutable=false.
-func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName(t *testing.T) {
+// TestTransformer_AppConfigAnnotationInjection_MutableInferredFromHashing
+// verifies the mutability inference. kustomize runs the transformer before
+// it appends a generator's hash, so the name is never hashed here: a
+// generator that will hash it leaves internal.config.kubernetes.io/needsHashSuffix
+// on the ConfigMap. That means immutable, with the name before the hash
+// recorded for upload; without it, mutable, with nothing recorded.
+func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromHashing(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
-		cmName      string
+		annotations string
 		wantMutable string
+		wantName    string
 	}{
-		{name: "stable name → mutable", cmName: "app-config", wantMutable: "true"},
-		{name: "kustomize-hashed name → immutable", cmName: "app-config-798k5k7g9f", wantMutable: "false"},
+		{name: "stable name → mutable", wantMutable: "true"},
+		{
+			name:        "name kustomize will hash → immutable",
+			annotations: "        internal.config.kubernetes.io/needsHashSuffix: enabled\n",
+			wantMutable: "false",
+			wantName:    "app-config",
+		},
+		{
+			name: "author's mode wins, and the name is still recorded",
+			annotations: "        internal.config.kubernetes.io/needsHashSuffix: enabled\n" +
+				"        installer.confighub.com/appconfig-mutable: \"true\"\n",
+			wantMutable: "true",
+			wantName:    "app-config",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := `apiVersion: config.kubernetes.io/v1
@@ -70,10 +86,10 @@ items:
   - apiVersion: v1
     kind: ConfigMap
     metadata:
-      name: ` + tc.cmName + `
+      name: app-config
       annotations:
         installer.confighub.com/toolchain: AppConfig/Properties
-    data:
+` + tc.annotations + `    data:
       application.properties: a=1
 functionConfig:
   apiVersion: installer.confighub.com/v1alpha1
@@ -90,39 +106,11 @@ functionConfig:
 				t.Errorf("appconfig-mutable: want %q, got %q",
 					tc.wantMutable, cm.Metadata.Annotations[annoMutable])
 			}
+			if cm.Metadata.Annotations[annoName] != tc.wantName {
+				t.Errorf("appconfig-name: want %q, got %q",
+					tc.wantName, cm.Metadata.Annotations[annoName])
+			}
 		})
-	}
-}
-
-// TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride
-// verifies the inference doesn't clobber an author-set value. A hashed
-// name with appconfig-mutable=true should stay mutable=true.
-func TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride(t *testing.T) {
-	input := `apiVersion: config.kubernetes.io/v1
-kind: ResourceList
-items:
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: app-config-798k5k7g9f
-      annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
-        installer.confighub.com/appconfig-mutable: "true"
-    data:
-      application.properties: a=1
-functionConfig:
-  apiVersion: installer.confighub.com/v1alpha1
-  kind: ConfigHubTransformers
-  metadata: {name: noop}
-  spec: {groups: []}
-`
-	out, err := runTransformer(context.Background(), []byte(input))
-	if err != nil {
-		t.Fatalf("runTransformer: %v", err)
-	}
-	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMutable] != "true" {
-		t.Errorf("expected author override to win, got %q", cm.Metadata.Annotations[annoMutable])
 	}
 }
 
