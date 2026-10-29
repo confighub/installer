@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/confighub/installer/internal/kustimport"
 	"github.com/confighub/installer/pkg/api"
 )
 
@@ -29,9 +30,11 @@ var defaultValidators = []api.FunctionGroup{{
 
 func newInitCmd() *cobra.Command {
 	var (
-		name    string
-		version string
-		force   bool
+		name        string
+		version     string
+		force       bool
+		source      string
+		sourceScope string
 	)
 	cmd := &cobra.Command{
 		Use:   "init <dir>",
@@ -53,7 +56,25 @@ that ship cloneable bases would fail it. Add or remove validators
 later with 'installer edit validator add/remove' (when shipped) or
 by hand-editing installer.yaml.
 
-Refuses to overwrite an existing installer.yaml unless --force.`,
+With --source, bases/default/ starts as a copy of an existing
+kustomization directory instead of an empty kustomization. The copy is
+made with kustomize localize: every file the source references comes
+along, and remote resources are downloaded into the package. Files the
+source references outside its own directory (an overlay's ../../base)
+must be inside --source-scope, which defaults to the enclosing git
+repository. For such a source, bases/default/ mirrors the directories
+of the files it references, and its kustomization.yaml is a generated
+one that includes the source's directory.
+
+The imported base gets an images: block naming every container image it
+runs, unless the source already declares one, so operators can override
+images with --set-image. The import is refused if the source inflates
+Helm charts, produces Secrets with data, or does not build to the same
+output once copied. The copy loses the comments in its kustomization
+files, and lists their fields in alphabetical order.
+
+Refuses to overwrite an existing installer.yaml unless --force, and
+refuses to import into a non-empty bases/default/ even with --force.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := filepath.Abs(args[0])
@@ -67,7 +88,19 @@ Refuses to overwrite an existing installer.yaml unless --force.`,
 			if _, err := os.Stat(pkgPath); err == nil && !force {
 				return fmt.Errorf("%s already exists; use --force to overwrite", pkgPath)
 			}
-			if err := os.MkdirAll(filepath.Join(dir, "bases", "default"), 0o755); err != nil {
+			if sourceScope != "" && source == "" {
+				return fmt.Errorf("--source-scope requires --source")
+			}
+			baseDir := filepath.Join(dir, "bases", "default")
+			baseDescription := "Default base — replace with your package's resources."
+			var imported *kustimport.Result
+			if source != "" {
+				if imported, err = kustimport.Import(source, sourceScope, baseDir); err != nil {
+					return fmt.Errorf("import --source %s: %w", source, err)
+				}
+				baseDescription = "Imported from an existing kustomization."
+			}
+			if err := os.MkdirAll(baseDir, 0o755); err != nil {
 				return err
 			}
 			if err := os.MkdirAll(filepath.Join(dir, "components"), 0o755); err != nil {
@@ -91,7 +124,7 @@ Refuses to overwrite an existing installer.yaml unless --force.`,
 						Name:        "default",
 						Path:        "bases/default",
 						Default:     true,
-						Description: "Default base — replace with your package's resources.",
+						Description: baseDescription,
 					}},
 					Transformers: []api.FunctionGroup{{
 						Toolchain:   "Kubernetes/YAML",
@@ -114,7 +147,7 @@ Refuses to overwrite an existing installer.yaml unless --force.`,
 			// Seed an empty kustomization.yaml so `installer render`
 			// works against the empty base. The author replaces this
 			// with their actual resources.
-			kustPath := filepath.Join(dir, "bases", "default", "kustomization.yaml")
+			kustPath := filepath.Join(baseDir, "kustomization.yaml")
 			if _, err := os.Stat(kustPath); os.IsNotExist(err) {
 				kust := []byte(`apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -135,18 +168,39 @@ resources: []
 
 			fmt.Printf("Initialized package %q at %s\n", name, dir)
 			fmt.Printf("  - %s\n", pkgPath)
-			fmt.Printf("  - %s/\n", filepath.Join(dir, "bases", "default"))
+			fmt.Printf("  - %s/\n", baseDir)
 			fmt.Printf("  - %s/\n", filepath.Join(dir, "components"))
 			fmt.Printf("  - %s/\n", filepath.Join(dir, "validation"))
 			fmt.Println()
-			fmt.Println("Next: drop your kustomize resources under bases/default/, then run")
+			if imported != nil {
+				printImport(source, imported)
+				fmt.Println("Next: render it with")
+			} else {
+				fmt.Println("Next: drop your kustomize resources under bases/default/, then render with")
+			}
 			fmt.Printf("  %s wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", InvocationName(), dir)
-			fmt.Printf("  %s render /tmp/dev\n", InvocationName())
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "package metadata.name (default: basename of <dir>)")
 	cmd.Flags().StringVar(&version, "version", "0.1.0", "package installerMetadata.version (SemVer)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing installer.yaml")
+	cmd.Flags().StringVar(&source, "source", "", "existing kustomization directory to copy into bases/default/")
+	cmd.Flags().StringVar(&sourceScope, "source-scope", "", "directory containing every file --source references (default: the enclosing git repository, else --source)")
 	return cmd
+}
+
+func printImport(source string, r *kustimport.Result) {
+	fmt.Printf("Imported %s into bases/default/", source)
+	if r.Target != "." {
+		fmt.Printf(", from %s; its kustomization.yaml includes %s", r.Scope, filepath.ToSlash(r.Target))
+	}
+	fmt.Println(".")
+	if len(r.Images) > 0 {
+		fmt.Println("Seeded images: in bases/default/kustomization.yaml for --set-image:")
+		for _, img := range r.Images {
+			fmt.Printf("  - %s\n", img.Name)
+		}
+	}
+	fmt.Println()
 }

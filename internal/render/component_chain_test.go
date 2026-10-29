@@ -23,7 +23,7 @@ import (
 // transformers chain.
 //
 // The package below sets metadata.namespace via the package-wide chain. The
-// `annotate` component then layers a yq-i call that adds a marker
+// `annotate` component then layers a set-yq call that adds a marker
 // annotation. Selecting `annotate` should produce manifests with both the
 // namespace AND the annotation; omitting it should produce only the
 // namespace.
@@ -97,7 +97,7 @@ spec:
         - toolchain: Kubernetes/YAML
           whereResource: "ConfigHub.ResourceType = 'v1/ConfigMap'"
           invocations:
-            - name: yq-i
+            - name: set-yq
               args: ['.metadata.annotations."installer.test/marker" = "hello"']
   transformers:
     - toolchain: Kubernetes/YAML

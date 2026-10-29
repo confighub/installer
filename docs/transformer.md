@@ -217,7 +217,7 @@ spec:
         - toolchain: Kubernetes/YAML
           whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
           invocations:
-            - name: yq-i
+            - name: set-yq
               args: ['.spec.namespaceSelector.matchNames = ["{{ .Namespace }}"]']
   transformers:
     - toolchain: Kubernetes/YAML
