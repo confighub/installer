@@ -9,11 +9,13 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/confighub/installer/pkg/api"
 )
 
 // TestTransformer_AppConfigAnnotationInjection_FileMode verifies the
 // pre-pass infers appconfig-mode=file and the unique source-key for a
-// ConfigMap with one data: file under installer.confighub.com/toolchain.
+// ConfigMap with one data: file under confighub.com/toolchain.
 // No function group is declared; the transformer's only job here is the
 // canonical-annotation pass.
 func TestTransformer_AppConfigAnnotationInjection_FileMode(t *testing.T) {
@@ -26,7 +28,7 @@ items:
       name: app-config
       namespace: demo
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       application.properties: |
         a=1
@@ -42,26 +44,42 @@ functionConfig:
 		t.Fatalf("runTransformer: %v", err)
 	}
 	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMode] != appConfigModeFile {
-		t.Errorf("appconfig-mode: want %q, got %q", appConfigModeFile, cm.Metadata.Annotations[annoMode])
+	if cm.Metadata.Annotations[api.AnnotationAppConfigMode] != api.AppConfigModeFile {
+		t.Errorf("appconfig-mode: want %q, got %q", api.AppConfigModeFile, cm.Metadata.Annotations[api.AnnotationAppConfigMode])
 	}
-	if cm.Metadata.Annotations[annoSourceKey] != "application.properties" {
+	if cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey] != "application.properties" {
 		t.Errorf("appconfig-source-key: want application.properties, got %q",
-			cm.Metadata.Annotations[annoSourceKey])
+			cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey])
 	}
 }
 
-// TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName
-// verifies the mutability inference: a stable name (no kustomize hash
-// suffix) yields mutable=true, a hashed name yields mutable=false.
-func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromName(t *testing.T) {
+// TestTransformer_AppConfigAnnotationInjection_MutableInferredFromHashing
+// verifies the mutability inference. kustomize runs the transformer before
+// it appends a generator's hash, so the name is never hashed here: a
+// generator that will hash it leaves internal.config.kubernetes.io/needsHashSuffix
+// on the ConfigMap. That means immutable, with the name before the hash
+// recorded for upload; without it, mutable, with nothing recorded.
+func TestTransformer_AppConfigAnnotationInjection_MutableInferredFromHashing(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
-		cmName      string
+		annotations string
 		wantMutable string
+		wantName    string
 	}{
-		{name: "stable name → mutable", cmName: "app-config", wantMutable: "true"},
-		{name: "kustomize-hashed name → immutable", cmName: "app-config-798k5k7g9f", wantMutable: "false"},
+		{name: "stable name → mutable", wantMutable: "true"},
+		{
+			name:        "name kustomize will hash → immutable",
+			annotations: "        internal.config.kubernetes.io/needsHashSuffix: enabled\n",
+			wantMutable: "false",
+			wantName:    "app-config",
+		},
+		{
+			name: "author's mode wins, and the name is still recorded",
+			annotations: "        internal.config.kubernetes.io/needsHashSuffix: enabled\n" +
+				"        confighub.com/appconfig-mutable: \"true\"\n",
+			wantMutable: "true",
+			wantName:    "app-config",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := `apiVersion: config.kubernetes.io/v1
@@ -70,10 +88,10 @@ items:
   - apiVersion: v1
     kind: ConfigMap
     metadata:
-      name: ` + tc.cmName + `
+      name: app-config
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
-    data:
+        confighub.com/toolchain: AppConfig/Properties
+` + tc.annotations + `    data:
       application.properties: a=1
 functionConfig:
   apiVersion: installer.confighub.com/v1alpha1
@@ -86,43 +104,15 @@ functionConfig:
 				t.Fatalf("runTransformer: %v", err)
 			}
 			cm := firstConfigMap(t, out)
-			if cm.Metadata.Annotations[annoMutable] != tc.wantMutable {
+			if cm.Metadata.Annotations[api.AnnotationAppConfigMutable] != tc.wantMutable {
 				t.Errorf("appconfig-mutable: want %q, got %q",
-					tc.wantMutable, cm.Metadata.Annotations[annoMutable])
+					tc.wantMutable, cm.Metadata.Annotations[api.AnnotationAppConfigMutable])
+			}
+			if cm.Metadata.Annotations[api.AnnotationAppConfigName] != tc.wantName {
+				t.Errorf("appconfig-name: want %q, got %q",
+					tc.wantName, cm.Metadata.Annotations[api.AnnotationAppConfigName])
 			}
 		})
-	}
-}
-
-// TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride
-// verifies the inference doesn't clobber an author-set value. A hashed
-// name with appconfig-mutable=true should stay mutable=true.
-func TestTransformer_AppConfigAnnotationInjection_AuthorMutableOverride(t *testing.T) {
-	input := `apiVersion: config.kubernetes.io/v1
-kind: ResourceList
-items:
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: app-config-798k5k7g9f
-      annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
-        installer.confighub.com/appconfig-mutable: "true"
-    data:
-      application.properties: a=1
-functionConfig:
-  apiVersion: installer.confighub.com/v1alpha1
-  kind: ConfigHubTransformers
-  metadata: {name: noop}
-  spec: {groups: []}
-`
-	out, err := runTransformer(context.Background(), []byte(input))
-	if err != nil {
-		t.Fatalf("runTransformer: %v", err)
-	}
-	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMutable] != "true" {
-		t.Errorf("expected author override to win, got %q", cm.Metadata.Annotations[annoMutable])
 	}
 }
 
@@ -138,7 +128,7 @@ items:
     metadata:
       name: app-env
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Env
+        confighub.com/toolchain: AppConfig/Env
     data:
       FOO: bar
       BAZ: qux
@@ -153,12 +143,12 @@ functionConfig:
 		t.Fatalf("runTransformer: %v", err)
 	}
 	cm := firstConfigMap(t, out)
-	if cm.Metadata.Annotations[annoMode] != appConfigModeEnv {
-		t.Errorf("appconfig-mode: want %q, got %q", appConfigModeEnv, cm.Metadata.Annotations[annoMode])
+	if cm.Metadata.Annotations[api.AnnotationAppConfigMode] != api.AppConfigModeEnv {
+		t.Errorf("appconfig-mode: want %q, got %q", api.AppConfigModeEnv, cm.Metadata.Annotations[api.AnnotationAppConfigMode])
 	}
-	if _, present := cm.Metadata.Annotations[annoSourceKey]; present {
+	if _, present := cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey]; present {
 		t.Errorf("env mode should not carry a source-key annotation, got %q",
-			cm.Metadata.Annotations[annoSourceKey])
+			cm.Metadata.Annotations[api.AnnotationAppConfigSourceKey])
 	}
 }
 
@@ -174,7 +164,7 @@ items:
     metadata:
       name: app-config
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       first.properties: a=1
       second.properties: b=2
@@ -188,7 +178,7 @@ functionConfig:
 	if err == nil {
 		t.Fatal("expected error for ambiguous file-mode ConfigMap")
 	}
-	if !strings.Contains(err.Error(), annoSourceKey) {
+	if !strings.Contains(err.Error(), api.AnnotationAppConfigSourceKey) {
 		t.Errorf("error should point at the missing source-key annotation: %v", err)
 	}
 }
@@ -206,7 +196,7 @@ items:
       name: app-config
       namespace: demo
       annotations:
-        installer.confighub.com/toolchain: AppConfig/Properties
+        confighub.com/toolchain: AppConfig/Properties
     data:
       application.properties: |
         configHub.configSchema=AppProperties

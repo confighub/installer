@@ -23,7 +23,7 @@ import (
 //     the full multi-doc stream in one chainexec.RunValidators call,
 //     same as the in-kustomize K8s/YAML validator path did before.
 //   - AppConfig/* — for each ConfigMap in the stream carrying
-//     installer.confighub.com/toolchain matching the group's toolchain,
+//     confighub.com/toolchain matching the group's toolchain,
 //     extract the raw AppConfig file body and validate that. Carriers
 //     without the annotation, or with a different toolchain, are
 //     skipped.
@@ -54,7 +54,7 @@ func runValidatorsAfterKustomize(ctx context.Context, groups []api.FunctionGroup
 }
 
 // runAppConfigValidatorGroup walks the rendered manifest stream for
-// ConfigMaps tagged with installer.confighub.com/toolchain matching
+// ConfigMaps tagged with confighub.com/toolchain matching
 // group.Toolchain, extracts the raw AppConfig file body from each, and
 // runs the group's invocations against that body. Each carrier becomes
 // one chainexec.RunValidators call; failures are tagged with the
@@ -126,7 +126,7 @@ func decodeIfAppConfigConfigMap(doc *yaml.Node, wantToolchain string) (*appConfi
 	if shape.Kind != "ConfigMap" {
 		return nil, false, nil
 	}
-	if shape.Metadata.Annotations["installer.confighub.com/toolchain"] != wantToolchain {
+	if shape.Metadata.Annotations[api.AnnotationToolchain] != wantToolchain {
 		return nil, false, nil
 	}
 	return &shape, true, nil
@@ -135,23 +135,23 @@ func decodeIfAppConfigConfigMap(doc *yaml.Node, wantToolchain string) (*appConfi
 // extractAppConfigBody mirrors internal/cli/appconfig.go's
 // extractAppConfigContent for the rendered (post-transformer) shape.
 // The transformer pre-pass has already injected
-// installer.confighub.com/appconfig-mode (and appconfig-source-key in
+// confighub.com/appconfig-mode (and appconfig-source-key in
 // file mode), so we trust the annotations here and surface a clear
 // error if either is missing.
 func extractAppConfigBody(shape *appConfigCarrierShape) ([]byte, error) {
-	mode := shape.Metadata.Annotations["installer.confighub.com/appconfig-mode"]
+	mode := shape.Metadata.Annotations[api.AnnotationAppConfigMode]
 	switch mode {
-	case "file":
-		key := shape.Metadata.Annotations["installer.confighub.com/appconfig-source-key"]
+	case api.AppConfigModeFile:
+		key := shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey]
 		if key == "" {
-			return nil, fmt.Errorf("file mode missing installer.confighub.com/appconfig-source-key")
+			return nil, fmt.Errorf("file mode missing %s", api.AnnotationAppConfigSourceKey)
 		}
 		body, ok := shape.Data[key]
 		if !ok {
 			return nil, fmt.Errorf("data[%q] not present", key)
 		}
 		return []byte(body), nil
-	case "env":
+	case api.AppConfigModeEnv:
 		keys := make([]string, 0, len(shape.Data))
 		for k := range shape.Data {
 			keys = append(keys, k)
@@ -163,6 +163,6 @@ func extractAppConfigBody(shape *appConfigCarrierShape) ([]byte, error) {
 		}
 		return buf.Bytes(), nil
 	default:
-		return nil, fmt.Errorf("unknown installer.confighub.com/appconfig-mode %q", mode)
+		return nil, fmt.Errorf("unknown %s %q", api.AnnotationAppConfigMode, mode)
 	}
 }

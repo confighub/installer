@@ -259,7 +259,7 @@ configMapGenerator:
       - application.properties
     options:
       annotations:
-        installer.confighub.com/toolchain: "AppConfig/Properties"
+        confighub.com/toolchain: "AppConfig/Properties"
 
   - name: app-env
     envs:
@@ -267,11 +267,11 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
       annotations:
-        installer.confighub.com/toolchain: "AppConfig/Env"
+        confighub.com/toolchain: "AppConfig/Env"
 ```
 
 The annotation key is generalized to
-`installer.confighub.com/toolchain`, not `appconfig-toolchain`, so
+`confighub.com/toolchain`, not `appconfig-toolchain`, so
 the same mechanism can roundtrip future non-Kubernetes toolchains
 that have a natural ConfigMap (or equivalent) carrier.
 
@@ -284,31 +284,37 @@ The installer transformer infers three more annotations from the
 rendered carrier and injects them back onto the ConfigMap so
 downstream consumers (upload, drift) see one canonical contract:
 
-- `installer.confighub.com/appconfig-mode: file | env` — derived
+- `confighub.com/appconfig-mode: file | env` — derived
   from the `data:` shape. `AppConfig/Env` always implies env mode
   unless the data looks file-shaped; everything else implies file
   mode.
-- `installer.confighub.com/appconfig-source-key: <name>` —
+- `confighub.com/appconfig-source-key: <name>` —
   file-mode only. The `data:` key whose value is the raw config
   body. Skipped when there's a single `data:` key (the unambiguous
   case).
-- `installer.confighub.com/appconfig-mutable: true | false` —
-  derived from the rendered ConfigMap's name pattern. Kustomize
-  appends a `-<10-char hash>` suffix iff `disableNameSuffixHash`
-  is false (the generator default), so the regex
-  `-[a-z0-9]{10}$` is a reliable signal. Matched → immutable
+- `confighub.com/appconfig-mutable: true | false` —
+  whether the generator hashes the ConfigMap's name. Kustomize
+  appends the hash after the transformer runs, so the name the
+  transformer sees is never hashed; a ConfigMap kustomize will hash
+  carries the build annotation
+  `internal.config.kubernetes.io/needsHashSuffix: enabled`, which
+  kustomize removes when it appends the hash. Present → immutable
   (versioned ConfigMaps, each content change rolls a new one);
-  unmatched → mutable (stable name, hash annotation on the
-  consuming workload triggers restarts). The upload step reads
-  this to pass `--immutable=false` to the render-configmap
-  Invocation in the mutable case.
+  absent → mutable (stable name, hash annotation on the consuming
+  workload triggers restarts). The upload step reads this to pass
+  `--immutable=false` to the render-configmap Invocation in the
+  mutable case.
+- `confighub.com/appconfig-name: <name>` — only for a
+  ConfigMap kustomize will hash: its name before the hash. Upload
+  names the AppConfig Units after it, so a change to the content,
+  which changes the hashed name, updates them.
 
-Authors don't write the mode, source-key, or mutable annotations
-themselves; the transformer infers and injects them. Authors who
-need to override the inference (rare: file-shaped `.env` content,
-an ambiguous `data:` shape, or a basename that happens to end in 10
-lowercase-alphanumeric chars) can set the annotation explicitly on
-the generator entry and the transformer respects it.
+Authors don't write the mode, source-key, mutable, or name
+annotations themselves; the transformer infers and injects them.
+Authors who need to override the inference (rare: file-shaped `.env`
+content, or an ambiguous `data:` shape) can set the mode, source-key
+or mutable annotation explicitly on the generator entry and the
+transformer respects it.
 
 We deliberately don't modify the package's `kustomization.yaml`
 files — that would conflict with the read-only-package principle.
@@ -322,7 +328,7 @@ When a `FunctionGroup` declares `toolchain: AppConfig/*`, the
 transformer:
 
 1. Pre-filters `ResourceList.items` to ConfigMaps whose
-   `installer.confighub.com/toolchain` annotation matches the
+   `confighub.com/toolchain` annotation matches the
    group's `toolchain`. The group's `whereResource` then filters
    further over the carrier ConfigMap — kind, name, labels — using
    standard ConfigHub filter syntax. Intra-content filtering is
@@ -347,19 +353,22 @@ write-back; failures become `ResourceList.results`.
 
 #### Upload split
 
-At upload, ConfigMaps with `installer.confighub.com/toolchain` are
+At upload, ConfigMaps with `confighub.com/toolchain` are
 split into four ConfigHub objects:
 
-- **AppConfig Unit** (slug = `<carrier-name>`, matching the
-  kustomize-generated ConfigMap name). Toolchain from the annotation.
-  Data = the extracted raw file body. Day-2 source of truth in the
-  native format. No target — it is a pure data source. The
-  `render-configmap` function uses the Unit slug as the rendered
-  ConfigMap's `metadata.name` (`<slug>-<hash>` in immutable mode,
-  `<slug>` in mutable mode), so the slug deliberately has no suffix —
-  workloads can reference the carrier by its kustomize-generated name
-  (e.g. `envFrom.configMapRef.name`) and the rendered ConfigMap will
-  match.
+- **AppConfig Unit** (slug = `<carrier-name>`: the
+  `appconfig-name` annotation when set, else the ConfigMap's name).
+  Toolchain from the annotation. Data = the extracted raw file body.
+  Day-2 source of truth in the native format. No target — it is a
+  pure data source. The `render-configmap` function uses the Unit
+  slug as the rendered ConfigMap's `metadata.name` (`<slug>-<hash>`
+  in immutable mode, `<slug>` in mutable mode). A workload reference
+  that already holds that name (a mutable ConfigMap under a stable
+  name) is left alone. Upload replaces any other reference to the
+  carrier with a named placeholder for the Unit, e.g.
+  `confighubplaceholderapp_env` for `app-env`, which Needs/Provides
+  fills with the rendered name, and with the newest render's as new
+  ones are added.
 - **render-configmap Invocation** (slug `<carrier-name>-render`).
   Toolchain from the annotation. This is the `TransformInvocation`
   the Upsert link runs to render the AppConfig Unit's data into a
@@ -368,11 +377,14 @@ split into four ConfigHub objects:
     The function ignores it for non-Env toolchains; we set it only
     where it's meaningful.
   - `--immutable=false` iff `appconfig-mutable=true` (the transformer
-    pre-pass infers this from kustomize's hash-suffix convention; see
-    "Author contract" above), otherwise `--immutable=true`. Mutable
-    ConfigMaps update in place with a stable name; immutable ones (the
-    kustomize default) get hashed names and accumulate as revisions
-    (bound via a separate `prune-configmaps` trigger if desired).
+    pre-pass infers this from kustomize's `needsHashSuffix` build
+    annotation; see "Author contract" above), otherwise
+    `--immutable=true`. Mutable ConfigMaps update in place with a
+    stable name; immutable ones (the kustomize default) get hashed
+    names and accumulate as revisions. A `prune-configmaps` Mutation
+    Trigger bounds them, and is also what moves workloads to the
+    newest render: until it withdraws the older ones, a reference
+    stays on the render it named first.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>-rendered`). Body is empty at creation; populated by
   the Upsert link below. Inherits the upload-wide `--target` flag
@@ -491,7 +503,7 @@ We test all of these against AppConfig-bearing ConfigMaps:
    declaration order, emitted as a single `out/compose/transformers.yaml`.
 5. **AppConfig annotation contract. ✅** Documented in
    author-guide.md; the transformer reads
-   `installer.confighub.com/toolchain` from kustomize-copied
+   `confighub.com/toolchain` from kustomize-copied
    generator annotations.
 6. **AppConfig transformer round-trip + annotation injection. ✅**
    `installer transformer` runs a pre-pass that derives and injects

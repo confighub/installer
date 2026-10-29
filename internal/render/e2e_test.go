@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/confighub/installer/internal/kustomize"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/render"
@@ -344,5 +346,143 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	}
 	if !strings.Contains(string(poolBytes), "namespace: inferdemo") {
 		t.Errorf("InferencePool namespace not set:\n%s", poolBytes)
+	}
+}
+
+// TestEndToEnd_HashedConfigMaps renders AppConfig carried in ConfigMaps
+// from two configMapGenerators, one that hashes its ConfigMap's name and
+// one with disableNameSuffixHash. kustomize runs the transformer before it
+// appends the hash, so this is the only test that sees what the transformer
+// is actually given. The hashed ConfigMap is immutable and records its
+// name before the hash; the other is mutable and records nothing. The
+// rendered output is kustomize's: the hashed name, and references to it
+// rewritten to match.
+func TestEndToEnd_HashedConfigMaps(t *testing.T) {
+	pkgDir := t.TempDir()
+	writeFile(t, filepath.Join(pkgDir, "installer.yaml"), `apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: hashed
+installerMetadata:
+  version: 0.0.1
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+`)
+	writeFile(t, filepath.Join(pkgDir, "bases/default/kustomization.yaml"), `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+configMapGenerator:
+  - name: app-env
+    envs:
+      - app.env
+    options:
+      annotations:
+        confighub.com/toolchain: AppConfig/Env
+  - name: app-props
+    files:
+      - app.properties
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        confighub.com/toolchain: AppConfig/Properties
+`)
+	writeFile(t, filepath.Join(pkgDir, "bases/default/app.env"), "GREETING=hello\n")
+	writeFile(t, filepath.Join(pkgDir, "bases/default/app.properties"), "port=5432\n")
+	writeFile(t, filepath.Join(pkgDir, "bases/default/deployment.yaml"), `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+        - name: app
+          image: registry.example.com/app:1.0.0
+          envFrom:
+            - configMapRef:
+                name: app-env
+          volumeMounts:
+            - name: props
+              mountPath: /etc/app
+      volumes:
+        - name: props
+          configMap:
+            name: app-props
+`)
+
+	loaded, err := ipkg.Load(pkgDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	outDir := filepath.Join(t.TempDir(), "out")
+	wres, err := wizard.Run(context.Background(), loaded.Package, wizard.RawAnswers{Namespace: "demo"}, loaded.Root, outDir)
+	if err != nil {
+		t.Fatalf("wizard.Run: %v", err)
+	}
+	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+		Loaded:    loaded,
+		Selection: wres.Selection,
+		Inputs:    wres.Inputs,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	type configMap struct {
+		Metadata struct {
+			Name        string            `yaml:"name"`
+			Annotations map[string]string `yaml:"annotations"`
+		} `yaml:"metadata"`
+	}
+	var hashed, stable *configMap
+	var deployment string
+	for _, f := range result.Manifests {
+		switch f.Kind {
+		case "ConfigMap":
+			var cm configMap
+			if err := yaml.Unmarshal(f.Body, &cm); err != nil {
+				t.Fatalf("parse %s: %v", f.Filename, err)
+			}
+			switch {
+			case strings.HasPrefix(cm.Metadata.Name, "app-env-"):
+				hashed = &cm
+			case cm.Metadata.Name == "app-props":
+				stable = &cm
+			}
+		case "Deployment":
+			deployment = string(f.Body)
+		}
+	}
+	if hashed == nil || stable == nil {
+		t.Fatalf("want ConfigMaps app-env-<hash> and app-props, got %v", filenames(result.Manifests))
+	}
+
+	if got := hashed.Metadata.Annotations["confighub.com/appconfig-mutable"]; got != "false" {
+		t.Errorf("a ConfigMap whose name kustomize hashes should be immutable, got appconfig-mutable %q", got)
+	}
+	if got := hashed.Metadata.Annotations["confighub.com/appconfig-name"]; got != "app-env" {
+		t.Errorf("a hashed ConfigMap should record its name before the hash, got appconfig-name %q", got)
+	}
+	if got := stable.Metadata.Annotations["confighub.com/appconfig-mutable"]; got != "true" {
+		t.Errorf("a ConfigMap under a stable name should be mutable, got appconfig-mutable %q", got)
+	}
+	if got, ok := stable.Metadata.Annotations["confighub.com/appconfig-name"]; ok {
+		t.Errorf("a ConfigMap under a stable name should record no other name, got appconfig-name %q", got)
+	}
+	if _, ok := hashed.Metadata.Annotations["internal.config.kubernetes.io/needsHashSuffix"]; ok {
+		t.Errorf("kustomize's build annotation should not reach the output")
+	}
+	if !strings.Contains(deployment, "name: "+hashed.Metadata.Name) {
+		t.Errorf("the Deployment should refer to the hashed name %s, as kustomize rewrote it:\n%s", hashed.Metadata.Name, deployment)
 	}
 }

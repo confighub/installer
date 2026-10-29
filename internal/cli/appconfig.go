@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -18,30 +17,11 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
-// kustomizeHashSuffix matches kustomize's configMapGenerator hash suffix:
-// `-` followed by exactly 10 lowercase-alphanumeric chars at end-of-name.
-// Anchored to the end so author-chosen names like `my-app-v1` aren't
-// misdetected. When matched on the rendered ConfigMap, the carrier was
-// generated with disableNameSuffixHash=false (kustomize default) →
-// immutable mode → ConfigMap rolls on every content change. When not
-// matched, the name is stable → mutable mode → ConfigMap is updated in
-// place. Authors can override the inference by pre-setting
-// installer.confighub.com/appconfig-mutable explicitly.
-var kustomizeHashSuffix = regexp.MustCompile(`-[a-z0-9]{10}$`)
-
-// AppConfig annotation keys. `toolchain` is the only one authors write by
-// hand; mode and source-key are derived by the transformer from the carrier
-// ConfigMap's data: shape (authors can pre-set them to override the
-// inference).
-const (
-	annoToolchain = "installer.confighub.com/toolchain"
-	annoMode      = "installer.confighub.com/appconfig-mode"
-	annoSourceKey = "installer.confighub.com/appconfig-source-key"
-	annoMutable   = "installer.confighub.com/appconfig-mutable"
-
-	appConfigModeFile = "file"
-	appConfigModeEnv  = "env"
-)
+// annoNeedsHashSuffix is the build annotation kustomize puts on a resource a
+// generator made without disableNameSuffixHash. The transformer runs before
+// kustomize appends the hash, so the name it sees is the name before the hash,
+// and this annotation is what says a hash is coming.
+const annoNeedsHashSuffix = "internal.config.kubernetes.io/needsHashSuffix"
 
 // isAppConfigToolchain reports whether the given group toolchain identifies
 // content stored in a ConfigMap carrier (vs. a top-level Kubernetes/YAML
@@ -85,7 +65,7 @@ type appConfigCarrier struct {
 }
 
 // injectAppConfigAnnotations walks the ResourceList for ConfigMaps tagged
-// with installer.confighub.com/toolchain. For each it derives the
+// with confighub.com/toolchain. For each it derives the
 // appconfig-mode (file/env, by inspecting data:) and, when in file mode,
 // the appconfig-source-key (the single data: key, or the explicit override
 // the author already wrote). The resolved annotations are re-injected onto
@@ -126,7 +106,7 @@ func injectAppConfigAnnotations(list *resourceList) error {
 }
 
 // decodeIfConfigMapWithToolchain returns the decoded shape only when the
-// item is a ConfigMap carrying installer.confighub.com/toolchain. Cheap
+// item is a ConfigMap carrying confighub.com/toolchain. Cheap
 // fast-path: we Decode into a tiny header first to filter, then re-decode
 // the full shape only for matches.
 func decodeIfConfigMapWithToolchain(item *yaml.Node) (*configMapShape, bool, error) {
@@ -145,7 +125,7 @@ func decodeIfConfigMapWithToolchain(item *yaml.Node) (*configMapShape, bool, err
 	if header.Kind != "ConfigMap" || !strings.HasPrefix(header.APIVersion, "v1") && header.APIVersion != "v1" {
 		return nil, false, nil
 	}
-	if _, ok := header.Metadata.Annotations[annoToolchain]; !ok {
+	if _, ok := header.Metadata.Annotations[api.AnnotationToolchain]; !ok {
 		return nil, false, nil
 	}
 	var shape configMapShape
@@ -163,58 +143,61 @@ func validateAndFillAnnotations(shape *configMapShape) (bool, error) {
 	if shape.Metadata.Annotations == nil {
 		return false, fmt.Errorf("annotations dropped during decode") // shouldn't happen — toolchain was present
 	}
-	toolchain := shape.Metadata.Annotations[annoToolchain]
+	toolchain := shape.Metadata.Annotations[api.AnnotationToolchain]
 	if !isAppConfigToolchain(toolchain) {
-		return false, fmt.Errorf("annotation %s=%q must be an AppConfig/* toolchain", annoToolchain, toolchain)
+		return false, fmt.Errorf("annotation %s=%q must be an AppConfig/* toolchain", api.AnnotationToolchain, toolchain)
 	}
 	changed := false
 
-	mode := shape.Metadata.Annotations[annoMode]
+	mode := shape.Metadata.Annotations[api.AnnotationAppConfigMode]
 	if mode == "" {
 		mode = inferMode(shape, toolchain)
-		shape.Metadata.Annotations[annoMode] = mode
+		shape.Metadata.Annotations[api.AnnotationAppConfigMode] = mode
 		changed = true
 	}
-	if mode != appConfigModeFile && mode != appConfigModeEnv {
-		return changed, fmt.Errorf("annotation %s=%q must be %q or %q", annoMode, mode, appConfigModeFile, appConfigModeEnv)
+	if mode != api.AppConfigModeFile && mode != api.AppConfigModeEnv {
+		return changed, fmt.Errorf("annotation %s=%q must be %q or %q", api.AnnotationAppConfigMode, mode, api.AppConfigModeFile, api.AppConfigModeEnv)
 	}
 
-	if mode == appConfigModeFile {
-		key := shape.Metadata.Annotations[annoSourceKey]
+	if mode == api.AppConfigModeFile {
+		key := shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey]
 		if key == "" {
 			keys := sortedDataKeys(shape)
 			if len(keys) != 1 {
 				return changed, fmt.Errorf("file mode requires exactly one data: key or an explicit %s annotation (have %d keys: %v)",
-					annoSourceKey, len(keys), keys)
+					api.AnnotationAppConfigSourceKey, len(keys), keys)
 			}
 			key = keys[0]
-			shape.Metadata.Annotations[annoSourceKey] = key
+			shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey] = key
 			changed = true
 		}
 		if _, ok := shape.Data[key]; !ok {
 			return changed, fmt.Errorf("%s=%q references a data key that doesn't exist (keys: %v)",
-				annoSourceKey, key, sortedDataKeys(shape))
+				api.AnnotationAppConfigSourceKey, key, sortedDataKeys(shape))
 		}
 	} else {
 		// env mode shouldn't carry a source-key annotation. Strip it
 		// if the author set it by mistake so downstream code doesn't
 		// see contradictory state.
-		if _, present := shape.Metadata.Annotations[annoSourceKey]; present {
-			delete(shape.Metadata.Annotations, annoSourceKey)
+		if _, present := shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey]; present {
+			delete(shape.Metadata.Annotations, api.AnnotationAppConfigSourceKey)
 			changed = true
 		}
 	}
 
-	// Mutability is inferred from kustomize's hash-suffix convention on
-	// the rendered name unless the author pre-set the annotation. The
-	// inference works because kustomize appends `-<10-char hash>` exactly
-	// when disableNameSuffixHash is false (the generator default).
-	if _, set := shape.Metadata.Annotations[annoMutable]; !set {
-		if kustomizeHashSuffix.MatchString(shape.Metadata.Name) {
-			shape.Metadata.Annotations[annoMutable] = "false"
-		} else {
-			shape.Metadata.Annotations[annoMutable] = "true"
-		}
+	// A generator that hashes the ConfigMap's name asks for a new ConfigMap on
+	// every change to its content, which is what immutable mode renders, so
+	// that is the mode unless the author set one. The hash is kustomize's, and
+	// ConfigHub renders the ConfigMap under a hash of its own, so the name
+	// before kustomize's is recorded: upload names the AppConfig after it,
+	// keeping it the same across changes to the content.
+	hashed := shape.Metadata.Annotations[annoNeedsHashSuffix] == "enabled"
+	if _, set := shape.Metadata.Annotations[api.AnnotationAppConfigMutable]; !set {
+		shape.Metadata.Annotations[api.AnnotationAppConfigMutable] = fmt.Sprintf("%t", !hashed)
+		changed = true
+	}
+	if hashed && shape.Metadata.Annotations[api.AnnotationAppConfigName] != shape.Metadata.Name {
+		shape.Metadata.Annotations[api.AnnotationAppConfigName] = shape.Metadata.Name
 		changed = true
 	}
 	return changed, nil
@@ -225,7 +208,7 @@ func validateAndFillAnnotations(shape *configMapShape) (bool, error) {
 // always pick file (the carrier is meant to hold a file body).
 func inferMode(shape *configMapShape, toolchain string) string {
 	if toolchain != "AppConfig/Env" {
-		return appConfigModeFile
+		return api.AppConfigModeFile
 	}
 	// AppConfig/Env normally maps to env mode (data keys are env-var
 	// names). But if there's a single data key whose value looks
@@ -233,9 +216,9 @@ func inferMode(shape *configMapShape, toolchain string) string {
 	// key via files: rather than envs:), it's file mode.
 	keys := sortedDataKeys(shape)
 	if len(keys) == 1 && strings.ContainsRune(shape.Data[keys[0]], '\n') {
-		return appConfigModeFile
+		return api.AppConfigModeFile
 	}
-	return appConfigModeEnv
+	return api.AppConfigModeEnv
 }
 
 func sortedDataKeys(shape *configMapShape) []string {
@@ -274,15 +257,15 @@ func runAppConfigGroup(
 		if !ok {
 			continue
 		}
-		if shape.Metadata.Annotations[annoToolchain] != group.Toolchain {
+		if shape.Metadata.Annotations[api.AnnotationToolchain] != group.Toolchain {
 			continue
 		}
 		carrier := &appConfigCarrier{
 			itemIndex: i,
 			shape:     shape,
-			toolchain: shape.Metadata.Annotations[annoToolchain],
-			mode:      shape.Metadata.Annotations[annoMode],
-			sourceKey: shape.Metadata.Annotations[annoSourceKey],
+			toolchain: shape.Metadata.Annotations[api.AnnotationToolchain],
+			mode:      shape.Metadata.Annotations[api.AnnotationAppConfigMode],
+			sourceKey: shape.Metadata.Annotations[api.AnnotationAppConfigSourceKey],
 		}
 		content, err := extractAppConfigContent(carrier)
 		if err != nil {
@@ -340,13 +323,13 @@ func runAppConfigGroup(
 // key/value pairs (sorted for determinism).
 func extractAppConfigContent(c *appConfigCarrier) ([]byte, error) {
 	switch c.mode {
-	case appConfigModeFile:
+	case api.AppConfigModeFile:
 		body, ok := c.shape.Data[c.sourceKey]
 		if !ok {
 			return nil, fmt.Errorf("data[%q] missing", c.sourceKey)
 		}
 		return []byte(body), nil
-	case appConfigModeEnv:
+	case api.AppConfigModeEnv:
 		var buf bytes.Buffer
 		for _, k := range sortedDataKeys(c.shape) {
 			fmt.Fprintf(&buf, "%s=%s\n", k, c.shape.Data[k])
@@ -364,13 +347,13 @@ func extractAppConfigContent(c *appConfigCarrier) ([]byte, error) {
 // authors / functions can include comments without breaking parity.
 func writeAppConfigContent(c *appConfigCarrier, content []byte) error {
 	switch c.mode {
-	case appConfigModeFile:
+	case api.AppConfigModeFile:
 		if c.shape.Data == nil {
 			c.shape.Data = map[string]string{}
 		}
 		c.shape.Data[c.sourceKey] = string(content)
 		return nil
-	case appConfigModeEnv:
+	case api.AppConfigModeEnv:
 		next := map[string]string{}
 		scanner := bufio.NewScanner(bytes.NewReader(content))
 		for scanner.Scan() {
