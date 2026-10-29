@@ -37,9 +37,13 @@ See the kpt package operations reference:
 Three pieces, all in one git repo (your work-dir):
 
 - **Base package** — `out/manifests/`, turned into a kpt package with a
-  `Kptfile`. Every `installer render` rewrites it. This is the upstream.
+  `Kptfile`. This is the upstream. Every `installer render` replaces
+  everything in it except the `Kptfile`: a file the render no longer
+  produces is removed, and so is any file you add there, and a file you
+  edit there is overwritten.
 - **Post-install clone** — `out/post-install/manifests/`, a kpt clone of
-  the base. **You make your edits here**, never in the base.
+  the base. **You make every change here** — edits, added resources,
+  `kpt fn` output — never in the base.
 - **Upgrade** — re-render the base, commit, then `kpt pkg update` in the
   clone merges the new render with your edits.
 
@@ -62,6 +66,9 @@ git add . && git commit -m "Initial render"
 # Turn the rendered manifests into a kpt package.
 cd out/manifests
 kpt pkg init .                 # writes Kptfile (+ README.md, package-context.yaml)
+# The next render keeps only the Kptfile, so drop the other two now rather
+# than have the first upgrade delete them from your clone.
+rm README.md package-context.yaml
 cd ../..
 git add . && git commit -m "kpt: init base package in out/manifests"
 
@@ -108,9 +115,9 @@ the inventory it won't prune deleted resources.) See
 
 ```bash
 # 1. Re-render the base (new package version, new inputs, image bump…).
-#    Rendering replaces out/manifests, so resources dropped by the upgrade
-#    go, while the base package's Kptfile is kept and out/manifests stays a
-#    valid kpt package.
+#    Rendering replaces everything in out/manifests except its Kptfile, so
+#    resources dropped by the upgrade go and out/manifests stays a valid kpt
+#    package.
 installer setup --pull <new-ref> --work-dir my-workdir
 #    (or, to re-render in place without re-pulling: installer render)
 git add . && git commit -m "render <pkg>@<new-version>"
