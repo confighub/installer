@@ -107,8 +107,7 @@ func newNewCmd() *cobra.Command {
 			"  installer wizard <path>/packages/kubernetes-resources \\\n" +
 			"      --work-dir /tmp/k8s-res \\\n" +
 			"      --non-interactive --namespace kubernetes-resources\n" +
-			"  installer render /tmp/k8s-res\n" +
-			"  installer upload /tmp/k8s-res --space kubernetes-resources\n\n" +
+			"  installer upload --work-dir /tmp/k8s-res --space kubernetes-resources\n\n" +
 			"The upload step records the install in\n" +
 			"~/.confighub/installer/state.yaml; subsequent `installer new` calls\n" +
 			"read the recorded Space and pull the canonical Unit body via cub.\n\n" +
@@ -217,7 +216,6 @@ func newNewCmd() *cobra.Command {
 			fmt.Println()
 			fmt.Println("Next: re-render to verify the new resource:")
 			fmt.Printf("  %s wizard %s --work-dir /tmp/dev --non-interactive --namespace demo\n", InvocationName(), abs)
-			fmt.Printf("  %s render /tmp/dev\n", InvocationName())
 			return nil
 		},
 	}
@@ -251,8 +249,7 @@ func findKubernetesResourcesInstall(orgID string) (*userconfig.InstallRecord, er
 	return nil, fmt.Errorf(
 		"kubernetes-resources is not installed for organization %s. Bootstrap with:\n"+
 			"  installer wizard <path>/packages/kubernetes-resources --work-dir /tmp/k8s-res --non-interactive --namespace kubernetes-resources\n"+
-			"  installer render /tmp/k8s-res\n"+
-			"  installer upload /tmp/k8s-res --space kubernetes-resources\n"+
+			"  installer upload --work-dir /tmp/k8s-res --space kubernetes-resources\n"+
 			"Then re-run `installer new`.",
 		orgID,
 	)

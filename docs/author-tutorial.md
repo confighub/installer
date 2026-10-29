@@ -61,6 +61,10 @@ installer init .
 `installer init` writes the manifest with one default base, a
 `set-namespace` group under `spec.transformers`, and the recommended
 validator chain (`vet-schemas`, `vet-merge-keys`, `vet-format`).
+(If you already have a kustomization for your application,
+`installer init . --source <dir>` starts `bases/default/` as a copy
+of it instead; see [Import an existing
+kustomization](./author-guide.md#import-an-existing-kustomization).)
 We'll fix the package name in a moment. Have a look at what was
 created:
 

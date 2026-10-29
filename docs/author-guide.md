@@ -13,7 +13,8 @@ tutorial](./author-tutorial.md).
 The CLI provides four authoring shortcuts:
 
 - `installer init <dir>` — scaffold a new package with the
-  recommended defaults.
+  recommended defaults, optionally starting its base from an
+  existing kustomization (`--source`).
 - `installer new <kind> <name>` — clone a Kubernetes resource
   template from the bootstrapped `kubernetes-resources` package.
 - `installer edit add/remove/set input|component|dependency` —
@@ -80,7 +81,10 @@ empty `bases/default/`, an empty `components/`, and an empty
 `validation/`. From there, drop your kustomize resources into
 `bases/default/` and either hand-author them or use `installer new
 <kind> <name>` to clone canonical templates from the
-[`kubernetes-resources`](#kubernetes-resources-package) package.
+[`kubernetes-resources`](#kubernetes-resources-package) package. If
+you already have a kustomization, `installer init --source` starts
+`bases/default/` as a copy of it; see [Import an existing
+kustomization](#import-an-existing-kustomization).
 
 A typical package with optional components, validation, and a
 collector:
@@ -225,7 +229,7 @@ spec:
         - toolchain: Kubernetes/YAML
           whereResource: "ConfigHub.ResourceType = 'monitoring.coreos.com/v1/ServiceMonitor'"
           invocations:
-            - name: yq-i
+            - name: set-yq
               args: ['.spec.endpoints[].interval = "{{ .Inputs.scrape_interval }}"']
   ```
 
@@ -418,7 +422,7 @@ spec:
 
 Common functions: `set-namespace`, `set-name`, `set-replicas`,
 `set-container-image`, `set-container-image-reference`,
-`set-container-resources`, `set-env`, `set-hostname`, `yq-i`,
+`set-container-resources`, `set-env`, `set-hostname`, `set-yq`,
 `set-string-path`, `delete-path`. The full list is in `cub function
 list` against a running ConfigHub.
 
@@ -1076,6 +1080,71 @@ Scaffolds `installer.yaml` (with the recommended validators),
 `components/`, `validation/`. Drop your kustomize resources into
 `bases/default/`, then add inputs / components / dependencies via
 `installer edit add` or hand-edit `installer.yaml`.
+
+### Import an existing kustomization
+
+```bash
+installer init ./my-package --source ~/src/my-app/deploy/overlays/prod
+```
+
+Starts `bases/default/` as a copy of an existing kustomization
+directory, made with
+[`kustomize localize`](https://kubectl.docs.kubernetes.io/references/kustomize/cmd/localize/):
+every file the source references is copied, and remote resources
+(URLs and git references) are downloaded into the package, so the
+package builds without network access. The copy is the package's
+from then on; nothing ties it back to the source.
+
+Point `--source` at the kustomization you deploy. A package
+installs one shape of your application, and the differences between
+environments come later, as [variants](https://docs.confighub.com/guide/variants/),
+so import a single overlay (or the base) rather than one per
+environment.
+
+When the source references files outside its own directory, as an
+overlay's `../../base` does, those files must be inside
+`--source-scope`, which defaults to the git repository the source
+is in. `bases/default/` then mirrors the directories of the files the
+source references, and its `kustomization.yaml` is a generated one
+that includes the source:
+
+```
+bases/default/
+├── kustomization.yaml       # resources: [overlays/prod], plus images:
+├── base/
+│   ├── kustomization.yaml
+│   └── deployment.yaml
+└── overlays/
+    └── prod/
+        ├── kustomization.yaml
+        └── replicas.yaml
+```
+
+A source that references nothing outside its directory is copied
+straight into `bases/default/`.
+
+Either way, `bases/default/kustomization.yaml` gets an `images:`
+block naming every container image the base runs, at the tag it
+already has, so operators can override them with `--set-image` (see
+[Declare an `images:` block](#declare-an-images-block)). A source that
+declares its own `images:` keeps it unchanged.
+
+The import is refused, and nothing is written, when:
+
+- the source inflates Helm charts (`helmCharts:`); `installer render`
+  does not run Helm, so render the chart with `helm template` and
+  reference the output instead.
+- the source produces Secrets with data, from a `secretGenerator` or
+  a Secret manifest; the package would publish them. Remove them, and
+  have a [collector](#speccollector) write `*.env.secret` files for a
+  `secretGenerator`.
+- the copy does not build to the same output as the source, as
+  happens when the source uses KRM function or exec plugins, which
+  localize does not copy.
+- `bases/default/` already has files in it, even with `--force`.
+
+The copied kustomization files lose their comments, and list their
+fields alphabetically. Resource files are copied unchanged.
 
 ### Add a Kubernetes resource
 

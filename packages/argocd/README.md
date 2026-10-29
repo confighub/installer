@@ -30,7 +30,7 @@ namespace and image).
 
 These are the small set of choices an operator makes at install time;
 everything else is post-install ConfigHub mutation (`set-replicas`,
-`set-container-image`, `set-env`, `yq-i` on `argocd-cm`, …).
+`set-container-image`, `set-env`, `set-yq` on `argocd-cm`, …).
 
 | decision | how |
 | --- | --- |

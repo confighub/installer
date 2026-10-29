@@ -47,7 +47,7 @@ applier or deployment tool.
 
 For post-installation customization, [ConfigHub's function suite](https://docs.confighub.com/guide/functions/#frequently-used-functions) includes functions for changing commonly changed Kubernetes resource properties,
 such as `set-container-image`, `set-container-resources`, `set-replicas`, `set-env`, and `set-hostname`,
-and general-purpose editing functions, such as `yq-i`, `set-string-path`, `delete-path`, and `set-starlark`.
+and general-purpose editing functions, such as `set-yq`, `set-string-path`, `delete-path`, and `set-starlark`.
 
 Why not just [kustomize](https://kustomize.io), or [kpt](https://kpt.dev)? Neither tool
 was really designed to be a full-blown installer, and package management was explicitly
