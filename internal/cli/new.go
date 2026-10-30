@@ -8,10 +8,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/confighub/sdk/core/cubapi"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
@@ -88,7 +88,6 @@ func newNewCmd() *cobra.Command {
 		pkgDir     string
 		outFile    string
 		stdoutOnly bool
-		nsOverride string
 		spaceSlug  string
 		updateKust bool
 	)
@@ -111,16 +110,13 @@ func newNewCmd() *cobra.Command {
 			"  installer upload --work-dir /tmp/k8s-res --space kubernetes-resources\n\n" +
 			"The upload step records the install in\n" +
 			"~/.confighub/installer/state.yaml; subsequent `installer new` calls\n" +
-			"read the recorded Space and pull the canonical Unit body via cub.\n\n" +
+			"read the recorded Space and pull the canonical Unit body from ConfigHub.\n\n" +
 			"Output goes to <package>/bases/default/<kind>-<name>.yaml. Pass\n" +
 			"--stdout to print to stdout instead. Pass --update-kustomization\n" +
 			"to also append the new file to bases/default/kustomization.yaml's\n" +
 			"resources list.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := exec.LookPath("cub"); err != nil {
-				return fmt.Errorf("cub CLI not found on PATH: %w", err)
-			}
 			kindArg := strings.ToLower(args[0])
 			name := args[1]
 			example, ok := kindToExample[kindArg]
@@ -150,23 +146,9 @@ func newNewCmd() *cobra.Command {
 				spaceSlug = install.SpaceSlug
 			}
 
-			// The Unit slug is <kind>-<install-namespace>-<orig-name>
-			// when origName is non-empty; <kind>-<install-namespace>
-			// otherwise (Namespace, where the resource name IS the
-			// install namespace).
-			installNs := nsOverride
-			if installNs == "" {
-				installNs = install.SpaceSlug // default install --namespace matches Space slug; see Long
-			}
-			unitSlug := example.kind + "-" + installNs
-			if example.origName != "" {
-				unitSlug += "-" + example.origName
-			}
-
-			body, err := fetchUnitData(ctx, spaceSlug, unitSlug)
+			body, err := fetchExampleData(ctx, spaceSlug, example)
 			if err != nil {
-				return fmt.Errorf("fetch %s/%s: %w (the kubernetes-resources install may use a different namespace; pass --install-namespace <ns> or check the Space)",
-					spaceSlug, unitSlug, err)
+				return fmt.Errorf("fetch the %s example from Space %s: %w", example.kind, spaceSlug, err)
 			}
 
 			// Customize: rename, set namespace placeholder, image,
@@ -226,7 +208,6 @@ func newNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&pkgDir, "package", ".", "package directory containing installer.yaml")
 	cmd.Flags().StringVar(&outFile, "out-file", "", "output filename (relative to <package>/bases/default/, or absolute)")
 	cmd.Flags().BoolVar(&stdoutOnly, "stdout", false, "print the customized YAML to stdout instead of writing a file")
-	cmd.Flags().StringVar(&nsOverride, "install-namespace", "", "namespace the kubernetes-resources package was installed with (default: same as space slug)")
 	cmd.Flags().StringVar(&spaceSlug, "space-slug", "", "override the kubernetes-resources Space recorded in user state")
 	cmd.Flags().BoolVar(&updateKust, "update-kustomization", true, "append the new file to bases/default/kustomization.yaml resources list")
 	return cmd
@@ -256,16 +237,44 @@ func findKubernetesResourcesInstall(orgID string) (*userconfig.InstallRecord, er
 	)
 }
 
-// fetchUnitData shells out to `cub unit data` and returns the body.
-func fetchUnitData(ctx context.Context, space, slug string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "cub", "unit", "data", "--space", space, slug)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cub unit data: %w\n%s", err, stderr.String())
+// fetchExampleData returns the configuration data of the Unit in space that
+// holds the example's resource. The Unit is found by the resource key upload
+// records on it, <group>/<Kind>/<namespace>/<name>, rather than by its slug,
+// which depends on how upload named it and on the install namespace. The
+// Namespace example is the one Namespace, whatever it is named.
+func fetchExampleData(ctx context.Context, space string, example canonicalExample) ([]byte, error) {
+	c, err := confighub.Client(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return stdout.Bytes(), nil
+	found, err := existingSpace(ctx, c, space)
+	if err != nil {
+		return nil, err
+	}
+	if found == nil {
+		return nil, fmt.Errorf("Space %s does not exist", space)
+	}
+	units, err := cubapi.ListUnits(ctx, c, cubapi.Where{}.
+		Eq("SpaceID", found.SpaceID.String()).
+		Eq("Labels.UploadSource", kubernetesResourcesPackageName), cubapi.ListOpts{})
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range units {
+		key := strings.Split(u.Unit.Annotations["UploadResource"], "/")
+		if len(key) != 4 || !strings.EqualFold(key[1], example.kind) {
+			continue
+		}
+		if example.origName != "" && key[3] != example.origName {
+			continue
+		}
+		data, err := cubapi.UnitData(ctx, c, u.Unit.SpaceID, u.Unit.UnitID)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(data), nil
+	}
+	return nil, fmt.Errorf("no Unit of the %s package in it holds a %s named %q", kubernetesResourcesPackageName, example.kind, example.origName)
 }
 
 type customizeOpts struct {

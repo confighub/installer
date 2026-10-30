@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/confighub/installer/internal/collector"
+	"github.com/confighub/installer/internal/render"
 	"github.com/confighub/installer/internal/selection"
 	"github.com/confighub/installer/pkg/api"
 )
@@ -74,6 +75,13 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 		return nil, fmt.Errorf("resolve selection: %w", err)
 	}
 
+	// Checked before anything is written, so a mistyped name never reaches
+	// the record, where render would refuse it on every run.
+	imageOverrides := mergeImageOverrides(raw.PriorImageOverrides, raw.ImageOverrides)
+	if err := render.ValidateImageOverrides(pkg, packageDir, sel.Spec.Base, imageOverrides); err != nil {
+		return nil, err
+	}
+
 	inputs := &api.Inputs{
 		APIVersion: api.APIVersion,
 		Kind:       api.KindInputs,
@@ -85,7 +93,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 			PackageVersion: pkg.InstallerMetadata.Version,
 			Namespace:      raw.Namespace,
 			Values:         values,
-			ImageOverrides: mergeImageOverrides(raw.PriorImageOverrides, raw.ImageOverrides),
+			ImageOverrides: imageOverrides,
 		},
 	}
 

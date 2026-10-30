@@ -6,43 +6,41 @@
 package cubctx
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
+
+	"github.com/confighub/sdk/core/cubapi"
 )
 
-// Context bundles the fields we read from `cub context get`.
+// Context bundles the fields we read from the active cub context.
 type Context struct {
 	OrganizationID string
 	ServerURL      string
 }
 
-// Get reads the active cub context. Shells out to `cub context get -o
-// jq=...` once per field — both calls inherit the user's cub session.
+// Get reads the active cub context from the cub configuration directory,
+// the one CUB_CONFIG names or the default, choosing the context CUB_CONTEXT
+// names or else the current one, as cub does.
 func Get(ctx context.Context) (*Context, error) {
-	org, err := runJQ(ctx, ".coordinate.organizationID")
+	env, err := cubapi.LoadEnvironment(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read cub context organizationID: %w", err)
+		return nil, err
 	}
-	server, err := runJQ(ctx, ".coordinate.serverURL")
+	store, err := cubapi.LoadConfig(env.Config)
 	if err != nil {
-		return nil, fmt.Errorf("read cub context serverURL: %w", err)
+		return nil, fmt.Errorf("read cub configuration: %w", err)
+	}
+	if env.Context != "" {
+		if err := store.Use(env.Context); err != nil {
+			return nil, err
+		}
+	}
+	active, err := store.ActiveContext()
+	if err != nil {
+		return nil, err
 	}
 	return &Context{
-		OrganizationID: org,
-		ServerURL:      server,
+		OrganizationID: active.Coordinate.OrganizationID,
+		ServerURL:      active.Coordinate.ServerURL,
 	}, nil
-}
-
-func runJQ(ctx context.Context, expr string) (string, error) {
-	cmd := exec.CommandContext(ctx, "cub", "context", "get", "-o", "jq="+expr)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("cub context get -o jq=%s: %w\n%s", expr, err, stderr.String())
-	}
-	return strings.TrimSpace(stdout.String()), nil
 }
