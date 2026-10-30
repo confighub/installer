@@ -5,8 +5,9 @@
 #
 # Flow:
 #
-#   setup + upload  — work-dir A installs a package with two inputs and uploads
-#                     it. The installer record is uploaded beside the package's
+#   setup + upload  — work-dir A installs a package with two inputs into a
+#                     Space that doesn't exist yet, which the upload creates.
+#                     The installer record is uploaded beside the package's
 #                     Units, hidden, and says where the package was pulled from.
 #   setup --space   — a fresh work-dir B, with no package and no --pull, re-enters
 #                     the install from the record: it pulls the package the
@@ -147,10 +148,12 @@ record_value() {
 
 log "setup + upload in work-dir A"
 A="$WORK_TMP/a"
-run setup-a "$BIN" setup --pull "$PKG" --work-dir "$A" --non-interactive --namespace "$NAMESPACE" \
+# --space names a Space that doesn't exist yet: a fresh install, which the
+# upload creates.
+run setup-a "$BIN" setup --pull "$PKG" --space "$SPACE" --work-dir "$A" --non-interactive --namespace "$NAMESPACE" \
   --input image=registry.example.com/app:1.0.0 --input greeting=hello \
   || fail "setup failed (see $WORK_TMP/setup-a.log)"
-cub space create --quiet "$SPACE" >/dev/null
+grep -q "warning" "$WORK_TMP/setup-a.log" && fail "a fresh install into a new Space should not warn (see $WORK_TMP/setup-a.log)"
 run upload-a "$BIN" upload --work-dir "$A" --space "$SPACE" || fail "upload failed (see $WORK_TMP/upload-a.log)"
 [[ "$(unit_value app-greeting-configmap '.data.GREETING')" == hello ]] || fail "the ConfigMap should say hello"
 

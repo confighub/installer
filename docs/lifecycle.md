@@ -339,7 +339,8 @@ decide the Spaces, and prints the images the render runs after each Space.
 2. Else an `installer` record Unit from an earlier upload of the package
    exists in ConfigHub → use the selection, inputs, facts, and package
    definition it holds. `setup --space <slug>` names the Space to recover
-   from; without it, setup looks for the package's install across the
+   from, and a Space that doesn't exist yet or holds no record is a fresh
+   install; without it, setup looks for the package's install across the
    organization and refuses when it finds more than one. In a work-dir
    with no package, `setup --space <slug>` needs no `--pull`: it pulls the
    package from the ref the record says it came from, pinned to the

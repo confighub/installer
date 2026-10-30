@@ -393,7 +393,7 @@ func recordedSourceRef(ctx context.Context, space string) (string, error) {
 		return "", fmt.Errorf("read the installer record in Space %s: %w", space, err)
 	}
 	if data == nil {
-		return "", fmt.Errorf("Space %s has no installer record; pass --pull <ref> to install a package", space)
+		return "", fmt.Errorf("Space %s does not exist or has no installer record; pass --pull <ref> to install a package", space)
 	}
 	rec, err := upload.ParseRecord(data)
 	if err != nil {
@@ -534,7 +534,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	}
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
-	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization). Without --pull, a work-dir with no package pulls the one the Space's installer record says the install came from")
+	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization); a Space that does not exist yet, or holds no installer record, is a fresh install there. Without --pull, a work-dir with no package pulls the one the Space's installer record says the install came from")
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")

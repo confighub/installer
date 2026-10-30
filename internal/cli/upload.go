@@ -569,7 +569,8 @@ func installerRecordFetcher(space string) func(ctx context.Context, packageName 
 				return nil, err
 			}
 			if found == nil {
-				return nil, fmt.Errorf("Space %s does not exist", space)
+				// Nothing is installed there yet; the upload creates it.
+				return nil, nil
 			}
 			where = where.Eq("SpaceID", found.SpaceID.String())
 		}

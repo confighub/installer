@@ -536,7 +536,11 @@ installer plan --space statusboard-prod     # No changes if nothing drifted
 
 `--space` names the install to recover. Without it, setup looks for the
 package's install across the organization, uses it if there is exactly
-one, and refuses with a list of the Spaces if there are several.
+one, and refuses with a list of the Spaces if there are several. A Space
+that doesn't exist yet, or holds no installer record, is a fresh install
+there, and `installer upload --space` creates it: a script that installs
+into a Space it names can always pass `--space`, and never picks up an
+install somewhere else.
 
 ## Common errors
 
