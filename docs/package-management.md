@@ -206,14 +206,28 @@ precondition.
 
 ### Lock file
 
-The lock is not stored in git. Per the broader design, all of `out/record/*` —
-`selection.yaml`, `inputs.yaml`, `function-chain.yaml`, `manifest-index.yaml`,
-the new `lock.yaml`, and the package's `installer.yaml` itself — are combined
-into a single multi-document YAML stream and uploaded as one
-`Kubernetes/YAML` Unit (the "installer record" Unit). That Unit has **no
-Target** because it is not deployed: it exists to reproduce a render. The
-renderer reads from `out/record/` locally; the upload step also writes the
-record Unit alongside the rendered Units.
+The lock is not stored in git. It travels in the installer record, which
+`installer upload` writes beside the package's rendered Units in each Space:
+one `AppConfig/YAML` document, the Unit `installer`, holding the package's
+`installer.yaml`, where the package was pulled from (`out/record/source.yaml`:
+the ref, and for an `oci://` ref the digest it resolved to), the selection,
+inputs and facts, and, in the parent's Space, the lock. The renderer reads
+from `out/record/` locally; the record is the same state, kept in ConfigHub.
+
+The record is uploaded so that ConfigHub alone is enough to change an
+install: nobody has to keep the work-dir in git or anywhere else. In an
+empty work-dir, `installer setup --space <slug>` reads the record, pulls the
+package from the recorded ref (pinned to its digest), and starts from the
+recorded answers; flags such as `--input` change what they name, and the
+rest carries forward. Only an `oci://` ref can be pulled on another
+machine; a local path in the record works only where it was pulled.
+
+The record Unit has **no Target**, because it is not deployed, and is
+hidden with the HiddenReason `InstallerRecord`, as a dot file is: lists and
+bulk operations leave it out unless `--include-hidden=InstallerRecord` asks
+for it, and naming it (`cub unit get --space <slug> installer`) shows it.
+Because it is hidden, `cub variant create` doesn't clone it unless given
+`--include-hidden`.
 
 Lock contents:
 

@@ -414,3 +414,18 @@ func TestParsePackageRejectsTwoDefaultsInAGroup(t *testing.T) {
 		t.Fatalf("error = %v, want one naming both defaults", err)
 	}
 }
+
+func TestSourcePinnedRef(t *testing.T) {
+	for _, tc := range []struct {
+		spec api.SourceSpec
+		want string
+	}{
+		{api.SourceSpec{Ref: "oci://reg/app:1.0.0", Digest: "sha256:abc"}, "oci://reg/app:1.0.0@sha256:abc"},
+		{api.SourceSpec{Ref: "oci://reg/app@sha256:abc", Digest: "sha256:abc"}, "oci://reg/app@sha256:abc"},
+		{api.SourceSpec{Ref: "/abs/path/to/pkg"}, "/abs/path/to/pkg"},
+	} {
+		if got := tc.spec.PinnedRef(); got != tc.want {
+			t.Errorf("PinnedRef(%+v) = %q, want %q", tc.spec, got, tc.want)
+		}
+	}
+}

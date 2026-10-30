@@ -153,13 +153,28 @@ re-running `installer setup`. See "Where to make changes" below.
 Finally, upload to ConfigHub:
 
 ```bash
-# 2. Upload: one Unit per resource, plus an "installer" record Unit
-#    holding installer.yaml and the record of the render.
+# 2. Upload: one Unit per resource, plus a hidden "installer" record Unit
+#    holding installer.yaml, where it was pulled from, and your answers.
 installer upload --space statusboard-prod
 ```
 
 Nothing local records the Space, so pass the same `--space` (or
-`--space-pattern`) to every later `upload` and `plan`. The Space is
+`--space-pattern`) to every later `upload` and `plan`.
+
+The installer record is what lets anyone change the install later without
+your work-dir: you don't need to keep it in git or share it. A teammate, or
+you on another machine, starts from an empty directory:
+
+```bash
+installer setup --space statusboard-prod --work-dir ./statusboard --input replicas=5
+installer upload --space statusboard-prod --work-dir ./statusboard
+```
+
+Setup pulls the package from where the record says it came from, starts
+from the recorded selection and inputs, and changes only what the flags
+name. That works on another machine when the package was pulled from an
+`oci://` reference. The record Unit is hidden, so `cub unit list` leaves it
+out; `cub unit get --space statusboard-prod installer` shows it. The Space is
 labeled `Component` (the package name, or `--component`), `Variant`
 (`base`, or `--variant`), and `Namespace` (the install namespace).
 

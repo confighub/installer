@@ -16,6 +16,7 @@ import (
 	"github.com/confighub/installer/internal/deps"
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/render"
+	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/internal/wizard"
 	"github.com/confighub/installer/pkg/api"
 )
@@ -70,16 +71,33 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 			pullRef += "@" + sourceDigest
 		}
 	}
+	// A work-dir with no package re-enters the install in --space from its
+	// installer record alone, pulling the package the record says it came from.
+	recordedPull := false
+	if pullRef == "" && opts.recoverSpace != "" {
+		if _, err := os.Stat(filepath.Join(pkgDir, ipkg.ManifestFile)); os.IsNotExist(err) {
+			pullRef, err = recordedSourceRef(ctx, opts.recoverSpace)
+			if err != nil {
+				return err
+			}
+			recordedPull = true
+			fmt.Printf("Pulling %s, which the installer record in Space %s says the install came from.\n", pullRef, opts.recoverSpace)
+		}
+	}
 	if pullRef != "" {
 		if _, err := ipkg.PullToWorkDir(ctx, pullRef, absWork); err != nil {
+			if recordedPull {
+				return fmt.Errorf("pull %s, from the installer record in Space %s: %w; pass --pull <ref> to pull the package from elsewhere",
+					pullRef, opts.recoverSpace, err)
+			}
 			return fmt.Errorf("pull %s: %w", pullRef, err)
 		}
 	}
 	loaded, err := ipkg.Load(pkgDir)
 	if err != nil {
-		if opts.pullRef == "" && os.IsNotExist(rootCause(err)) {
+		if pullRef == "" && os.IsNotExist(rootCause(err)) {
 			return fmt.Errorf(
-				"no package found in %s — pass --pull <ref> to fetch one, or `%s pull <ref> --work-dir %s` first",
+				"no package found in %s — pass --pull <ref> to fetch one, --space <slug> to re-enter an install from its installer record, or `%s pull <ref> --work-dir %s` first",
 				pkgDir, InvocationName(), absWork)
 		}
 		return fmt.Errorf("load package from %s: %w", pkgDir, err)
@@ -367,6 +385,26 @@ func runDepsUpdate(ctx context.Context, workDir string, pkg *api.Package, sel *a
 	return nil
 }
 
+// recordedSourceRef returns the reference that pulls the package an install's
+// installer record in space says it came from.
+func recordedSourceRef(ctx context.Context, space string) (string, error) {
+	data, err := installerRecordFetcher(space)(ctx, "")
+	if err != nil {
+		return "", fmt.Errorf("read the installer record in Space %s: %w", space, err)
+	}
+	if data == nil {
+		return "", fmt.Errorf("Space %s has no installer record; pass --pull <ref> to install a package", space)
+	}
+	rec, err := upload.ParseRecord(data)
+	if err != nil {
+		return "", err
+	}
+	if rec.Source == nil || rec.Source.Ref == "" {
+		return "", fmt.Errorf("the installer record in Space %s doesn't say where its package came from; pass --pull <ref>", space)
+	}
+	return rec.Source.PinnedRef(), nil
+}
+
 // runRenderInWorkDir runs render.Render (and the per-dep renderer for
 // multi-package installs) against the work-dir's package + spec.
 func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded, res *wizard.Result) error {
@@ -470,7 +508,10 @@ Auto-detection:
     ConfigHub → load prior install state from it. This recovers a fresh
     clone. --space names the Space to recover from; without it the
     package's only install in the organization is used, and several
-    installs are refused.
+    installs are refused. The record also says where the package was
+    pulled from, so in an empty work-dir "setup --space <slug>" needs no
+    --pull: anyone can change an install from what ConfigHub holds, with
+    no work-dir kept in git or elsewhere.
   - else → fresh install.
 
 When prior state is loaded, setup runs the schema-diff machinery
@@ -493,7 +534,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	}
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
-	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization)")
+	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization). Without --pull, a work-dir with no package pulls the one the Space's installer record says the install came from")
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")
