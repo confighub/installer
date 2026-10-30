@@ -35,11 +35,11 @@ func TestApplyImageOverridesNoOpWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestRequireImagesBlockMissing(t *testing.T) {
+func TestDeclaredImagesMissing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kustomization.yaml")
 	mustWrite(t, path, "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - x.yaml\n")
-	err := requireImagesBlock(path)
+	_, err := declaredImages(path)
 	if err == nil {
 		t.Fatal("expected error for missing images: block")
 	}
@@ -51,9 +51,9 @@ func TestRequireImagesBlockMissing(t *testing.T) {
 	}
 }
 
-func TestRequireImagesBlockMissingFile(t *testing.T) {
+func TestDeclaredImagesMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	err := requireImagesBlock(filepath.Join(dir, "doesnotexist.yaml"))
+	_, err := declaredImages(filepath.Join(dir, "doesnotexist.yaml"))
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -62,7 +62,7 @@ func TestRequireImagesBlockMissingFile(t *testing.T) {
 	}
 }
 
-func TestRequireImagesBlockPresent(t *testing.T) {
+func TestDeclaredImagesPresent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kustomization.yaml")
 	mustWrite(t, path, `apiVersion: kustomize.config.k8s.io/v1beta1
@@ -73,8 +73,43 @@ images:
   - name: hello
     newTag: v1
 `)
-	if err := requireImagesBlock(path); err != nil {
+	declared, err := declaredImages(path)
+	if err != nil {
 		t.Errorf("expected no error for present images block, got: %v", err)
+	}
+	if !declared["hello"] || len(declared) != 1 {
+		t.Errorf("want the one declared image hello, got %v", declared)
+	}
+}
+
+// A name the base doesn't declare would match no container, and kustomize
+// would ignore it without a word, so it is refused, naming the ones declared.
+func TestValidateImageOverrides(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "bases/default/kustomization.yaml"), `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+  - name: nginxdemos/hello
+    newTag: plain-text
+  - name: busybox
+`)
+	pkg := &api.Package{Metadata: api.Metadata{Name: "demo"},
+		Spec: api.PackageSpec{Bases: []api.Base{{Name: "default", Path: "bases/default", Default: true}}}}
+
+	if err := ValidateImageOverrides(pkg, root, "default", map[string]string{"nginxdemos/hello": "nginxdemos/hello:latest"}); err != nil {
+		t.Errorf("a declared name should be accepted, got: %v", err)
+	}
+	if err := ValidateImageOverrides(pkg, root, "default", nil); err != nil {
+		t.Errorf("no overrides should be accepted, got: %v", err)
+	}
+	err := ValidateImageOverrides(pkg, root, "default", map[string]string{"hello": "nginxdemos/hello:latest", "nginxdemos/hello": "x"})
+	if err == nil {
+		t.Fatal("want an error for a name the base doesn't declare")
+	}
+	for _, want := range []string{"names hello,", "declares busybox, nginxdemos/hello"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should contain %q, got: %v", want, err)
+		}
 	}
 }
 

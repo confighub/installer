@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -23,16 +24,16 @@ import (
 // non-persistent at the package source level. Allowed by Principle 1's carve-out for the installer's own
 // `--set-image` mutations.
 //
-// Pre-flight: the chosen base's kustomization.yaml must declare an
-// `images:` block. If it does not, returns an error pointing the
-// operator at the recommended alternatives. The check exists because
-// setting an image would otherwise silently inject an `images:` block
-// on a package whose author did not intend image overrides.
+// Pre-flight: every name in overrides must be declared in the chosen
+// base's `images:` block (ValidateImageOverrides).
 //
 // No-op when overrides is empty.
 func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[string]string) error {
 	if len(overrides) == 0 {
 		return nil
+	}
+	if err := ValidateImageOverrides(loaded.Package, loaded.Root, sel.Spec.Base, overrides); err != nil {
+		return err
 	}
 	baseRel, err := basePathForName(loaded.Package, sel.Spec.Base)
 	if err != nil {
@@ -40,10 +41,6 @@ func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[
 	}
 	baseDir := filepath.Join(loaded.Root, baseRel)
 	kustPath := filepath.Join(baseDir, "kustomization.yaml")
-
-	if err := requireImagesBlock(kustPath); err != nil {
-		return err
-	}
 
 	args := make([]string, 0, len(overrides))
 	for name, ref := range overrides {
@@ -56,28 +53,74 @@ func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[
 	return nil
 }
 
-// requireImagesBlock parses kustomization.yaml at path and returns an
-// error if the top-level `images:` field is absent. Empty file or
-// missing file is treated as "no images block" — render fails fast
-// either way.
-func requireImagesBlock(path string) error {
+// ValidateImageOverrides checks that every name overrides sets is declared
+// in the images: block of base's kustomization.yaml, under packageRoot. The
+// block is how a package author says which images may be overridden. An
+// entry for any other name matches no container, and kustomize ignores it
+// without a word, so a mistyped name would change nothing.
+func ValidateImageOverrides(pkg *api.Package, packageRoot, base string, overrides map[string]string) error {
+	if len(overrides) == 0 {
+		return nil
+	}
+	baseRel, err := basePathForName(pkg, base)
+	if err != nil {
+		return err
+	}
+	kustPath := filepath.Join(packageRoot, baseRel, "kustomization.yaml")
+	declared, err := declaredImages(kustPath)
+	if err != nil {
+		return err
+	}
+	var undeclared []string
+	for name := range overrides {
+		if !declared[name] {
+			undeclared = append(undeclared, name)
+		}
+	}
+	if len(undeclared) == 0 {
+		return nil
+	}
+	sort.Strings(undeclared)
+	names := make([]string, 0, len(declared))
+	for name := range declared {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return fmt.Errorf("--set-image names %s, which the base %q doesn't declare in the images: block of %s; it declares %s",
+		strings.Join(undeclared, ", "), base, kustPath, strings.Join(names, ", "))
+}
+
+// declaredImages returns the names in the images: block of the
+// kustomization.yaml at path. A missing file, or one with no images: block,
+// is an error that points the operator at the alternatives: setting an
+// image would otherwise silently inject an images: block on a package
+// whose author did not intend image overrides.
+func declaredImages(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("--set-image was given but %s does not exist; the chosen base must contain a kustomization.yaml that declares an `images:` block", path)
+			return nil, fmt.Errorf("--set-image was given but %s does not exist; the chosen base must contain a kustomization.yaml that declares an `images:` block", path)
 		}
-		return fmt.Errorf("read %s: %w", path, err)
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	var doc map[string]any
+	var doc struct {
+		Images *[]struct {
+			Name string `yaml:"name"`
+		} `yaml:"images"`
+	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if _, ok := doc["images"]; !ok {
-		return fmt.Errorf(
+	if doc.Images == nil {
+		return nil, fmt.Errorf(
 			"%s has no `images:` block; declare one to use --set-image, "+
 				"or have the package author declare image inputs and a "+
 				"set-container-image group in transformers (see "+
 				"docs/principles.md Principle 5)", path)
 	}
-	return nil
+	declared := map[string]bool{}
+	for _, img := range *doc.Images {
+		declared[img.Name] = true
+	}
+	return declared, nil
 }
