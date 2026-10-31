@@ -415,12 +415,10 @@ split into four ConfigHub objects:
   inference so Deployments referencing the carrier by name link to it
   cleanly.
 
-Known follow-up: `get-references` doesn't currently surface
-`spec.template.spec.containers[*].envFrom.configMapRef.name` /
-`envFrom.secretRef.name`, so a workload that consumes the AppConfig
-solely through `envFrom` (no `volumes`/`volumeMounts`) won't get an
-auto-inferred link to the placeholder Unit even with the namespace
-fix above. Tracked separately.
+The inference reads a workload's `envFrom.configMapRef.name` as well
+as its `volumes`, so a workload that takes its environment from the
+carrier through `envFrom` alone is linked to the placeholder Unit too
+(`test/e2e/env-configmaps.sh` checks it).
 
 The rendered ConfigMap YAML in `out/manifests/` is NOT uploaded as a
 Unit — the render-configmap Invocation re-derives the ConfigMap from

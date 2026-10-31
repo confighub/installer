@@ -371,6 +371,11 @@ rejection`. Spaces created with the `installer-e2e-*` prefix are cleaned on
 exit. `test/e2e/upload-reconcile.sh` drives `examples/collector-app`, which has an
 AppConfig carrier and a collector, through upload, re-upload, emptying, a
 DestroyGate refusal, and recovering a fresh work-dir from ConfigHub.
+`test/e2e/env-configmaps.sh` checks that a ConfigMap generated from env
+files becomes an AppConfig/Env Unit that ConfigHub renders into a key-value
+ConfigMap, which a Deployment reads with `envFrom`; with
+`INSTALLER_ENV_KUBE_CONTEXT` it also deploys both and checks the pod's
+environment.
 
 ## Roadmap
 
