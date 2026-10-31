@@ -346,6 +346,10 @@ authoring packages, the user docs above are what you want.
   function chain into kustomize), durable `out/compose/`,
   component-scoped function-chain mixins, and AppConfig support via
   `configMapGenerator` round-trip. Not yet implemented.
+- [Embedding the installer as a Go library](docs/library.md) — design
+  and phased plan for a public `pkg/installer` package that runs setup,
+  render and upload in another program's process, such as cub.
+  Proposed.
 
 ## Multi-package example
 
