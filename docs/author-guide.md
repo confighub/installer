@@ -687,7 +687,7 @@ what isn't.
 
 3. **`installer upload`** — sends each package (parent + each locked
    dep) to ConfigHub's upload API, one Space per package. Every rendered
-   resource becomes its own Unit, and each Space gets an untargeted,
+   resource becomes its own Unit, and each Space gets an Unreleasable,
    hidden `installer` record Unit carrying your `installer.yaml`, where it
    was pulled from, and the record of the render, so the install can be
    changed from ConfigHub without the work-dir.

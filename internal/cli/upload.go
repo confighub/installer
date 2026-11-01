@@ -57,7 +57,7 @@ func (f *uploadFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.workDir, "work-dir", ".", "working directory")
 	cmd.Flags().StringVar(&f.space, "space", "", "Space slug for a package with no dependencies; overrides --space-pattern")
 	cmd.Flags().StringVar(&f.spacePattern, "space-pattern", "{{.PackageName}}", "Go template for each package's Space slug (vars: .PackageName, .PackageVersion, .Variant)")
-	cmd.Flags().StringVar(&f.target, "target", "", "Target for new Units: <space>/<target>, a UUID, or a slug in the package's Space. Recorded as each Space's TargetID annotation; later uploads use it when --target is omitted.")
+	cmd.Flags().StringVar(&f.target, "target", "", "release Target for each package's Space, which a Release of the Space publishes its Units for: <space>/<target>, a UUID, or a slug in the package's Space. Without it, a Space keeps the release Target it has.")
 	cmd.Flags().StringVar(&f.changeSet, "changeset", "", "existing open ChangeSet every package's writes join: <space>/<changeset>, a UUID, or a slug in the parent's Space (default: one new ChangeSet per Space)")
 	cmd.Flags().StringVar(&f.component, "component", "", "value for the parent's well-known \"Component\" Space label (default: the package name); a dependency's is its package name")
 	cmd.Flags().StringVar(&f.variant, "variant", "base", "value for every package's well-known \"Variant\" Space label")
@@ -337,20 +337,13 @@ func existingSpace(ctx context.Context, c *cubapi.Client, slug string) (*goclien
 	return found.Space, nil
 }
 
-// uploadTargetID decides the Target a package's new Units are created on. An
-// explicit --target wins; a bare slug is looked up in the package's Space, so
-// that Space has to exist already. Without --target, a Space an earlier upload
-// bound to a Target keeps it, as its TargetID annotation records.
+// uploadTargetID resolves --target, the release Target of a package's Space. A
+// bare slug is looked up in the package's Space, so that Space has to exist
+// already. Without --target there is none to set: the Space keeps the release
+// Target an earlier upload, or anyone else, gave it, and its Units take that.
 func uploadTargetID(ctx context.Context, c *cubapi.Client, space *goclientnew.Space, slug, targetRef string) (*goclientnew.UUID, error) {
 	if targetRef == "" {
-		if space == nil || space.Annotations["TargetID"] == "" {
-			return nil, nil
-		}
-		ref := cubapi.ParseRef(space.Annotations["TargetID"])
-		if !ref.IsID() {
-			return nil, fmt.Errorf("Space %s has a TargetID annotation that is not a UUID: %q", slug, space.Annotations["TargetID"])
-		}
-		return &ref.ID, nil
+		return nil, nil
 	}
 	ref := cubapi.ParseRef(targetRef)
 	opts := cubapi.ResolveOpts{}

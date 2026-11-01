@@ -222,7 +222,7 @@ recorded answers; flags such as `--input` change what they name, and the
 rest carries forward. Only an `oci://` ref can be pulled on another
 machine; a local path in the record works only where it was pulled.
 
-The record Unit has **no Target**, because it is not deployed, and is
+The record Unit is **Unreleasable**, because it is not deployed, and is
 hidden with the HiddenReason `InstallerRecord`, as a dot file is: lists and
 bulk operations leave it out unless `--include-hidden=InstallerRecord` asks
 for it, and naming it (`cub unit get --space <slug> installer`) shows it.

@@ -387,9 +387,9 @@ split into four ConfigHub objects:
     stays on the render it named first.
 - **Placeholder Kubernetes/YAML ConfigMap Unit** (slug =
   `<carrier-name>-rendered`). Body is empty at creation; populated by
-  the Upsert link below. Inherits the upload-wide `--target` flag
-  (typically a Kubernetes namespace target) so it applies into the
-  same place as every other rendered manifest. The `-rendered` suffix
+  the Upsert link below. Unlike the AppConfig Unit it is releasable,
+  so a Release of the Space delivers it, through the Space's release
+  Target, to the same place as every other rendered manifest. The `-rendered` suffix
   avoids colliding with the AppConfig Unit (which owns the bare
   carrier name). Workloads still resolve to the rendered ConfigMap by
   `metadata.name` (= `<carrier-name>`, set by render-configmap from

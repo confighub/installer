@@ -13,19 +13,22 @@
 #                    `installer render` (bypasses setup's collector,
 #                    which would write the image input back into facts)
 #   make Target    — creates a Target in its own Space so the upload can
-#                    bind Units to it via cross-Space <space>/<target>
+#                    make it the Space's release Target via cross-Space
+#                    <space>/<target>
 #   upload         — first upload: Units, the AppConfig set, inferred Links,
 #                    and the installer record Unit, with the well-known Space
 #                    labels, --space-label/--space-annotation,
 #                    --unit-label/--unit-annotation, and --target
 #   metadata check — Space labels/annotations, Unit ownership and --unit-*
-#                    pairs, the cross-Space TargetID annotation and binding,
-#                    and that the AppConfig and record Units are untargeted
+#                    pairs, the Space's release Target and TargetID
+#                    annotation, the Units' TargetID, and that the
+#                    AppConfig and record Units are Unreleasable
 #   plan (clean)   — No changes
 #   AppConfig edit — edits the .env carrier, re-renders, uploads; the change
 #                    lands and is rendered into the placeholder
 #   re-run         — an unchanged upload writes nothing
-#   add w/o target — a new Unit binds to the Target the Space recorded;
+#   add w/o target — the Space keeps its release Target, and a new Unit
+#                    takes it;
 #                    re-passing --environment updates only Environment
 #   edit + upload  — a rendered Deployment edit is planned and merged
 #   drop manifest  — the Unit is emptied, never deleted: refused without
@@ -76,9 +79,9 @@ APP_NAME=installer-test-app
 PINNED_IMAGE=${INSTALLER_UPLOAD_IMAGE:-registry.example.com/collector-app:v1.0.0}
 # What setup is given; the pin step below replaces it through facts.yaml.
 INITIAL_IMAGE=registry.example.com/collector-app:initial
-# A Target lives in its own Space so the first upload can bind Units to it
-# via the cross-Space <space>/<target> --target syntax and record the
-# resolved TargetID as $SPACE's "TargetID" annotation.
+# A Target lives in its own Space so the first upload can make it $SPACE's
+# release Target via the cross-Space <space>/<target> --target syntax, which
+# also records the resolved TargetID as $SPACE's "TargetID" annotation.
 TARGET_SPACE="${SPACE}-targets"
 TARGET_SLUG=installer-test-target
 
@@ -221,10 +224,11 @@ appcfg_cm=$(grep -l "confighub.com/toolchain: AppConfig/Env" "$WORK_TMP/out/mani
 [[ -n "$appcfg_cm" ]] || fail "expected at least one AppConfig-tagged ConfigMap among rendered manifests"
 note "AppConfig carrier ConfigMap: $(basename "$appcfg_cm")"
 
-# 5c. Create the cross-Space Target the first upload will bind Units to.
-#     It needs no live cluster — upload only binds Units (sets TargetID),
-#     it never applies. Resolving its UUID up front lets later steps assert
-#     the recorded "TargetID" annotation and the per-Unit bindings.
+# 5c. Create the cross-Space Target the first upload makes the Space's
+#     release Target. It needs no live cluster — upload only sets the
+#     Space's ReleaseTargetID, it never publishes or applies. Resolving its
+#     UUID up front lets later steps assert the Space's release Target, the
+#     recorded "TargetID" annotation and the Units' TargetID.
 log "create cross-Space Target ($TARGET_SPACE/$TARGET_SLUG)"
 cub space create --quiet "$TARGET_SPACE" >/dev/null || fail "failed to create Target Space $TARGET_SPACE"
 cub target create --space "$TARGET_SPACE" "$TARGET_SLUG" >/dev/null \
@@ -238,8 +242,8 @@ note "Target $TARGET_SPACE/$TARGET_SLUG → TargetID $TARGET_ID"
 #    and the installer record, carrying the well-known Space labels
 #    (Component via --component), the free-form --space-label /
 #    --space-annotation pairs, the --unit-label / --unit-annotation pairs on
-#    every Unit, and binding new Units to the cross-Space Target (whose
-#    TargetID is recorded as a Space annotation). Every upload names the
+#    every Unit, and making the cross-Space Target the Space's release
+#    Target (also recorded as its TargetID annotation). Every upload names the
 #    Space with --space: nothing local records it.
 log "installer upload --space $SPACE (first upload — AppConfig pathway + Space/Unit metadata + cross-Space --target)"
 run upload-first "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" \
@@ -266,36 +270,34 @@ note "Units in $SPACE after first upload: $unit_count"
 cub unit get --space "$SPACE" "$APP_NAME" >/dev/null 2>&1 \
   || fail "expected the Deployment's Unit to be named $APP_NAME"
 
-# 6b. The installer record: one untargeted AppConfig/YAML Unit, a single
+# 6b. The installer record: one Unreleasable AppConfig/YAML Unit, a single
 #     document using the configHub schema paths.
 [[ "$(unit_jq installer .Unit.ToolchainType)" == "AppConfig/YAML" ]] || fail "installer record Unit should be AppConfig/YAML"
 [[ "$(unit_jq installer .Unit.Annotations.UploadResource)" == "AppConfig/YAML/installer" ]] || fail "installer record Unit should be keyed AppConfig/YAML/installer"
-rec_tid=$(unit_jq installer .Unit.TargetID)
-[[ -z "$rec_tid" || "$rec_tid" == "null" ]] || fail "installer record Unit should have no Target, got '$rec_tid'"
+[[ "$(unit_jq installer .Unit.Unreleasable)" == "true" ]] || fail "installer record Unit should be Unreleasable"
 cub unit data --space "$SPACE" installer > "$WORK_TMP/installer-record.txt"
 grep -q "^  configSchema: InstallerRecord$" "$WORK_TMP/installer-record.txt" || fail "installer record lacks configHub.configSchema (see $WORK_TMP/installer-record.txt)"
 grep -q "^apiVersion:" "$WORK_TMP/installer-record.txt" && fail "installer record should not be a KRM document (see $WORK_TMP/installer-record.txt)"
 grep -q "^  namespace: $SPACE$" "$WORK_TMP/installer-record.txt" || fail "installer record should carry the inputs' namespace"
-note "installer record: AppConfig/YAML, configSchema InstallerRecord, untargeted"
+note "installer record: AppConfig/YAML, configSchema InstallerRecord, Unreleasable"
 
 # 6c. AppConfig-pathway assertions: one render-configmap Invocation, one
 #     *-rendered placeholder holding the rendered ConfigMap in the install
-#     namespace, and an untargeted AppConfig Unit.
+#     namespace, and an Unreleasable AppConfig Unit.
 invocation_count=$(cub invocation list --space "$SPACE" 2>/dev/null | awk 'NR>1 && /-render/' | wc -l | tr -d ' ')
 [[ "$invocation_count" -ge 1 ]] || fail "expected at least one render-configmap Invocation in $SPACE (got $invocation_count)"
 cub unit data --space "$SPACE" collector-app-env-rendered 2>/dev/null > "$WORK_TMP/rendered.txt"
 grep -q "kind: ConfigMap" "$WORK_TMP/rendered.txt" || fail "placeholder collector-app-env-rendered should contain a rendered ConfigMap"
 grep -q "^  namespace: $SPACE$" "$WORK_TMP/rendered.txt" || fail "rendered ConfigMap should be in namespace $SPACE (see $WORK_TMP/rendered.txt)"
-appcfg_tid=$(unit_jq collector-app-env .Unit.TargetID)
-[[ -z "$appcfg_tid" || "$appcfg_tid" == "null" ]] || fail "AppConfig Unit collector-app-env should have no Target, got '$appcfg_tid'"
-note "rendered ConfigMap present in the placeholder, in namespace $SPACE; AppConfig Unit untargeted"
+[[ "$(unit_jq collector-app-env .Unit.Unreleasable)" == "true" ]] || fail "AppConfig Unit collector-app-env should be Unreleasable"
+note "rendered ConfigMap present in the placeholder, in namespace $SPACE; AppConfig Unit Unreleasable"
 
 link_count=$(cub link list --space "$SPACE" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')
 [[ "$link_count" -ge 2 ]] || fail "expected inferred Links plus the Upsert Link in $SPACE"
 note "Links in $SPACE: $link_count"
 
 # 6d. Metadata assertions.
-log "metadata assertions: Space labels/annotations, Unit labels/annotations, TargetID round-trip"
+log "metadata assertions: Space labels/annotations, Unit labels/annotations, release Target round-trip"
 [[ "$(space_jq .Space.Labels.Component)"   == "my-component" ]] || fail "Space label Component != my-component (got '$(space_jq .Space.Labels.Component)')"
 [[ "$(space_jq .Space.Labels.Variant)"     == "base" ]]         || fail "Space label Variant != base (the default)"
 [[ "$(space_jq .Space.Labels.Namespace)"   == "$SPACE" ]]       || fail "Space label Namespace != $SPACE (the install namespace)"
@@ -306,12 +308,14 @@ log "metadata assertions: Space labels/annotations, Unit labels/annotations, Tar
 [[ "$(space_jq .Space.Labels.tier)"        == "infra" ]]        || fail "Space label tier != infra (--space-label)"
 [[ "$(space_jq '.Space.Annotations.note')" == "e2e" ]]          || fail "Space annotation note != e2e (--space-annotation)"
 [[ "$(space_jq '.Space.Annotations.TargetID')" == "$TARGET_ID" ]] || fail "Space TargetID annotation != $TARGET_ID (got '$(space_jq '.Space.Annotations.TargetID')')"
-note "Space carries Component=my-component, Variant=base, Namespace, Layer/Environment/Region/Owner, tier, note, TargetID"
+[[ "$(space_jq .Space.ReleaseTargetID)" == "$TARGET_ID" ]] || fail "Space ReleaseTargetID != $TARGET_ID (got '$(space_jq .Space.ReleaseTargetID)')"
+note "Space carries Component=my-component, Variant=base, Namespace, Layer/Environment/Region/Owner, tier, note, TargetID; release Target $TARGET_ID"
 
 [[ "$(unit_jq "$APP_NAME" .Unit.Labels.UploadSource)" == "collector-app" ]] || fail "Unit $APP_NAME should be owned by the package (UploadSource=collector-app)"
 [[ "$(unit_jq "$APP_NAME" '.Unit.Labels["managed-by"]')" == "installer-e2e" ]] || fail "Unit $APP_NAME managed-by label != installer-e2e (--unit-label)"
 [[ "$(unit_jq "$APP_NAME" '.Unit.Annotations["install-note"]')" == "hello" ]] || fail "Unit $APP_NAME install-note annotation != hello (--unit-annotation)"
-[[ "$(unit_jq "$APP_NAME" .Unit.TargetID)" == "$TARGET_ID" ]] || fail "Unit $APP_NAME TargetID != $TARGET_ID (cross-Space --target binding)"
+[[ "$(unit_jq "$APP_NAME" .Unit.TargetID)" == "$TARGET_ID" ]] || fail "Unit $APP_NAME TargetID != $TARGET_ID (the Space's release Target from --target)"
+[[ "$(unit_jq "$APP_NAME" .Unit.Unreleasable)" != "true" ]] || fail "Unit $APP_NAME should be releasable"
 note "Unit $APP_NAME: UploadSource=collector-app, managed-by=installer-e2e, install-note=hello, TargetID=$TARGET_ID"
 
 # 7. plan against the unchanged work-dir → No changes.
@@ -380,10 +384,11 @@ grep -q "^No changes\\.$" "$WORK_TMP/upload-converge-1.log" \
 grep -q " link " "$WORK_TMP/upload-converge-1.log" \
   && fail "upload of an unchanged work-dir should not touch Links (see $WORK_TMP/upload-converge-1.log)"
 
-# 9b. An added resource without --target binds to the Target the Space
-#     recorded. Re-passing --environment updates that label; the labels not
-#     re-passed, --component's included, and the TargetID annotation stay.
-log "add without --target: binds from the Space's TargetID; --environment re-pass updates only Environment"
+# 9b. An upload without --target leaves the Space's release Target, and an
+#     added resource's Unit takes it. Re-passing --environment updates that
+#     label; the labels not re-passed, --component's included, and the
+#     TargetID annotation stay.
+log "add without --target: the Space keeps its release Target; --environment re-pass updates only Environment"
 EXTRA_NAME=extra-e2e-config
 cat > "$WORK_TMP/out/manifests/configmap-$EXTRA_NAME.yaml" <<EOF
 apiVersion: v1
@@ -401,9 +406,10 @@ run upload-readback "$BIN" upload --work-dir "$WORK_TMP" --space "$SPACE" --yes 
 grep -q "^Applied: 1 created, 0 updated, 0 emptied, 0 revived, 0 adopted\\.$" "$WORK_TMP/upload-readback.log" \
   || fail "add should report exactly 1 created (see $WORK_TMP/upload-readback.log)"
 
+[[ "$(space_jq .Space.ReleaseTargetID)" == "$TARGET_ID" ]] || fail "Space ReleaseTargetID changed across an upload without --target"
 extra_tid=$(unit_jq "$EXTRA_SLUG" .Unit.TargetID)
-[[ "$extra_tid" == "$TARGET_ID" ]] || fail "added Unit $EXTRA_SLUG TargetID = '$extra_tid', want $TARGET_ID (read back from the Space annotation)"
-note "added Unit $EXTRA_SLUG bound to TargetID $TARGET_ID without --target"
+[[ "$extra_tid" == "$TARGET_ID" ]] || fail "added Unit $EXTRA_SLUG TargetID = '$extra_tid', want $TARGET_ID (the Space's release Target)"
+note "added Unit $EXTRA_SLUG takes the Space's release Target $TARGET_ID without --target"
 
 [[ "$(space_jq .Space.Labels.Environment)" == "Staging" ]]       || fail "Environment label != Staging (re-passed value should update)"
 [[ "$(space_jq .Space.Labels.Component)"   == "my-component" ]]  || fail "Component label changed; it should stay unless --component is given"
