@@ -120,13 +120,13 @@ Goal: each package gets its own Space; the lock survives as a Unit.
   - Iterate packages in dependency-topological order (parent last is fine; cross-Space Links are created after both Spaces exist).
   - `--space-pattern <go-template>` with vars `{{.PackageName}} {{.PackageVersion}} {{.Variant}}` (no variant resolution yet — left empty). Default: `"{{.PackageName}}"`.
   - For each package:
-    - Build a multi-doc YAML stream from `installer.yaml` + every file in `<pkg>/spec/` (selection, inputs, function-chain, manifest-index, and — for the parent — the lock). Create one `Kubernetes/YAML` Unit holding the stream; do **not** assign a Target.
-    - Upload rendered manifests as today, one Unit per file. `--target` applies to these only.
+    - Build a multi-doc YAML stream from `installer.yaml` + every file in `<pkg>/spec/` (selection, inputs, function-chain, manifest-index, and — for the parent — the lock). Create one `Kubernetes/YAML` Unit holding the stream, Unreleasable so no Release delivers it.
+    - Upload rendered manifests as today, one Unit per file. These are the Units a Release delivers to the Space's release Target (`--target`).
     - Run the existing intra-Space link inference on the new Units.
   - After all Spaces exist, for every dep edge in the lock create a Link from the parent's installer-record Unit to the dep's installer-record Unit (Link slug derived from the edge, idempotent).
 - Decision: the parent's installer-record Unit embeds the full lock; each dep's installer-record Unit holds only its own slice (its `installer.yaml` + `out/<dep>/spec/*`). This makes a dep's Space self-describing.
 
-Acceptance: `installer upload` on a fixture multi-package render creates N Spaces, N untargeted installer-record Units, M rendered Units, and the expected cross-Space Links.
+Acceptance: `installer upload` on a fixture multi-package render creates N Spaces, N Unreleasable installer-record Units, M rendered Units, and the expected cross-Space Links.
 
 ## Phase 7 — Signing
 

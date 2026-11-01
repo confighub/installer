@@ -283,10 +283,11 @@ Flags:
   later upload are updated; ones omitted are left alone, and so are
   `Component` and `Variant` when their flags are omitted.
 - `--unit-label`, `--unit-annotation` — set on every Unit the upload writes.
-- `--target` — the Target new Units are created on: `<space>/<target>`, a
-  UUID, or a slug in the package's Space. Recorded as the Space's
-  `TargetID` annotation, which a later upload without `--target` uses.
-  Existing Units keep their Target.
+- `--target` — the Space's release Target, which a Release of the Space
+  publishes its Units for: `<space>/<target>`, a UUID, or a slug in the
+  package's Space. Also recorded as the Space's `TargetID` annotation. A
+  later upload without `--target` leaves the Space's release Target as it
+  is.
 - `--changeset` — an existing open ChangeSet every package's writes join,
   so one restore reverts the whole install. Default: one per Space.
 - `--yes` — empty Units without asking. Without it, an upload that would
@@ -296,7 +297,7 @@ Flags:
 ### Installer record
 
 Each package's request includes one AppConfig/YAML document, uploaded as
-the untargeted `installer` Unit. It uses the AppConfig/YAML schema's
+the Unreleasable `installer` Unit. It uses the AppConfig/YAML schema's
 reserved `configHub` paths rather than KRM `apiVersion`, `kind`, and
 `metadata`:
 

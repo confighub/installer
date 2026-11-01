@@ -29,7 +29,8 @@ type RequestOptions struct {
 	SpaceAnnotations map[string]string
 	UnitLabels       map[string]string
 	UnitAnnotations  map[string]string
-	// TargetIDs maps a Space slug to the Target its new Units are created on.
+	// TargetIDs maps a Space slug to the release Target the Space is given.
+	// Its Units are released to it, except those that are Unreleasable.
 	TargetIDs map[string]goclientnew.UUID
 	// ChangeSetID is an existing ChangeSet every package's writes join, so one
 	// restore reverts the whole install. Nil gives each Space its own.
