@@ -30,10 +30,12 @@ var recordedPackages = map[string]bool{
 // Used by `installer upload` so `installer new` can locate the
 // kubernetes-resources package without operator intervention.
 func recordUploadInUserState(ctx context.Context, packages []upload.Package) error {
-	if len(packages) == 0 || !packages[0].IsParent {
-		return nil
+	var parent upload.Package
+	for _, pkg := range packages {
+		if pkg.IsParent {
+			parent = pkg
+		}
 	}
-	parent := packages[0]
 	if !recordedPackages[parent.Name] {
 		return nil
 	}

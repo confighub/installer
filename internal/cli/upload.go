@@ -76,12 +76,43 @@ func (f *uploadFlags) noteChanged(cmd *cobra.Command) {
 	f.variantSet = cmd.Flags().Changed("variant")
 }
 
-// preparedUpload is one request per package, in upload order: the parent, then
-// each locked dependency.
+// preparedUpload is one request per package, in upload order: each locked
+// dependency, then the parent.
 type preparedUpload struct {
 	client   *cubapi.Client
 	packages []upload.Package
 	requests []goclientnew.UploadRequest
+	// newComponents are the dependencies' Components that do not exist yet,
+	// which the upload creates before the parent's request names them.
+	newComponents map[string]bool
+}
+
+// dryRunRequest is request i as a dry run can send it. A dependency's dry run
+// creates no Component, so the parent's cannot name one the upload has yet to
+// create, and ConfigHub refuses a DependsOn that names a missing Component. It
+// leaves those out and returns them. DependsOn only records the dependency on
+// the parent's Space, so what the dry run reports for each Unit is unchanged.
+func (p *preparedUpload) dryRunRequest(i int) (goclientnew.UploadRequest, []string) {
+	req := p.requests[i]
+	if len(p.newComponents) == 0 {
+		return req, nil
+	}
+	var omitted []string
+	components := make([]goclientnew.UploadComponentRequest, len(req.Components))
+	for j, component := range req.Components {
+		var kept []string
+		for _, name := range component.DependsOn {
+			if p.newComponents[name] {
+				omitted = append(omitted, name)
+			} else {
+				kept = append(kept, name)
+			}
+		}
+		component.DependsOn = kept
+		components[j] = component
+	}
+	req.Components = components
+	return req, omitted
 }
 
 func newUploadCmd() *cobra.Command {
@@ -132,10 +163,12 @@ When the upload would empty any Unit it lists them and asks first, unless
 
 			// Emptying a Unit withdraws what it deployed, so an upload that
 			// would empty anything is confirmed first. The preview is a dry
-			// run of the same requests, so what is confirmed is what happens.
+			// run of the same requests (see dryRunRequest), so what is
+			// confirmed is what happens.
 			if !yes {
 				var previews []*goclientnew.UploadResult
-				for _, req := range prepared.requests {
+				for i := range prepared.requests {
+					req, _ := prepared.dryRunRequest(i)
 					preview, err := cubapi.Upload(ctx, prepared.client, req, true)
 					if err != nil {
 						return err
@@ -292,8 +325,8 @@ func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) 
 		opts.ChangeSetID = &id
 	}
 
-	prepared := &preparedUpload{client: client, packages: packages}
-	for _, pkg := range packages {
+	prepared := &preparedUpload{client: client, packages: uploadOrder(packages), newComponents: map[string]bool{}}
+	for _, pkg := range prepared.packages {
 		space, err := existingSpace(ctx, client, pkg.SpaceSlug)
 		if err != nil {
 			return nil, err
@@ -321,8 +354,49 @@ func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) 
 			return nil, err
 		}
 		prepared.requests = append(prepared.requests, req)
+
+		if !pkg.IsParent {
+			name := pkgOpts.ComponentName(pkg)
+			exists, err := componentExists(ctx, client, name)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				prepared.newComponents[name] = true
+			}
+		}
 	}
 	return prepared, nil
+}
+
+// uploadOrder is the order packages are uploaded in: each dependency, then the
+// parent. ConfigHub resolves the Components the parent's DependsOn names when
+// the parent is uploaded, so the dependencies' uploads have to create them first.
+func uploadOrder(packages []upload.Package) []upload.Package {
+	ordered := make([]upload.Package, 0, len(packages))
+	for _, pkg := range packages {
+		if !pkg.IsParent {
+			ordered = append(ordered, pkg)
+		}
+	}
+	for _, pkg := range packages {
+		if pkg.IsParent {
+			ordered = append(ordered, pkg)
+		}
+	}
+	return ordered
+}
+
+// componentExists reports whether the Component name exists in the organization.
+func componentExists(ctx context.Context, c *cubapi.Client, name string) (bool, error) {
+	_, err := cubapi.ResolveComponent(ctx, c, cubapi.NewRef("", name), cubapi.ResolveOpts{})
+	if cubapi.IsNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("look up Component %s: %w", name, err)
+	}
+	return true, nil
 }
 
 // existingSpace returns the Space with slug, or nil when there is none yet.

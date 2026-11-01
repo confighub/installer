@@ -238,9 +238,9 @@ installer upload [--work-dir <dir>] [--space <slug> | --space-pattern <tmpl>]
                  [--target <ref>] [--changeset <ref>] [--yes]
 ```
 
-Sends each package's render to ConfigHub's upload API — the parent, then
-each locked dependency, each into its own Space — and ConfigHub makes the
-Space match it. There is no first-upload mode: every upload is
+Sends each package's render to ConfigHub's upload API — each locked
+dependency, then the parent, each into its own Space — and ConfigHub makes
+the Space match it. There is no first-upload mode: every upload is
 create-or-update.
 
 - **What each request carries.** The package's rendered manifests
@@ -276,7 +276,8 @@ Flags:
   Nothing local records it, so pass the same flag to every upload and plan.
 - `--component` — the parent's `Component` label (default: the package
   name). A dependency's is its package name. The parent's Space records its
-  dependencies' components in its `DependsOn` annotation.
+  dependencies' Components, by ComponentID, in its `DependsOn` annotation,
+  so the dependencies are uploaded first.
 - `--variant` — every package's `Variant` label (default `base`).
 - `--layer`, `--environment`, `--region`, `--owner`, `--space-label`,
   `--space-annotation` — Space metadata. Labels and annotations given on a

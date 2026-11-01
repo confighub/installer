@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/confighub/sdk/core/cubapi"
 	goclientnew "github.com/confighub/sdk/core/openapi/goclient-new"
@@ -39,13 +40,17 @@ Plan writes nothing.`,
 				return err
 			}
 			var results []*goclientnew.UploadResult
-			for i, req := range prepared.requests {
+			for i := range prepared.requests {
 				pkg := prepared.packages[i]
+				req, omitted := prepared.dryRunRequest(i)
 				result, err := cubapi.Upload(ctx, prepared.client, req, true, cubapi.WithUploadMutations)
 				if err != nil {
 					return fmt.Errorf("plan %s: %w", pkg.Name, err)
 				}
 				upload.Report(os.Stdout, result, true)
+				if len(omitted) > 0 {
+					fmt.Printf("  DependsOn %s is left out of this dry run: upload creates those Components first\n", strings.Join(omitted, ", "))
+				}
 				if err := upload.ReportImages(os.Stdout, pkg); err != nil {
 					return err
 				}

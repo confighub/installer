@@ -252,7 +252,7 @@ type UploadOptions struct {
 func (i *Installer) PlanUpload(ctx context.Context, opts UploadOptions) (*UploadPlan, error)
 
 type UploadPlan struct {
-	Packages []PlannedPackage // parent first, then each locked dependency
+	Packages []PlannedPackage // each locked dependency, then the parent
 }
 
 // Emptied lists the Units the upload would empty, as <space>/<unit>.
