@@ -510,10 +510,14 @@ ls out/<dep-name>/manifests/     # each dep's manifests
 installer upload --space-pattern '{{.PackageName}}-prod'
 ```
 
-Plan and upload send one request per package, parent first, with the
-same `--space-pattern` each time. Each dependency's Space is labeled with
-its own package name as `Component`, and the parent's Space lists them in
-its `DependsOn` annotation. Upload prints a revert command per Space it
+Plan and upload send one request per package, each dependency before the
+parent, with the same `--space-pattern` each time. Each dependency's Space
+is labeled with its own package name as `Component`, and the parent's Space
+records those Components, by ComponentID, in its `DependsOn` annotation.
+ConfigHub requires them to exist by then, which is why the dependencies go
+first. A plan before the first upload leaves the dependencies' Components
+out of the parent's `DependsOn`, since nothing has created them yet, and
+says so. Upload prints a revert command per Space it
 writes to; `--changeset <ref>` puts every package's writes in one existing
 ChangeSet instead, so one restore reverts the whole install.
 

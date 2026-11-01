@@ -35,6 +35,10 @@ KEEP=${INSTALLER_E2E_KEEP:-0}
 # Spaces created by the upload step. Names track the --space-pattern
 # below; cleaned up on exit.
 UPLOAD_SPACES=(installer-e2e-example-stack installer-e2e-example-base)
+# The Components the upload creates, named after the packages. They outlive
+# their Spaces, so they are deleted too: a run that finds them already there
+# cannot check a first upload.
+UPLOAD_COMPONENTS=(example-stack example-base)
 
 log() { printf '\n=== %s ===\n' "$*"; }
 fail() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
@@ -44,6 +48,9 @@ cleanup() {
   if [[ "$DO_UPLOAD" = "1" ]]; then
     for s in "${UPLOAD_SPACES[@]}"; do
       cub space delete --recursive --quiet "$s" >/dev/null 2>&1
+    done
+    for c in "${UPLOAD_COMPONENTS[@]}"; do
+      cub component delete --quiet "$c" >/dev/null 2>&1
     done
   fi
   docker rm -f "$REGISTRY_NAME" >/dev/null 2>&1
@@ -159,6 +166,18 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
   if ! cub space list >/dev/null 2>&1; then
     fail "cub auth not configured (run \`cub auth login\`)"
   fi
+  # Before the first upload, example-base's Component does not exist yet, so
+  # the parent's dry run cannot name it in DependsOn; plan says it left it out.
+  # The upload below creates the dependency first, and so names it.
+  log "plan before the first upload"
+  "$BIN" plan --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/plan-first.out"
+  if cub component get example-base --quiet >/dev/null 2>&1; then
+    echo "Component example-base already exists, so the first-upload check is skipped"
+  elif ! grep -q "DependsOn example-base is left out of this dry run" "$WORK_TMP/plan-first.out"; then
+    fail "plan before the first upload should say it left example-base out of DependsOn"
+  fi
+
+  log "first upload"
   "$BIN" upload --work-dir "$WORK_TMP" --space-pattern "$PATTERN" 2>&1 | tee "$WORK_TMP/upload-first.out"
 
   for s in "${UPLOAD_SPACES[@]}"; do
@@ -174,10 +193,11 @@ if [[ "$DO_UPLOAD" = "1" ]]; then
     cub unit list --space "$s" 2>&1 | awk 'NR>1 {print "    "$1}'
   done
 
-  # The parent's Space names its dependency's component, and only the parent's
-  # record carries the lock.
-  [[ "$(cub space get "$PARENT_SPACE" --quiet -o jq=.Space.Annotations.DependsOn | tr -d '"')" == "example-base" ]] \
-    || fail "parent Space should record DependsOn=example-base"
+  # The parent's Space records its dependency's Component, by ComponentID, and
+  # only the parent's record carries the lock.
+  BASE_COMPONENT_ID="$(cub component get example-base --quiet -o jq=.Component.ComponentID | tr -d '"')"
+  [[ "$(cub space get "$PARENT_SPACE" --quiet -o jq=.Space.Annotations.DependsOn | tr -d '"')" == "$BASE_COMPONENT_ID" ]] \
+    || fail "parent Space should record DependsOn=$BASE_COMPONENT_ID (example-base's ComponentID)"
   cub unit data --space "$PARENT_SPACE" installer | grep -q "^lock:" \
     || fail "the parent's installer record should carry the lock"
   if cub unit data --space installer-e2e-example-base installer | grep -q "^lock:"; then

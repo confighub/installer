@@ -286,8 +286,8 @@ ConfigHub Links + automatic apply-ordering (Roadmap item in the README) handle
 ordering inside a Space. Across Spaces, the dep tree implies an order: a Space
 is applied only after the Spaces of packages it depends on have converged. The
 installer's upload step records this as the parent Space's `DependsOn`
-annotation, naming its dependencies' components, and the lock is carried in
-the parent's installer record.
+annotation, which holds its dependencies' Components by ComponentID, and the
+lock is carried in the parent's installer record.
 
 ### Cluster-side `externalRequires` still apply
 
