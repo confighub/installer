@@ -78,7 +78,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 	// Checked before anything is written, so a mistyped name never reaches
 	// the record, where render would refuse it on every run.
 	imageOverrides := mergeImageOverrides(raw.PriorImageOverrides, raw.ImageOverrides)
-	if err := render.ValidateImageOverrides(pkg, packageDir, sel.Spec.Base, imageOverrides); err != nil {
+	if err := render.ValidateImageOverrides(pkg, packageDir, sel.Spec.Base, sel.Spec.Components, imageOverrides); err != nil {
 		return nil, err
 	}
 

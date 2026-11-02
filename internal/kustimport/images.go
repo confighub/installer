@@ -6,6 +6,7 @@ package kustimport
 import (
 	"sort"
 
+	"github.com/confighub/installer/internal/kustomize"
 	"sigs.k8s.io/kustomize/api/pkg/util"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/types"
@@ -25,7 +26,7 @@ func seedImages(m resmap.ResMap) []types.Image {
 		if err != nil {
 			continue
 		}
-		for _, ref := range containerImages(obj) {
+		for _, ref := range kustomize.ContainerImages(obj) {
 			name, tag, digest := util.SplitImageName(ref)
 			img := types.Image{Name: name, NewTag: tag, Digest: digest}
 			prev, ok := byName[img.Name]
@@ -47,33 +48,5 @@ func seedImages(m resmap.ResMap) []types.Image {
 		out = append(out, *img)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
-}
-
-// containerImages returns the image of every container and init container
-// anywhere in obj, the fields kustomize's images transformer rewrites.
-func containerImages(obj any) []string {
-	var out []string
-	switch v := obj.(type) {
-	case map[string]any:
-		for key, val := range v {
-			if key == "containers" || key == "initContainers" {
-				if list, ok := val.([]any); ok {
-					for _, c := range list {
-						if cm, ok := c.(map[string]any); ok {
-							if image, ok := cm["image"].(string); ok && image != "" {
-								out = append(out, image)
-							}
-						}
-					}
-				}
-			}
-			out = append(out, containerImages(val)...)
-		}
-	case []any:
-		for _, val := range v {
-			out = append(out, containerImages(val)...)
-		}
-	}
 	return out
 }

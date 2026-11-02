@@ -71,7 +71,7 @@ Pass --non-interactive to script the wizard with --base, --components,
 	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
-	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); set in the chosen base's images: block before render, as `kustomize edit set image` would. The base's kustomization.yaml must declare an `images:` block.")
+	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable), set before render as `kustomize edit set image` would, for every container of the chosen base and selected components; name is the image without its tag or digest, which a container runs or an images: block declares")
 	cmd.Flags().BoolVar(&opts.runRender, "render", true, "render after the wizard writes spec docs; pass --render=false to skip and run installer render later")
 	return cmd
 }

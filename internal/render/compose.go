@@ -29,6 +29,7 @@ import (
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/pkg/api"
 	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/kustomize/api/types"
 )
 
 // composeInputs is what composeKustomization needs to produce the on-disk
@@ -44,13 +45,17 @@ type composeInputs struct {
 	// guarantee.
 	Namespace         string
 	TransformerBinary string // absolute path to the installer binary
+	// Images is the images: block of the composed kustomization: the
+	// --set-image overrides, as applyImageOverrides returns them.
+	Images []types.Image
 }
 
 // composeKustomization writes a synthesized kustomization tree under
 // composeDir (created if missing, cleared if it already exists). The
 // kustomization references the chosen base + components by relative path,
-// wires transformers.yaml as a transformer and validators.yaml as a
-// validator (when each is non-empty), and writes a one-line
+// sets the --set-image overrides in its images: block, wires
+// transformers.yaml as a transformer and validators.yaml as a validator
+// (when each is non-empty), and writes a one-line
 // installer-transformer.sh wrapper script that execs the running installer
 // binary's transformer subcommand.
 //
@@ -59,54 +64,17 @@ type composeInputs struct {
 // the render byte-for-byte.
 func composeKustomization(in composeInputs, composeDir string) error {
 	pkg := in.Loaded.Package
-	baseDir, err := basePathForName(pkg, in.Selection.Spec.Base)
-	if err != nil {
-		return err
-	}
-
 	if err := os.RemoveAll(composeDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(composeDir, 0o755); err != nil {
 		return err
 	}
-
-	// kustomize rejects absolute paths in resources/components; compute
-	// relative paths from the compose dir to each referenced directory.
-	// Both paths must be symlink-resolved or kustomize's own EvalSymlinks
-	// step produces nonsense (notably on macOS, where /var → /private/var).
-	composeReal, err := filepath.EvalSymlinks(composeDir)
+	composed, err := wrapSelection(pkg, in.Loaded.Root, in.Selection.Spec.Base, in.Selection.Spec.Components, composeDir)
 	if err != nil {
 		return err
 	}
-	rootReal, err := filepath.EvalSymlinks(in.Loaded.Root)
-	if err != nil {
-		return err
-	}
-	rel := func(target string) (string, error) {
-		return filepath.Rel(composeReal, filepath.Join(rootReal, target))
-	}
-
-	baseRel, err := rel(baseDir)
-	if err != nil {
-		return err
-	}
-	composed := composedKustomization{
-		APIVersion: "kustomize.config.k8s.io/v1beta1",
-		Kind:       "Kustomization",
-		Resources:  []string{baseRel},
-	}
-	for _, name := range in.Selection.Spec.Components {
-		path, err := componentPathForName(pkg, name)
-		if err != nil {
-			return err
-		}
-		r, err := rel(path)
-		if err != nil {
-			return err
-		}
-		composed.Components = append(composed.Components, r)
-	}
+	composed.Images = in.Images
 
 	// Write transformers.yaml + validators.yaml + the exec wrapper when needed,
 	// and link them into the top-level kustomization. Empty groups are
@@ -223,6 +191,52 @@ func writeTransformerWrapper(composeDir, installerBin string) error {
 	return os.WriteFile(filepath.Join(composeDir, "installer-transformer.sh"), []byte(body), 0o755)
 }
 
+// wrapSelection returns a kustomization, to be written in dir, that
+// includes the base and components, named in pkg, of the package at root.
+func wrapSelection(pkg *api.Package, root, base string, components []string, dir string) (composedKustomization, error) {
+	baseDir, err := basePathForName(pkg, base)
+	if err != nil {
+		return composedKustomization{}, err
+	}
+	// kustomize rejects absolute paths in resources/components; compute
+	// relative paths from dir to each referenced directory.
+	// Both paths must be symlink-resolved or kustomize's own EvalSymlinks
+	// step produces nonsense (notably on macOS, where /var → /private/var).
+	dirReal, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return composedKustomization{}, err
+	}
+	rootReal, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return composedKustomization{}, err
+	}
+	rel := func(target string) (string, error) {
+		return filepath.Rel(dirReal, filepath.Join(rootReal, target))
+	}
+
+	baseRel, err := rel(baseDir)
+	if err != nil {
+		return composedKustomization{}, err
+	}
+	k := composedKustomization{
+		APIVersion: "kustomize.config.k8s.io/v1beta1",
+		Kind:       "Kustomization",
+		Resources:  []string{baseRel},
+	}
+	for _, name := range components {
+		path, err := componentPathForName(pkg, name)
+		if err != nil {
+			return composedKustomization{}, err
+		}
+		r, err := rel(path)
+		if err != nil {
+			return composedKustomization{}, err
+		}
+		k.Components = append(k.Components, r)
+	}
+	return k, nil
+}
+
 func basePathForName(pkg *api.Package, name string) (string, error) {
 	for _, b := range pkg.Spec.Bases {
 		if b.Name == name {
@@ -248,4 +262,7 @@ type composedKustomization struct {
 	Components   []string `yaml:"components,omitempty"`
 	Transformers []string `yaml:"transformers,omitempty"`
 	Validators   []string `yaml:"validators,omitempty"`
+	// Images is applied after the components, so it reaches the
+	// containers of the base and of every component.
+	Images []types.Image `yaml:"images,omitempty"`
 }

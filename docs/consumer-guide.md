@@ -224,9 +224,9 @@ Then `installer plan` to see what the change would do, and
 ### 2. `--set-image` overrides (install-time, image-only)
 
 The most common day-2 change is a container image tag bump (mirror,
-patch release). If the package declares an `images:` block in its
-chosen base, you can override at setup time without editing the
-package source:
+patch release). You can override any image the chosen base or a
+selected component runs at setup time, without editing the package
+source:
 
 ```bash
 installer setup --set-image myorg/statusboard=myorg/statusboard:1.2.4
@@ -235,9 +235,12 @@ installer upload
 
 The override is recorded in `out/record/inputs.yaml` under
 `spec.imageOverrides`, so subsequent setups carry it forward unless
-you pass a different `--set-image` for the same name. If the package
-doesn't declare an `images:` block, this fails fast with a message
-naming the missing block.
+you pass a different `--set-image` for the same name. The name is the
+image without its tag or digest. A ref without a tag keeps the tag the
+container has, so `--set-image postgres=mirror.example.com/postgres`
+moves every `postgres` container to the mirror. A name that no
+container runs and no `images:` block declares fails fast, listing the
+names that would work.
 
 ### 3. Post-install ConfigHub mutations
 
@@ -548,12 +551,14 @@ install somewhere else.
 
 ## Common errors
 
-### `--set-image was given but bases/.../kustomization.yaml has no images: block`
+### `--set-image names foo, which no container or images: block of the base ... uses`
 
-The package author hasn't declared the image as overridable. Two
-options: (1) ask the author to add an `images:` block declaring the
-image you want to override; (2) make the change post-install via
-`cub function do set-container-image` instead.
+No container of the chosen base or the selected components runs the
+image `foo`, and no `images:` block of theirs declares it, so the
+override would change nothing. The error lists the names that would.
+Check for a tag or digest in the name (`postgres`, not
+`postgres:17.6-alpine`), and that the component running the image is
+selected.
 
 ### `no package found in <work-dir>/package/ — pass --pull <ref> to fetch one`
 
