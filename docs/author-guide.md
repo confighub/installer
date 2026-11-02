@@ -698,7 +698,7 @@ what isn't.
 4. **`installer plan`** — day-2 dry run of what the next `installer
    upload` would change in ConfigHub. The
    operator's job, but several things you author shape how it
-   behaves: your `images:` block enables `--set-image`; your
+   behaves: your `images:` block states the images `--set-image` overrides; your
    `default: true` components are adopted by `default`-preset
    re-renders; your input schema diff (across versions) drives what
    `setup --pull <new-ref>` prompts for vs carries forward silently.
@@ -945,11 +945,13 @@ well-authored package can install with `installer setup --pull <ref>
 
 Put a kustomize `images:` block in your chosen base's
 `kustomization.yaml`, with `newName` / `newTag` matching what's
-hard-coded in your manifests. This enables `installer setup
---set-image name=ref` for operators. Without it, `--set-image`
-fails fast with a message pointing at this guide. Cost: three lines
-of YAML; benefit: image mirroring + patch-version bumps without
-your operator hand-editing your package tree.
+hard-coded in your manifests, and one in a component's for an image
+only that component runs. It states, in one place, the images your
+package pins, under the names operators pass to `installer setup
+--set-image name=ref`. `--set-image` also sets an image no block
+declares, wherever the base or a selected component runs it, so
+operators can mirror every image for an air-gapped install without
+hand-editing your package tree.
 
 ```yaml
 # bases/default/kustomization.yaml

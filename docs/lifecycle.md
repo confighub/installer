@@ -394,8 +394,10 @@ the recommended path depends on how often the override is expected:
   declares a kustomize `images:` transformer in the chosen base.
   Operator passes `--set-image name=ref` (repeatable) to `installer
   setup` or `installer wizard`; before render, the installer sets the
-  image in the `images:` block of the package's working copy, as
-  `kustomize edit set image` would. The
+  image, as `kustomize edit set image` would, in the `images:` block
+  of the kustomization it composes from the base and the selected
+  components, which reaches all their containers, and in the entries
+  their own `images:` blocks declare for it. The
   `--set-image` value is recorded in `out/record/inputs.yaml` under
   `spec.imageOverrides` so the next setup carries it forward without
   the operator re-typing it.
@@ -411,10 +413,9 @@ the recommended path depends on how often the override is expected:
 rendered manifests, so the operator can see the eventual image set
 without applying anything.
 
-`installer setup --set-image` against a package whose base has no
-`images:` transformer fails fast with a useful message: "package's
-base kustomization.yaml has no `images:` block; declare one to use
---set-image, or use a `spec.transformers` input."
+`installer setup --set-image` for a name that no container of the
+base or the selected components runs, and no `images:` block of theirs
+declares, fails fast, listing the names that would work.
 
 ## Common scenarios
 

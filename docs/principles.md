@@ -29,8 +29,8 @@ a package directory or hand-editing a `bases/*/kustomization.yaml`,
 stop. Either declare an input for it (and let the package's
 `transformers` consume it), or do it post-install in ConfigHub.
 The one allowed package-file mutation is the installer's own update of
-the base's `images:` block behind `--set-image`, the equivalent of
-`kustomize edit set image` (see Principle 4).
+the `images:` blocks of the base and components behind `--set-image`,
+the equivalent of `kustomize edit set image` (see Principle 5).
 
 ## 2. Spec files are the round-trippable source of truth
 
@@ -109,10 +109,14 @@ Container images are the most common day-2 change. The installer's
 recommended pattern, in order of decreasing user friction:
 
 1. **Package author declares a kustomize `images:` transformer** in the
-   chosen base's `kustomization.yaml`. Operators override at install or
-   upgrade time with `installer setup --set-image name=ref` (which
-   updates the `images:` block in the package's working copy before
-   render, as `kustomize edit set image` would). Operators override post-install with `cub function
+   chosen base's `kustomization.yaml`, and in a component's for an image
+   only the component runs. Operators override at install or
+   upgrade time with `installer setup --set-image name=ref`, which
+   sets the image before render, as `kustomize edit set image` would,
+   wherever the base or a selected component uses it. It works for an
+   image no `images:` block declares too, such as a bundled database an
+   air-gapped install pulls from a mirror; the block is where the
+   package states the images it pins. Operators override post-install with `cub function
 do set-container-image` on the uploaded Unit. This is the default
    recommendation.
 2. **Package author declares image inputs and a `set-container-image`

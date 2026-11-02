@@ -13,8 +13,9 @@ import (
 	"github.com/confighub/installer/pkg/api"
 )
 
-// A --set-image name the chosen base doesn't declare is refused before the
-// wizard writes anything, so the mistake doesn't reach the record.
+// A --set-image name the chosen base neither runs nor declares is refused
+// before the wizard writes anything, so the mistake doesn't reach the
+// record.
 func TestRunRefusesUndeclaredImage(t *testing.T) {
 	pkgDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(pkgDir, "bases/default"), 0o755); err != nil {

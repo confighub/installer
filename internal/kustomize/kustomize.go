@@ -131,6 +131,53 @@ func parseImageArg(arg string) (types.Image, error) {
 	return img, nil
 }
 
+// ParseImage returns the images: entry SetImages writes for arg when the
+// kustomization has no entry for its name yet.
+func ParseImage(arg string) (types.Image, error) {
+	img, err := parseImageArg(arg)
+	if err != nil {
+		return types.Image{}, err
+	}
+	if img.NewName == preserve {
+		img.NewName = ""
+	}
+	if img.NewTag == preserve {
+		img.NewTag = ""
+	}
+	if img.Digest == preserve {
+		img.Digest = ""
+	}
+	return img, nil
+}
+
+// ContainerImages returns the image of every container and init container
+// anywhere in obj, the fields kustomize's images transformer rewrites.
+func ContainerImages(obj any) []string {
+	var out []string
+	switch v := obj.(type) {
+	case map[string]any:
+		for key, val := range v {
+			if key == "containers" || key == "initContainers" {
+				if list, ok := val.([]any); ok {
+					for _, c := range list {
+						if cm, ok := c.(map[string]any); ok {
+							if image, ok := cm["image"].(string); ok && image != "" {
+								out = append(out, image)
+							}
+						}
+					}
+				}
+			}
+			out = append(out, ContainerImages(val)...)
+		}
+	case []any:
+		for _, val := range v {
+			out = append(out, ContainerImages(val)...)
+		}
+	}
+	return out
+}
+
 // AddResource appends resource to the resources: list of the kustomization
 // file at path, as `kustomize edit add resource` does, unless it is already
 // listed. The rest of the file, comments included, is left as it was.

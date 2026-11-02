@@ -78,11 +78,12 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		transformerBin = exe
 	}
 
-	// 0. Apply per-image overrides (if any) to the chosen base's
-	//    kustomization.yaml, as `kustomize edit set image` would. The
-	//    chosen base must declare an `images:` block; render fails fast
-	//    otherwise.
-	if err := applyImageOverrides(opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides); err != nil {
+	// 0. Apply per-image overrides (if any), as `kustomize edit set image`
+	//    would: to the images: block of the composed kustomization, which
+	//    reaches the containers of the base and of every component, and to
+	//    the entries the base and components declare for them.
+	images, err := applyImageOverrides(opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides)
+	if err != nil {
 		return nil, err
 	}
 
@@ -111,6 +112,7 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		Chain:             chain,
 		Namespace:         opts.Inputs.Spec.Namespace,
 		TransformerBinary: transformerBin,
+		Images:            images,
 	}, composeDir); err != nil {
 		return nil, err
 	}

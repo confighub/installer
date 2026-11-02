@@ -210,8 +210,9 @@ grep replicas /tmp/statusboard/out/manifests/deployment-demo-statusboard.yaml
 
 Operators frequently want to pin a specific image tag, mirror to an
 internal registry, or bump a patch version — without hand-editing
-your source. Declare a kustomize `images:` block in your base, and
-they get `installer setup --set-image` for free.
+your source. `installer setup --set-image` does that for any image
+your package runs; a kustomize `images:` block in your base states the
+images, and the references, your package pins.
 
 Edit `bases/default/kustomization.yaml` to add an `images:` block.
 `installer init` already left a comment showing the shape; add:
@@ -251,10 +252,9 @@ grep -A 1 imageOverrides /tmp/statusboard/out/record/inputs.yaml
 #   nginxdemos/hello: nginxdemos/hello:plain-text-v2
 ```
 
-If you don't declare an `images:` block and an operator passes
-`--set-image`, render fails fast with a useful message — `kustomize
-edit set image` against an undeclared image would silently inject a
-new block, which contradicts your contract as the package author.
+An operator's `--set-image` for a name that no container runs and no
+`images:` block declares fails fast, listing the names that would
+work: kustomize would ignore it, and the render would keep the image.
 
 ## Step 4: an opt-in component
 

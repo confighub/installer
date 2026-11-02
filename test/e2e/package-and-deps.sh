@@ -312,7 +312,7 @@ with open(p, 'w') as f: yaml.safe_dump_all(docs, f, default_flow_style=False, so
   fi
   echo "setup --set-image: bump applied; override carried forward"
 
-  log "setup --pull --set-image against a package without images: block fails fast"
+  log "setup --pull --set-image for an image the package doesn't run fails fast"
   NO_IMG_SRC="$WORK_TMP/example-stack-no-images"
   cp -r "$EDITED_SRC" "$NO_IMG_SRC"
   python3 -c "
@@ -324,12 +324,12 @@ with open(p, 'w') as f: yaml.safe_dump(d, f, sort_keys=False)
 " "$NO_IMG_SRC/bases/default/kustomization.yaml"
   if "$BIN" setup --pull "$NO_IMG_SRC" --work-dir "$WORK_TMP" --non-interactive \
       --set-image foo=bar:1 2>&1 | tee "$WORK_TMP/setup-noimg.out"; then
-    fail "setup --set-image against package without images: block should fail"
+    fail "setup --set-image for an image the package doesn't run should fail"
   fi
-  if ! grep -q "no \`images:\` block" "$WORK_TMP/setup-noimg.out"; then
-    fail "preflight error should name the missing images: block"
+  if ! grep -q "names foo, which no container" "$WORK_TMP/setup-noimg.out"; then
+    fail "preflight error should name the image no container runs"
   fi
-  echo "preflight: package without images: block correctly rejected"
+  echo "preflight: image the package doesn't run correctly rejected"
 fi
 
 log "OK"

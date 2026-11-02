@@ -91,12 +91,12 @@ Working:
   merged, dropped ones are emptied, and an unchanged work-dir writes
   nothing. Every upload is create-or-update, so the first and every later
   one run the same way. `installer plan` is the same requests as a dry run.
-- **Image overrides.** `installer setup --set-image` sets the image
-  in the chosen base's `images:` block before render, as
-  `kustomize edit set image` would. Overrides round-trip via
+- **Image overrides.** `installer setup --set-image` sets an image
+  before render, as `kustomize edit set image` would, wherever the
+  chosen base or a selected component uses it. Overrides round-trip via
   `Inputs.Spec.ImageOverrides` and carry forward across re-renders /
-  upgrades. The chosen base must declare an `images:` block; render
-  fails fast otherwise.
+  upgrades. A name that no container runs and no `images:` block
+  declares fails fast.
 
 Stubbed: `installer preflight` — cluster-side constraint checks.
 
