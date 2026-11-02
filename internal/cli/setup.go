@@ -419,6 +419,9 @@ func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded
 	if err != nil {
 		return err
 	}
+	if warning := r.UnusedNamespaceWarning(res.Inputs.Spec.Namespace); warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
+	}
 	fmt.Printf("Rendered %d manifest(s) to %s\n", len(r.Manifests), manifestsDir)
 	if len(r.Secrets) > 0 {
 		fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(r.Secrets), outDir)
