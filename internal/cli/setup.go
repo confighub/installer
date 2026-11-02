@@ -541,11 +541,11 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")
-	cmd.Flags().StringSliceVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
+	cmd.Flags().StringArrayVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
 	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
-	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable), set before render as `kustomize edit set image` would, for every container of the chosen base and selected components; name is the image without its tag or digest, which a container runs or an images: block declares")
+	cmd.Flags().StringArrayVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable), set before render as `kustomize edit set image` would, for every container of the chosen base and selected components; name is the image without its tag or digest, which a container runs or an images: block declares")
 	cmd.Flags().StringVar(&opts.outputOCI, "output-oci", "", "write rendered manifests to a local OCI layout path or push them to oci://host/repo:tag")
 	return cmd
 }
