@@ -227,6 +227,62 @@ functionConfig:
 	}
 }
 
+// An env-mode ConfigMap holds each value itself after a transformer runs,
+// both the value a function set and the ones it left alone, not the quoted
+// and escaped form the env file writes them in.
+func TestTransformer_AppConfigEnvRoundTripKeepsValues(t *testing.T) {
+	input := `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: app-env
+      namespace: demo
+      annotations:
+        confighub.com/toolchain: AppConfig/Env
+        confighub.com/appconfig-mode: env
+    data:
+      ADMIN_JWK: placeholder
+      GREETING: hello world
+      HASHED: "a # b"
+      QUOTED: "'single'"
+      ESCAPED: 'x"y\z'
+      PORT: "5432"
+functionConfig:
+  apiVersion: installer.confighub.com/v1alpha1
+  kind: ConfigHubTransformers
+  metadata: {name: chain}
+  spec:
+    groups:
+      - toolchain: AppConfig/Env
+        invocations:
+          - name: set-string-path
+            args: ["NoSchema", "ADMIN_JWK", '{"kty":"OKP","x":"abc"}']
+`
+	out, err := runTransformer(context.Background(), []byte(input))
+	if err != nil {
+		t.Fatalf("runTransformer: %v", err)
+	}
+	cm := firstConfigMap(t, out)
+	want := map[string]string{
+		"ADMIN_JWK": `{"kty":"OKP","x":"abc"}`,
+		"GREETING":  "hello world",
+		"HASHED":    "a # b",
+		"QUOTED":    "'single'",
+		"ESCAPED":   `x"y\z`,
+		"PORT":      "5432",
+	}
+	for k, v := range want {
+		if cm.Data[k] != v {
+			t.Errorf("data[%s] = %q, want %q", k, cm.Data[k], v)
+		}
+	}
+	if len(cm.Data) != len(want) {
+		t.Errorf("data has %d keys, want %d: %q", len(cm.Data), len(want), cm.Data)
+	}
+}
+
 // firstConfigMap unmarshals the output ResourceList and returns the first
 // ConfigMap-shaped item, decoded into configMapShape so tests can inspect
 // metadata.annotations and data: directly.

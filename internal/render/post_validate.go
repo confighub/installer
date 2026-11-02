@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/confighub/sdk/configkit/envkit"
 	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/chainexec"
@@ -159,7 +160,7 @@ func extractAppConfigBody(shape *appConfigCarrierShape) ([]byte, error) {
 		sort.Strings(keys)
 		var buf bytes.Buffer
 		for _, k := range keys {
-			fmt.Fprintf(&buf, "%s=%s\n", k, shape.Data[k])
+			fmt.Fprintf(&buf, "%s=%s\n", k, envkit.FormatValue(shape.Data[k]))
 		}
 		return buf.Bytes(), nil
 	default:
