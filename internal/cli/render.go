@@ -90,6 +90,9 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 				return err
 			}
 
+			if warning := result.UnusedNamespaceWarning(inputs.Spec.Namespace); warning != "" {
+				fmt.Fprintln(os.Stderr, warning)
+			}
 			fmt.Printf("Rendered %d manifest(s) to %s\n", len(result.Manifests), manifestsDir)
 			if len(result.Secrets) > 0 {
 				fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(result.Secrets), outDir)
