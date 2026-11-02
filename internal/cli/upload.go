@@ -65,10 +65,10 @@ func (f *uploadFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.environment, "environment", "", "value for the well-known \"Environment\" Space label (e.g. Prod)")
 	cmd.Flags().StringVar(&f.region, "region", "", "value for the well-known \"Region\" Space label (e.g. us-east1)")
 	cmd.Flags().StringVar(&f.owner, "owner", "", "value for the well-known \"Owner\" Space label (e.g. Engineering)")
-	cmd.Flags().StringSliceVar(&f.spaceLabels, "space-label", nil, "label key=value to set on the Space(s) (repeatable); the well-known labels have their own flags")
-	cmd.Flags().StringSliceVar(&f.spaceAnnotations, "space-annotation", nil, "annotation key=value to set on the Space(s) (repeatable); \"TargetID\" is reserved (use --target)")
-	cmd.Flags().StringSliceVar(&f.unitLabels, "unit-label", nil, "label key=value to set on every Unit the upload writes (repeatable)")
-	cmd.Flags().StringSliceVar(&f.unitAnnotations, "unit-annotation", nil, "annotation key=value to set on every Unit the upload writes (repeatable)")
+	cmd.Flags().StringArrayVar(&f.spaceLabels, "space-label", nil, "label key=value to set on the Space(s) (repeatable); the well-known labels have their own flags")
+	cmd.Flags().StringArrayVar(&f.spaceAnnotations, "space-annotation", nil, "annotation key=value to set on the Space(s) (repeatable); \"TargetID\" is reserved (use --target)")
+	cmd.Flags().StringArrayVar(&f.unitLabels, "unit-label", nil, "label key=value to set on every Unit the upload writes (repeatable)")
+	cmd.Flags().StringArrayVar(&f.unitAnnotations, "unit-annotation", nil, "annotation key=value to set on every Unit the upload writes (repeatable)")
 }
 
 func (f *uploadFlags) noteChanged(cmd *cobra.Command) {

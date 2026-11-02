@@ -67,11 +67,11 @@ Pass --non-interactive to script the wizard with --base, --components,
 	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
 	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required in non-interactive mode.")
 	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")
-	cmd.Flags().StringSliceVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
+	cmd.Flags().StringArrayVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
 	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
 	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
 	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
-	cmd.Flags().StringSliceVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); set in the chosen base's images: block before render, as `kustomize edit set image` would. The base's kustomization.yaml must declare an `images:` block.")
+	cmd.Flags().StringArrayVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable); set in the chosen base's images: block before render, as `kustomize edit set image` would. The base's kustomization.yaml must declare an `images:` block.")
 	cmd.Flags().BoolVar(&opts.runRender, "render", true, "render after the wizard writes spec docs; pass --render=false to skip and run installer render later")
 	return cmd
 }
