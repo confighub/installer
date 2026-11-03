@@ -4,13 +4,13 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/confighub/sdk/configkit/envkit"
 	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/chainexec"
@@ -320,7 +320,8 @@ func runAppConfigGroup(
 // extractAppConfigContent pulls the raw AppConfig file body out of the
 // carrier ConfigMap's data: map. file mode reads data[sourceKey]
 // verbatim; env mode reconstructs a .env-shaped doc by joining the
-// key/value pairs (sorted for determinism).
+// key/value pairs (sorted for determinism), each value quoted as an env file
+// writes it, so a value with spaces, quotes or '#' reads back as itself.
 func extractAppConfigContent(c *appConfigCarrier) ([]byte, error) {
 	switch c.mode {
 	case api.AppConfigModeFile:
@@ -332,7 +333,7 @@ func extractAppConfigContent(c *appConfigCarrier) ([]byte, error) {
 	case api.AppConfigModeEnv:
 		var buf bytes.Buffer
 		for _, k := range sortedDataKeys(c.shape) {
-			fmt.Fprintf(&buf, "%s=%s\n", k, c.shape.Data[k])
+			fmt.Fprintf(&buf, "%s=%s\n", k, envkit.FormatValue(c.shape.Data[k]))
 		}
 		return buf.Bytes(), nil
 	default:
@@ -342,9 +343,9 @@ func extractAppConfigContent(c *appConfigCarrier) ([]byte, error) {
 
 // writeAppConfigContent is extractAppConfigContent's inverse. file mode
 // overwrites data[sourceKey]; env mode parses the mutated .env-shaped
-// content back into key/value pairs and replaces data: wholesale. Lines
-// starting with '#' or blank are ignored on the env-parse side so
-// authors / functions can include comments without breaking parity.
+// content back into key/value pairs and replaces data: wholesale. Each value
+// is read the way an env file is, with its quoting, escaping and inline
+// comment removed; comment and blank lines are skipped.
 func writeAppConfigContent(c *appConfigCarrier, content []byte) error {
 	switch c.mode {
 	case api.AppConfigModeFile:
@@ -354,22 +355,13 @@ func writeAppConfigContent(c *appConfigCarrier, content []byte) error {
 		c.shape.Data[c.sourceKey] = string(content)
 		return nil
 	case api.AppConfigModeEnv:
-		next := map[string]string{}
-		scanner := bufio.NewScanner(bytes.NewReader(content))
-		for scanner.Scan() {
-			line := scanner.Text()
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-			eq := strings.IndexByte(line, '=')
-			if eq < 0 {
-				return fmt.Errorf("env-mode AppConfig line lacks '=': %q", line)
-			}
-			next[strings.TrimSpace(line[:eq])] = line[eq+1:]
+		entries, err := envkit.ParseEnvEntries(content)
+		if err != nil {
+			return fmt.Errorf("env-mode AppConfig: %w", err)
 		}
-		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("scan env content: %w", err)
+		next := make(map[string]string, len(entries))
+		for _, e := range entries {
+			next[e.Key] = e.Value
 		}
 		c.shape.Data = next
 		return nil
