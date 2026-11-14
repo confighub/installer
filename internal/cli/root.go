@@ -56,6 +56,7 @@ ArgoCD, Flux, or direct Kubernetes apply.`,
 		newVetCmd(),
 		// Inspect / discover
 		newDocCmd(),
+		newShowCmd(),
 		newPullCmd(),
 		newInspectCmd(),
 		newListCmd(),

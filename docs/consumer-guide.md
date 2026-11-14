@@ -174,7 +174,11 @@ Setup pulls the package from where the record says it came from, starts
 from the recorded selection and inputs, and changes only what the flags
 name. That works on another machine when the package was pulled from an
 `oci://` reference. The record Unit is hidden, so `cub unit list` leaves it
-out; `cub unit get --space statusboard-prod installer` shows it. The Space is
+out; `installer show --space statusboard-prod` summarizes it (the package,
+where it came from, the components selected, and each input's answer beside
+its default), and `cub unit data --space statusboard-prod installer` prints
+it as stored. ConfigHub's UI shows the same summary as the Unit's Overview,
+in its Resources tab. The Space is
 labeled `Component` (the package name, or `--component`), `Variant`
 (`base`, or `--variant`), and `Namespace` (the install namespace).
 
@@ -611,6 +615,7 @@ pass `--yes`.
 | Render and push OCI | `installer setup --pull <ref> --namespace <ns> --output-oci oci://host/repo:tag` |
 | Re-render after editing inputs | `installer setup --non-interactive` |
 | Push to ConfigHub | `installer upload --space <slug>` |
+| See what is installed in a Space | `installer show --space <slug>` |
 | Preview cub-side changes | `installer plan` |
 | Apply cub-side changes | `installer upload --yes` |
 | Bump an image | `installer setup --set-image NAME=REF && installer upload --yes` |
