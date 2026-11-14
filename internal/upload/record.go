@@ -159,15 +159,25 @@ type PriorDocuments struct {
 	Lock      *api.Lock
 }
 
-// ParseRecord reads a record document back into the installer's document
-// types, restoring the package name and version the record says once.
-func ParseRecord(data []byte) (*PriorDocuments, error) {
+// UnmarshalRecord reads a record document as it is stored, with the package
+// name and version said once, in its package section.
+func UnmarshalRecord(data []byte) (*Record, error) {
 	var rec Record
 	if err := yaml.Unmarshal(data, &rec); err != nil {
 		return nil, fmt.Errorf("parse installer record: %w", err)
 	}
 	if rec.ConfigHub.ConfigSchema != RecordSchema {
 		return nil, fmt.Errorf("installer record has configHub.configSchema %q, want %q", rec.ConfigHub.ConfigSchema, RecordSchema)
+	}
+	return &rec, nil
+}
+
+// ParseRecord reads a record document back into the installer's document
+// types, restoring the package name and version the record says once.
+func ParseRecord(data []byte) (*PriorDocuments, error) {
+	rec, err := UnmarshalRecord(data)
+	if err != nil {
+		return nil, err
 	}
 	name, version := rec.Package.Name, rec.Package.InstallerMetadata.Version
 	out := &PriorDocuments{
