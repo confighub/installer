@@ -11,8 +11,8 @@ installer working end-to-end with the existing examples and e2e scripts.
 
 ## Motivation
 
-`cub cluster up --k8sbot-installer` installs argobot's shared base Space
-from argobot's installer package. It does so by finding the installer cub
+`cub cluster up --k8sbot-installer` installs k8sbot's shared base Space
+from k8sbot's installer package. It does so by finding the installer cub
 plugin and running it twice as a subprocess, `setup --pull <ref> --space
 <base> --non-interactive ...` and then `upload --space <base> --variant
 <variant> --yes`, streaming its output to the terminal. That works, with

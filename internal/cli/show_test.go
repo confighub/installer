@@ -14,7 +14,7 @@ const showTestRecord = `configHub:
   configSchema: InstallerRecord
   configName: installer
 package:
-  name: argobot
+  name: k8sbot
   installerMetadata:
     version: 0.2.9
     kubeVersion: '>= 1.28'
@@ -61,7 +61,7 @@ package:
       - name: set-namespace
         args: ['{{ .Namespace }}']
       description: |
-        Put argobot in the install
+        Put k8sbot in the install
         namespace.
     validators:
     - toolchain: Kubernetes/YAML
@@ -73,21 +73,21 @@ selection:
   base: default
   components: [argocd]
 inputs:
-  namespace: argobot
+  namespace: k8sbot
   values:
-    channel: ops/argobot
+    channel: ops/k8sbot
     retired: old
   imageOverrides:
-    argobot: ghcr.io/confighub/argobot:0.2.9
+    k8sbot: ghcr.io/confighub/k8sbot:0.2.9
 source:
-  ref: oci://ghcr.io/confighub/packages/argobot:0.2.9
+  ref: oci://ghcr.io/confighub/packages/k8sbot:0.2.9
   digest: sha256:101c9b
 facts:
   values:
     serverURL: https://hub.confighub.com
 lock:
   package:
-    name: argobot
+    name: k8sbot
   resolved:
   - name: crds
     ref: oci://ghcr.io/confighub/packages/argo-crds:2.1.0
@@ -96,12 +96,12 @@ lock:
     requestedBy: [root]
 `
 
-const showTestWant = `Package:             argobot
+const showTestWant = `Package:             k8sbot
 Version:             0.2.9
-Space:               nonprod-argobot
-Source:              oci://ghcr.io/confighub/packages/argobot:0.2.9
+Space:               nonprod-k8sbot
+Source:              oci://ghcr.io/confighub/packages/k8sbot:0.2.9
 Digest:              sha256:101c9b
-Namespace:           argobot
+Namespace:           k8sbot
 Base:                default
 Kubernetes version:  >= 1.28
 
@@ -114,14 +114,14 @@ Components:
   (* selected)
 
 Inputs:
-  INPUT     VALUE        DEFAULT
-  channel   ops/argobot  ""
-  replicas               1
+  INPUT     VALUE       DEFAULT
+  channel   ops/k8sbot  ""
+  replicas              1
   retired   old
 
 Image overrides:
-  IMAGE    OVERRIDE
-  argobot  ghcr.io/confighub/argobot:0.2.9
+  IMAGE   OVERRIDE
+  k8sbot  ghcr.io/confighub/k8sbot:0.2.9
 
 Facts:
   FACT       VALUE
@@ -137,7 +137,7 @@ Cluster requirements:
 
 Transformers:
   FROM     FUNCTIONS      DESCRIPTION
-  package  set-namespace  Put argobot in the install namespace.
+  package  set-namespace  Put k8sbot in the install namespace.
 
 Validators:
   vet-schemas, vet-pod-security-standard restricted
@@ -149,7 +149,7 @@ func TestPrintRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := printRecord(&out, "nonprod-argobot", rec); err != nil {
+	if err := printRecord(&out, "nonprod-k8sbot", rec); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != showTestWant {
