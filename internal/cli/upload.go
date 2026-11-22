@@ -5,29 +5,18 @@ package cli
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/confighub/sdk/core/cubapi"
-	goclientnew "github.com/confighub/sdk/core/openapi/goclient-new"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighub/installer/internal/deps"
-	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/upload"
-	"github.com/confighub/installer/internal/version"
-	"github.com/confighub/installer/pkg/api"
+	"github.com/confighub/installer/pkg/installer"
 )
-
-// confighub is the installer's connection to ConfigHub: the cub plugin
-// environment when run as `cub installer`, otherwise the active cub context.
-var confighub = cubapi.MemoizedClient{UserAgent: "installer"}
 
 // uploadFlags are the flags `installer upload` and `installer plan` share:
 // everything that decides what is uploaded and where it goes.
@@ -76,43 +65,83 @@ func (f *uploadFlags) noteChanged(cmd *cobra.Command) {
 	f.variantSet = cmd.Flags().Changed("variant")
 }
 
-// preparedUpload is one request per package, in upload order: each locked
-// dependency, then the parent.
-type preparedUpload struct {
-	client   *cubapi.Client
-	packages []upload.Package
-	requests []goclientnew.UploadRequest
-	// newComponents are the dependencies' Components that do not exist yet,
-	// which the upload creates before the parent's request names them.
-	newComponents map[string]bool
+// options validates the flags and turns them into installer.UploadOptions.
+func (f *uploadFlags) options() (installer.UploadOptions, error) {
+	for flag, vals := range map[string][]string{"--unit-annotation": f.unitAnnotations, "--unit-label": f.unitLabels} {
+		if err := validateKeyValueFlags(flag, vals); err != nil {
+			return installer.UploadOptions{}, err
+		}
+	}
+	if err := validateSpaceLabelFlags(f.spaceLabels); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	if err := validateSpaceAnnotationFlags(f.spaceAnnotations); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	if f.variant == "" {
+		return installer.UploadOptions{}, fmt.Errorf("--variant must not be empty")
+	}
+	opts := installer.UploadOptions{
+		WorkDir:      f.workDir,
+		Space:        f.space,
+		SpacePattern: f.spacePattern,
+		Target:       f.target,
+		ChangeSet:    f.changeSet,
+		Layer:        f.layer,
+		Environment:  f.environment,
+		Region:       f.region,
+		Owner:        f.owner,
+	}
+	if f.componentSet {
+		opts.Component = f.component
+	}
+	if f.variantSet {
+		opts.Variant = f.variant
+	}
+	var err error
+	if opts.SpaceLabels, err = mergeKeyValues(nil, f.spaceLabels); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	if opts.SpaceAnnotations, err = mergeKeyValues(nil, f.spaceAnnotations); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	if opts.UnitLabels, err = mergeKeyValues(nil, f.unitLabels); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	if opts.UnitAnnotations, err = mergeKeyValues(nil, f.unitAnnotations); err != nil {
+		return installer.UploadOptions{}, err
+	}
+	return opts, nil
 }
 
-// dryRunRequest is request i as a dry run can send it. A dependency's dry run
-// creates no Component, so the parent's cannot name one the upload has yet to
-// create, and ConfigHub refuses a DependsOn that names a missing Component. It
-// leaves those out and returns them. DependsOn only records the dependency on
-// the parent's Space, so what the dry run reports for each Unit is unchanged.
-func (p *preparedUpload) dryRunRequest(i int) (goclientnew.UploadRequest, []string) {
-	req := p.requests[i]
-	if len(p.newComponents) == 0 {
-		return req, nil
+// prepareUpload builds the upload the flags describe, adding the flag that
+// remedies a failure when there is one.
+func prepareUpload(ctx context.Context, inst *installer.Installer, f uploadFlags) (*installer.UploadPlan, error) {
+	opts, err := f.options()
+	if err != nil {
+		return nil, err
 	}
-	var omitted []string
-	components := make([]goclientnew.UploadComponentRequest, len(req.Components))
-	for j, component := range req.Components {
-		var kept []string
-		for _, name := range component.DependsOn {
-			if p.newComponents[name] {
-				omitted = append(omitted, name)
-			} else {
-				kept = append(kept, name)
-			}
-		}
-		component.DependsOn = kept
-		components[j] = component
+	plan, err := inst.PrepareUpload(ctx, opts)
+	if err != nil {
+		return nil, uploadError(err, f.workDir)
 	}
-	req.Components = components
-	return req, omitted
+	return plan, nil
+}
+
+// uploadError adds the flag or command that remedies an upload failure, when
+// there is one.
+func uploadError(err error, workDir string) error {
+	switch {
+	case errors.Is(err, installer.ErrSpaceWithDependencies):
+		return fmt.Errorf("--space cannot be used when the package declares dependencies; use --space-pattern")
+	case errors.Is(err, installer.ErrNoLock):
+		return fmt.Errorf("%v; run `%s deps update --work-dir %s` and `%s render --work-dir %s` first",
+			err, InvocationName(), absPath(workDir), InvocationName(), absPath(workDir))
+	case errors.Is(err, installer.ErrStaleLock):
+		return fmt.Errorf("%v; run `%s deps update --work-dir %s` and `%s render --work-dir %s` again",
+			err, InvocationName(), absPath(workDir), InvocationName(), absPath(workDir))
+	}
+	return err
 }
 
 func newUploadCmd() *cobra.Command {
@@ -156,55 +185,42 @@ When the upload would empty any Unit it lists them and asks first, unless
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
 			flags.noteChanged(cmd)
-			prepared, err := prepareUpload(ctx, flags)
+			inst, err := newInstaller()
+			if err != nil {
+				return err
+			}
+			plan, err := prepareUpload(ctx, inst, flags)
 			if err != nil {
 				return err
 			}
 
 			// Emptying a Unit withdraws what it deployed, so an upload that
 			// would empty anything is confirmed first. The preview is a dry
-			// run of the same requests (see dryRunRequest), so what is
-			// confirmed is what happens.
+			// run of the same requests, so what is confirmed is what happens.
 			if !yes {
-				var previews []*goclientnew.UploadResult
-				for i := range prepared.requests {
-					req, _ := prepared.dryRunRequest(i)
-					preview, err := cubapi.Upload(ctx, prepared.client, req, true)
-					if err != nil {
-						return err
-					}
-					previews = append(previews, preview)
+				if err := inst.PreviewUpload(ctx, plan, installer.PreviewOptions{}); err != nil {
+					return err
 				}
-				if err := confirmEmpties(upload.Emptied(previews)); err != nil {
+				if err := confirmEmpties(plan.Emptied()); err != nil {
 					return err
 				}
 			}
 
-			failed := false
-			var results []*goclientnew.UploadResult
-			for i, req := range prepared.requests {
-				pkg := prepared.packages[i]
-				fmt.Printf("== %s@%s → Space %s ==\n", pkg.Name, pkg.Version, pkg.SpaceSlug)
-				result, err := cubapi.Upload(ctx, prepared.client, req, false)
-				if err != nil {
-					return fmt.Errorf("upload %s: %w", pkg.Name, err)
-				}
-				upload.Report(os.Stdout, result, false)
-				failed = failed || upload.Failed(result)
-				results = append(results, result)
-				if err := hideRecord(ctx, prepared.client, pkg); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: could not hide the installer record in Space %s: %v\n", pkg.SpaceSlug, err)
-				}
-				printRevert(ctx, prepared.client, pkg, result)
+			result, err := inst.Upload(ctx, plan)
+			if err != nil {
+				return err
 			}
-			fmt.Printf("\n%s\n", upload.Summarize(results).Applied())
+			for _, pkg := range result.Packages {
+				printRevert(pkg)
+			}
+			fmt.Printf("\n%s\n", upload.Summarize(result.Results()).Applied())
 
 			// Record the parent's install in ~/.confighub/installer/state.yaml
 			// for the packages `installer new` locates later. Best-effort.
-			if err := recordUploadInUserState(ctx, prepared.packages); err != nil {
+			if err := recordUploadInUserState(ctx, result); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: could not record install in user state: %v\n", err)
 			}
-			if failed {
+			if result.Failed() {
 				return fmt.Errorf("some writes failed; the rest landed, and uploading again retries the failures")
 			}
 			return nil
@@ -215,245 +231,14 @@ When the upload would empty any Unit it lists them and asks first, unless
 	return cmd
 }
 
-// printRevert prints how to revert what an upload wrote to a Space: restoring
-// the package's Units to before the upload's ChangeSet, which empties the Units
-// it created and reverts the rest.
-func printRevert(ctx context.Context, c *cubapi.Client, pkg upload.Package, result *goclientnew.UploadResult) {
-	if !upload.Summarize([]*goclientnew.UploadResult{result}).Changes() {
-		return
+// printRevert prints how to revert what an upload wrote to each Space it
+// changed: restoring the package's Units to before the upload's ChangeSet,
+// which empties the Units it created and reverts the rest.
+func printRevert(pkg installer.UploadedPackage) {
+	for _, cs := range pkg.ChangeSets {
+		fmt.Printf("\nRevert this upload of %s with:\n  cub unit update --patch --space %s --restore Before:ChangeSet:%s --where \"Labels.UploadSource = '%s'\" --include-hidden=%s\n",
+			cs.Space, cs.Space, cs.ChangeSet, pkg.Name, upload.RecordHiddenReason)
 	}
-	for _, comp := range result.Components {
-		for _, s := range comp.Spaces {
-			if s.ChangeSetID == nil {
-				continue
-			}
-			ref := s.ChangeSetID.String()
-			if cs, err := cubapi.ResolveChangeSet(ctx, c, cubapi.RefFromID(*s.ChangeSetID), cubapi.ResolveOpts{}); err == nil && cs.ChangeSet != nil {
-				ref = cs.ChangeSet.Slug
-			}
-			fmt.Printf("\nRevert this upload of %s with:\n  cub unit update --patch --space %s --restore Before:ChangeSet:%s --where \"Labels.UploadSource = '%s'\" --include-hidden=%s\n",
-				s.SpaceSlug, s.SpaceSlug, ref, pkg.Name, upload.RecordHiddenReason)
-		}
-	}
-}
-
-// prepareUpload loads the work-dir, finds its packages, resolves --target and
-// --changeset, and builds one upload request per package.
-func prepareUpload(ctx context.Context, f uploadFlags) (*preparedUpload, error) {
-	for flag, vals := range map[string][]string{"--unit-annotation": f.unitAnnotations, "--unit-label": f.unitLabels} {
-		if err := validateKeyValueFlags(flag, vals); err != nil {
-			return nil, err
-		}
-	}
-	if err := validateSpaceLabelFlags(f.spaceLabels); err != nil {
-		return nil, err
-	}
-	if err := validateSpaceAnnotationFlags(f.spaceAnnotations); err != nil {
-		return nil, err
-	}
-	if f.variant == "" {
-		return nil, fmt.Errorf("--variant must not be empty")
-	}
-
-	workDir, err := filepath.Abs(f.workDir)
-	if err != nil {
-		return nil, err
-	}
-	loaded, err := ipkg.Load(filepath.Join(workDir, "package"))
-	if err != nil {
-		return nil, fmt.Errorf("load package: %w", err)
-	}
-	lock, err := loadLockIfNeeded(workDir, loaded.Package)
-	if err != nil {
-		return nil, err
-	}
-	pattern := f.spacePattern
-	if f.space != "" {
-		if len(loaded.Package.Spec.Dependencies) > 0 {
-			return nil, fmt.Errorf("--space cannot be used when the package declares dependencies; use --space-pattern")
-		}
-		pattern = f.space
-	}
-	packages, err := upload.Discover(upload.DiscoverInput{
-		WorkDir:       workDir,
-		SpacePattern:  pattern,
-		Variant:       f.variant,
-		ParentPackage: loaded.Package,
-		Lock:          lock,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := confighub.Preflight(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	opts := upload.RequestOptions{
-		Component:     f.component,
-		Variant:       f.variant,
-		SpaceLabels:   map[string]string{},
-		TargetIDs:     map[string]goclientnew.UUID{},
-		ClientVersion: version.Version,
-	}
-	for label, value := range map[string]string{
-		"Layer": f.layer, "Environment": f.environment, "Region": f.region, "Owner": f.owner,
-	} {
-		if value != "" {
-			opts.SpaceLabels[label] = value
-		}
-	}
-	if opts.SpaceLabels, err = mergeKeyValues(opts.SpaceLabels, f.spaceLabels); err != nil {
-		return nil, err
-	}
-	if opts.SpaceAnnotations, err = mergeKeyValues(nil, f.spaceAnnotations); err != nil {
-		return nil, err
-	}
-	if opts.UnitLabels, err = mergeKeyValues(nil, f.unitLabels); err != nil {
-		return nil, err
-	}
-	if opts.UnitAnnotations, err = mergeKeyValues(nil, f.unitAnnotations); err != nil {
-		return nil, err
-	}
-
-	if f.changeSet != "" {
-		id, err := resolveChangeSet(ctx, client, packages[0].SpaceSlug, f.changeSet)
-		if err != nil {
-			return nil, err
-		}
-		opts.ChangeSetID = &id
-	}
-
-	prepared := &preparedUpload{client: client, packages: uploadOrder(packages), newComponents: map[string]bool{}}
-	for _, pkg := range prepared.packages {
-		space, err := existingSpace(ctx, client, pkg.SpaceSlug)
-		if err != nil {
-			return nil, err
-		}
-		id, err := uploadTargetID(ctx, client, space, pkg.SpaceSlug, f.target)
-		if err != nil {
-			return nil, err
-		}
-		if id != nil {
-			opts.TargetIDs[pkg.SpaceSlug] = *id
-		}
-		// Every request sets Component and Variant, so a Space an earlier
-		// upload labeled keeps those labels unless the flags say otherwise.
-		pkgOpts := opts
-		if space != nil {
-			if !f.componentSet && pkg.IsParent && space.Labels["Component"] != "" {
-				pkgOpts.Component = space.Labels["Component"]
-			}
-			if !f.variantSet && space.Labels["Variant"] != "" {
-				pkgOpts.Variant = space.Labels["Variant"]
-			}
-		}
-		req, err := upload.BuildRequest(pkg, packages, pkgOpts)
-		if err != nil {
-			return nil, err
-		}
-		prepared.requests = append(prepared.requests, req)
-
-		if !pkg.IsParent {
-			name := pkgOpts.ComponentName(pkg)
-			exists, err := componentExists(ctx, client, name)
-			if err != nil {
-				return nil, err
-			}
-			if !exists {
-				prepared.newComponents[name] = true
-			}
-		}
-	}
-	return prepared, nil
-}
-
-// uploadOrder is the order packages are uploaded in: each dependency, then the
-// parent. ConfigHub resolves the Components the parent's DependsOn names when
-// the parent is uploaded, so the dependencies' uploads have to create them first.
-func uploadOrder(packages []upload.Package) []upload.Package {
-	ordered := make([]upload.Package, 0, len(packages))
-	for _, pkg := range packages {
-		if !pkg.IsParent {
-			ordered = append(ordered, pkg)
-		}
-	}
-	for _, pkg := range packages {
-		if pkg.IsParent {
-			ordered = append(ordered, pkg)
-		}
-	}
-	return ordered
-}
-
-// componentExists reports whether the Component name exists in the organization.
-func componentExists(ctx context.Context, c *cubapi.Client, name string) (bool, error) {
-	_, err := cubapi.ResolveComponent(ctx, c, cubapi.NewRef("", name), cubapi.ResolveOpts{})
-	if cubapi.IsNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("look up Component %s: %w", name, err)
-	}
-	return true, nil
-}
-
-// existingSpace returns the Space with slug, or nil when there is none yet.
-func existingSpace(ctx context.Context, c *cubapi.Client, slug string) (*goclientnew.Space, error) {
-	found, err := cubapi.ResolveSpace(ctx, c, cubapi.NewRef("", slug), cubapi.ResolveOpts{})
-	if cubapi.IsNotFoundError(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("look up Space %s: %w", slug, err)
-	}
-	return found.Space, nil
-}
-
-// uploadTargetID resolves --target, the release Target of a package's Space. A
-// bare slug is looked up in the package's Space, so that Space has to exist
-// already. Without --target there is none to set: the Space keeps the release
-// Target an earlier upload, or anyone else, gave it, and its Units take that.
-func uploadTargetID(ctx context.Context, c *cubapi.Client, space *goclientnew.Space, slug, targetRef string) (*goclientnew.UUID, error) {
-	if targetRef == "" {
-		return nil, nil
-	}
-	ref := cubapi.ParseRef(targetRef)
-	opts := cubapi.ResolveOpts{}
-	if !ref.IsID() && ref.Space == "" {
-		if space == nil {
-			return nil, fmt.Errorf("--target %q names a Target in Space %s, which does not exist yet; name it as <space>/<target> or by UUID", targetRef, slug)
-		}
-		opts.Space = space.SpaceID
-	}
-	target, err := cubapi.ResolveTarget(ctx, c, ref, opts)
-	if err != nil {
-		return nil, fmt.Errorf("resolve --target %s: %w", targetRef, err)
-	}
-	return &target.Target.TargetID, nil
-}
-
-// resolveChangeSet resolves --changeset, looking a bare slug up in the
-// parent's Space.
-func resolveChangeSet(ctx context.Context, c *cubapi.Client, parentSlug, changeSetRef string) (goclientnew.UUID, error) {
-	ref := cubapi.ParseRef(changeSetRef)
-	opts := cubapi.ResolveOpts{}
-	if !ref.IsID() && ref.Space == "" {
-		space, err := existingSpace(ctx, c, parentSlug)
-		if err != nil {
-			return goclientnew.UUID{}, err
-		}
-		if space == nil {
-			return goclientnew.UUID{}, fmt.Errorf("--changeset %q names a ChangeSet in Space %s, which does not exist yet; name it as <space>/<changeset> or by UUID", changeSetRef, parentSlug)
-		}
-		opts.Space = space.SpaceID
-	}
-	changeSet, err := cubapi.ResolveChangeSet(ctx, c, ref, opts)
-	if err != nil {
-		return goclientnew.UUID{}, fmt.Errorf("resolve --changeset %s: %w", changeSetRef, err)
-	}
-	return changeSet.ChangeSet.ChangeSetID, nil
 }
 
 // confirmEmpties asks before an upload empties Units. Without a terminal to
@@ -488,28 +273,6 @@ func commandContext(cmd *cobra.Command) context.Context {
 		return ctx
 	}
 	return context.Background()
-}
-
-// loadLockIfNeeded returns the work-dir's lock. A package without dependencies
-// has none; a package with dependencies must have an up-to-date one, or the
-// upload would target the wrong dependency versions.
-func loadLockIfNeeded(workDir string, pkg *api.Package) (*api.Lock, error) {
-	if len(pkg.Spec.Dependencies) == 0 {
-		return nil, nil
-	}
-	lock, err := deps.ReadLock(workDir)
-	if err != nil {
-		return nil, err
-	}
-	if lock == nil {
-		return nil, fmt.Errorf("package declares dependencies but %s does not exist; run `%s deps update --work-dir %s` and `%s render --work-dir %s` first",
-			deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
-	}
-	if deps.IsStale(lock, pkg) {
-		return nil, fmt.Errorf("lock at %s is stale; run `%s deps update --work-dir %s` and `%s render --work-dir %s` again",
-			deps.LockPath(workDir), InvocationName(), workDir, InvocationName(), workDir)
-	}
-	return lock, nil
 }
 
 // mergeKeyValues adds key=value flag values to into, returning it.
@@ -573,120 +336,4 @@ func validateSpaceAnnotationFlags(vals []string) error {
 		}
 	}
 	return nil
-}
-
-// hideRecord hides the installer record Unit an upload of pkg wrote, as a dot
-// file is hidden: it is there for the installer to re-enter the install, and
-// users rarely need to see it among the package's Units. A record already
-// hidden, for this reason or another someone gave it, is left alone.
-func hideRecord(ctx context.Context, c *cubapi.Client, pkg upload.Package) error {
-	space, err := existingSpace(ctx, c, pkg.SpaceSlug)
-	if err != nil || space == nil {
-		return err
-	}
-	where := cubapi.Where{}.
-		Eq("SpaceID", space.SpaceID.String()).
-		Eq("Labels.UploadSource", pkg.Name).
-		Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
-	units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{IncludeHidden: "*"})
-	if err != nil {
-		return err
-	}
-	for _, u := range units {
-		if u.Unit.HiddenReason != "" {
-			continue
-		}
-		body, err := json.Marshal(map[string]string{"HiddenReason": upload.RecordHiddenReason})
-		if err != nil {
-			return err
-		}
-		res, err := c.API.PatchUnitWithBodyWithResponse(ctx, u.Unit.SpaceID, u.Unit.UnitID, nil,
-			"application/merge-patch+json", bytes.NewReader(body))
-		if cubapi.IsAPIError(err, res) {
-			return cubapi.InterpretErrorGeneric(err, res)
-		}
-	}
-	return nil
-}
-
-// installerRecordFetcher returns a wizard.RecordFetcher that reads the
-// installer record an earlier upload wrote, as findInstallerRecord finds it.
-func installerRecordFetcher(space string) func(ctx context.Context, packageName string) ([]byte, error) {
-	return func(ctx context.Context, packageName string) ([]byte, error) {
-		found, err := findInstallerRecord(ctx, space, packageName)
-		if err != nil || found == nil {
-			return nil, err
-		}
-		return found.Data, nil
-	}
-}
-
-// foundRecord is an installer record and the Space it is in.
-type foundRecord struct {
-	Data      []byte
-	SpaceSlug string
-}
-
-// findInstallerRecord reads the installer record an earlier upload wrote: the
-// Unit keyed AppConfig/YAML/installer that the package's uploads own, which is
-// hidden. With space set it reads the record in that Space, of whichever
-// package owns it when packageName is empty. Without, it looks across the
-// organization and uses the one it finds, refusing when several installs of
-// the package exist, since picking one could re-enter someone else's. It
-// returns nil when there is no record.
-func findInstallerRecord(ctx context.Context, space, packageName string) (*foundRecord, error) {
-	c, err := confighub.Client(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if packageName == "" && space == "" {
-		return nil, fmt.Errorf("a Space or a package name is needed to find an installer record")
-	}
-	where := cubapi.Where{}.
-		Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
-	if packageName != "" {
-		where = where.Eq("Labels.UploadSource", packageName)
-	}
-	if space != "" {
-		found, err := existingSpace(ctx, c, space)
-		if err != nil {
-			return nil, err
-		}
-		if found == nil {
-			// Nothing is installed there yet; the upload creates it.
-			return nil, nil
-		}
-		where = where.Eq("SpaceID", found.SpaceID.String())
-	}
-	units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID", IncludeHidden: upload.RecordHiddenReason})
-	if err != nil {
-		return nil, err
-	}
-	switch len(units) {
-	case 0:
-		return nil, nil
-	case 1:
-	default:
-		if space != "" {
-			return nil, fmt.Errorf("Space %s holds installer records of %d packages; pass --pull <ref> to say which package", space, len(units))
-		}
-		var spaces []string
-		for _, u := range units {
-			if u.Space != nil {
-				spaces = append(spaces, u.Space.Slug)
-			}
-		}
-		return nil, fmt.Errorf("%s is installed in %d Spaces (%s); pass --space to choose one",
-			packageName, len(units), strings.Join(spaces, ", "))
-	}
-	unit := units[0].Unit
-	data, err := cubapi.UnitData(ctx, c, unit.SpaceID, unit.UnitID)
-	if err != nil {
-		return nil, err
-	}
-	found := &foundRecord{Data: []byte(data), SpaceSlug: space}
-	if units[0].Space != nil {
-		found.SpaceSlug = units[0].Space.Slug
-	}
-	return found, nil
 }

@@ -158,3 +158,30 @@ func countDocs(body []byte) int {
 // referenced — keep the import explicit so future additions don't
 // have to re-import.
 var _ = api.KindPackage
+
+func readFactsOptional(path string) (*api.Facts, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return api.ParseFacts(data)
+}
+
+func readSelection(path string) (*api.Selection, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return api.ParseSelection(data)
+}
+
+func readInputs(path string) (*api.Inputs, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return api.ParseInputs(data)
+}

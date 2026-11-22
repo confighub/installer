@@ -6,6 +6,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/confighub/installer/internal/hubclient"
 	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/pkg/api"
 )
@@ -50,8 +52,18 @@ Use --json for the record as stored, as JSON.`,
 			if packageName == "" && space == "" {
 				return fmt.Errorf("name the Space with --space, or the package")
 			}
-			found, err := findInstallerRecord(commandContext(cmd), space, packageName)
+			ctx := commandContext(cmd)
+			c, err := hubclient.Default.Client(ctx)
 			if err != nil {
+				return err
+			}
+			found, err := hubclient.FindInstallerRecord(ctx, c, space, packageName)
+			switch {
+			case errors.Is(err, hubclient.ErrSeveralPackages):
+				return fmt.Errorf("%v; pass --pull <ref> to say which package", err)
+			case errors.Is(err, hubclient.ErrSeveralInstalls):
+				return fmt.Errorf("%v; pass --space to choose one", err)
+			case err != nil:
 				return err
 			}
 			if found == nil {

@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/hubclient"
 	"github.com/confighub/installer/internal/kustomize"
 	"github.com/confighub/installer/internal/userconfig"
 )
@@ -243,11 +244,11 @@ func findKubernetesResourcesInstall(orgID string) (*userconfig.InstallRecord, er
 // which depends on how upload named it and on the install namespace. The
 // Namespace example is the one Namespace, whatever it is named.
 func fetchExampleData(ctx context.Context, space string, example canonicalExample) ([]byte, error) {
-	c, err := confighub.Client(ctx)
+	c, err := hubclient.Default.Client(ctx)
 	if err != nil {
 		return nil, err
 	}
-	found, err := existingSpace(ctx, c, space)
+	found, err := hubclient.ExistingSpace(ctx, c, space)
 	if err != nil {
 		return nil, err
 	}

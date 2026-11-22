@@ -30,6 +30,7 @@ import (
 	"github.com/confighub/sdk/core/cubapi"
 
 	"github.com/confighub/installer/internal/fakehub"
+	"github.com/confighub/installer/internal/hubclient"
 )
 
 var update = flag.Bool("update", false, "rewrite the lifecycle golden files")
@@ -92,7 +93,7 @@ type result struct {
 func runInstaller(t *testing.T, args ...string) result {
 	t.Helper()
 	// A fresh client per command, as each run of the binary has.
-	confighub = cubapi.MemoizedClient{UserAgent: "installer"}
+	hubclient.Default = cubapi.MemoizedClient{UserAgent: "installer"}
 
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {

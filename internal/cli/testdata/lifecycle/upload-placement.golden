@@ -386,23 +386,23 @@ POST /upload ? dry_run=true & include=Mutations
 ===== installer plan --work-dir $WORK --space missing --target tgt =====
 --- stdout
 --- stderr
-Error: --target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
+Error: Target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
 --- error
---target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
+Target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
 
 ===== installer plan --work-dir $WORK --space missing --changeset cs =====
 --- stdout
 --- stderr
-Error: --changeset "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
+Error: ChangeSet "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
 --- error
---changeset "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
+ChangeSet "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
 
 ===== installer plan --work-dir $WORK --space hello --target no-such-target =====
 --- stdout
 --- stderr
-Error: resolve --target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
+Error: resolve Target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
 --- error
-resolve --target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
+resolve Target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
 
 ===== installer plan --work-dir $WORK --space hello --space-label Component=x =====
 --- stdout

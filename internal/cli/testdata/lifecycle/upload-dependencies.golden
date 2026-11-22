@@ -177,14 +177,14 @@ Space example-base-base (Create)
   Create    installer
   Create    configmap-e2e-ns-example-base-defaults
   Create    namespace-e2e-ns
-
-Revert this upload of example-base-base with:
-  cub unit update --patch --space example-base-base --restore Before:ChangeSet:upload-example-base-base --where "Labels.UploadSource = 'example-base'" --include-hidden=InstallerRecord
 == example-stack@0.1.0 → Space example-stack-base ==
 Space example-stack-base (Create)
   Create    installer
   Create    deployment-e2e-ns-example-stack
   Create    namespace-e2e-ns
+
+Revert this upload of example-base-base with:
+  cub unit update --patch --space example-base-base --restore Before:ChangeSet:upload-example-base-base --where "Labels.UploadSource = 'example-base'" --include-hidden=InstallerRecord
 
 Revert this upload of example-stack-base with:
   cub unit update --patch --space example-stack-base --restore Before:ChangeSet:upload-example-stack-base --where "Labels.UploadSource = 'example-stack'" --include-hidden=InstallerRecord

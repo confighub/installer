@@ -134,7 +134,7 @@ inputs: {namespace: demo, values: {greeting: hi}}
 func TestLoadPriorStateFetchFailureWarns(t *testing.T) {
 	warned := 0
 	fetch := func(context.Context, string) ([]byte, error) { return nil, errors.New("no session") }
-	state, src, err := LoadPriorState(context.Background(), t.TempDir(), "hello", fetch, func(string) { warned++ })
+	state, src, err := LoadPriorState(context.Background(), t.TempDir(), "hello", fetch, func(error) { warned++ })
 	if err != nil || state != nil || src != SourceNone {
 		t.Fatalf("state = %+v, source = %q, err = %v", state, src, err)
 	}

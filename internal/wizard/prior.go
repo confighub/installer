@@ -52,7 +52,7 @@ type RecordFetcher func(ctx context.Context, packageName string) ([]byte, error)
 //
 // A ConfigHub fetch failure is not an error: it is reported through warn (the
 // CLI prints to stderr; tests pass nil) and the install starts fresh.
-func LoadPriorState(ctx context.Context, workDir, packageName string, fetch RecordFetcher, warn func(string)) (*PriorState, PriorSource, error) {
+func LoadPriorState(ctx context.Context, workDir, packageName string, fetch RecordFetcher, warn func(error)) (*PriorState, PriorSource, error) {
 	state, err := loadLocalSpec(workDir)
 	if err != nil {
 		return nil, SourceNone, err
@@ -66,7 +66,7 @@ func LoadPriorState(ctx context.Context, workDir, packageName string, fetch Reco
 	data, err := fetch(ctx, packageName)
 	if err != nil {
 		if warn != nil {
-			warn(fmt.Sprintf("fetch the installer record for %s from ConfigHub: %v", packageName, err))
+			warn(fmt.Errorf("fetch the installer record for %s from ConfigHub: %w", packageName, err))
 		}
 		return nil, SourceNone, nil
 	}

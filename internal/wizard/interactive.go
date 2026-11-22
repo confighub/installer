@@ -507,11 +507,11 @@ func StringifyAny(v any) string { return stringifyAny(v) }
 
 // AskOneInput prompts interactively for a single input declaration
 // using the same widget the wizard uses inline (text / select / bool).
-// Used by `installer upgrade` to ask for new required inputs that the
+// Setup uses it to ask for the required inputs an upgrade adds that the
 // prior install did not answer.
-func AskOneInput(in api.Input) (string, error) {
+func AskOneInput(in api.Input, opts AskOptions) (string, error) {
 	out := RawAnswers{Inputs: map[string]string{}}
-	if err := promptInput(&in, nil, &out, AskOptions{}); err != nil {
+	if err := promptInput(&in, nil, &out, opts); err != nil {
 		return "", err
 	}
 	return out.Inputs[in.Name], nil

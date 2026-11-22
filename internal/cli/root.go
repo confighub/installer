@@ -10,6 +10,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -34,6 +35,14 @@ func InvocationName() string {
 		return os.Args[0]
 	}
 	return "installer"
+}
+
+// absPath is path made absolute, or path itself when it can't be.
+func absPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // NewRoot builds the root cobra command with all subcommands attached.

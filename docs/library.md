@@ -1,6 +1,6 @@
 # Embedding the installer as a Go library — Design and plan
 
-Status: proposed.
+Status: phase 1 implemented; phases 2–4 proposed.
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -159,9 +159,13 @@ type Options struct {
 	ConfigHub *cubapi.Client
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
-	// ErrOut receives warnings and the stderr of the package's collector
-	// and of cosign; nil discards them.
+	// ErrOut receives warnings, unless Warn is set, and the stderr of the
+	// package's collector and of cosign; nil discards them.
 	ErrOut io.Writer
+	// Warn receives each warning, such as an installer record that can't be
+	// read, after which setup starts fresh; nil prints "warning: <err>" to
+	// ErrOut. The error may be a sentinel, for the host to add its remedy.
+	Warn func(error)
 	// Registry configures access to OCI registries.
 	Registry RegistryOptions
 	// SigningPolicy is enforced on every package pulled, including
@@ -247,7 +251,15 @@ type UploadOptions struct {
 	UnitLabels, UnitAnnotations               map[string]string
 }
 
-// PlanUpload builds the upload requests and runs them as dry runs, as
+// PrepareUpload builds one upload request per package. It reads ConfigHub
+// (Spaces, Components, the Target and ChangeSet) and writes nothing.
+func (i *Installer) PrepareUpload(ctx context.Context, opts UploadOptions) (*UploadPlan, error)
+
+// PreviewUpload runs each request as a dry run and records the result in
+// its package's Preview; Mutations asks for the paths each write changes.
+func (i *Installer) PreviewUpload(ctx context.Context, plan *UploadPlan, opts PreviewOptions) error
+
+// PlanUpload is PrepareUpload, then PreviewUpload with Mutations, as
 // `installer plan` does. It writes nothing.
 func (i *Installer) PlanUpload(ctx context.Context, opts UploadOptions) (*UploadPlan, error)
 
@@ -255,7 +267,7 @@ type UploadPlan struct {
 	Packages []PlannedPackage // each locked dependency, then the parent
 }
 
-// Emptied lists the Units the upload would empty, as <space>/<unit>.
+// Emptied lists the Units the previewed upload would empty, as <space>/<unit>.
 func (p *UploadPlan) Emptied() []string
 
 // Upload sends the plan's requests and hides each installer record Unit.
@@ -271,18 +283,28 @@ func (r *UploadResult) Failed() bool
 func (r *UploadResult) Changed() bool
 ```
 
+Preparing and previewing are separate because the CLI uses them
+differently: `installer upload --yes` sends no dry runs, `installer upload`
+previews without Mutations to find the Units it would empty, and
+`installer plan` previews with them, which costs the server more.
+
 The CLI keeps what only the CLI needs: flag parsing, deciding whether to
 pass a `Terminal` (stdin is a terminal and `--non-interactive` isn't
-given), the confirmation before emptying Units (`PlanUpload`, then
-`Emptied`, then `Upload`), the "Next:" hints, the revert hint printed from
-each Space's ChangeSet, and recording the install in
-`~/.confighub/installer/state.yaml` for `installer new`.
+given), the confirmation before emptying Units (`PrepareUpload`, then
+`PreviewUpload` and `Emptied`, then `Upload`), the "Next:" hints, the
+revert hint printed from each Space's ChangeSet, and recording the install
+in `~/.confighub/installer/state.yaml` for `installer new`.
 
 Where an error's remedy is a CLI flag, the package returns a sentinel
-error (`ErrNoPackage`, `ErrSpaceWithDependencies`, `ErrNoInstallerRecord`,
-`ErrNoRecordedSource`) wrapped with the details, and states the condition
-in terms of the options. The CLI matches it with `errors.Is` and adds the
-flag to use.
+error (`ErrNoPackage`, `ErrRecordedSourcePull`, `ErrNoInstallerRecord`,
+`ErrNoRecordedSource`, `ErrSeveralPackages`, `ErrSeveralInstalls`,
+`ErrPresetAndSelect`, `ErrNoPriorInstall`, `ErrNamespaceRequired`,
+`ErrInputTypesChanged`, `ErrNewRequiredInputs`, `ErrNoLock`,
+`ErrStaleLock`, `ErrSpaceWithDependencies`) wrapped with the details, and
+states the condition in terms of the options. The CLI matches it with
+`errors.Is` and adds the flag or command to use. Flag syntax (`--input
+k=v`, `--space-label k=v`, reserved label keys) is the CLI's to check
+before it calls the package.
 
 ### The transform step
 
@@ -360,7 +382,31 @@ For cub specifically:
 
 ## Plan
 
-### Phase 1 — `pkg/installer` with the lifecycle moved in
+### Phase 1 — `pkg/installer` with the lifecycle moved in (done)
+
+Done as described below, with these differences:
+
+- Upload is `PrepareUpload`, `PreviewUpload` and `Upload`, with
+  `PlanUpload` combining the first two (see API above).
+- `Options.ConfigHub` exists; when it is nil the package falls back to the
+  cub environment's client, as the CLI did. Phase 3 removes the fallback.
+- `Options.Warn` lets the CLI add flags to warnings.
+- The shared ConfigHub lookups (finding a Space, finding an installer
+  record) are in `internal/hubclient`, which `show` and `new` use too.
+- Three upload errors name the option instead of the flag (`Target "x"
+  names a Target in Space ...`, `resolve Target x: ...`, and the same for
+  ChangeSet), and a multi-package upload prints every Space's revert hint
+  after all the reports instead of after each.
+
+Before the move, `internal/cli`'s lifecycle tests were added: they run
+setup, wizard, render, plan and upload through the cobra tree against
+`internal/fakehub`, a fake ConfigHub, and `internal/testregistry`, an
+in-memory OCI registry, and compare the output, the work-dir and every
+request sent to ConfigHub with golden files. Apart from the changes above,
+the golden files are unchanged by the move. `pkg/installer`'s own tests
+use only the public API.
+
+The original plan:
 
 - New: `pkg/installer/{installer.go, setup.go, upload.go, errors.go}` —
   `Options`, `New`, `Setup`, `Render`, `PlanUpload`, `Upload`, and the
