@@ -680,8 +680,8 @@ what isn't.
    `.Selection` / `.Package` / `.Namespace` / `.Facts`, writes them as
    KRM function configs, and builds it with the kustomize built into
    the installer, as `kustomize build --enable-exec
-   --enable-alpha-plugins` would. Kustomize invokes the `installer transformer` subcommand as an exec plugin
-   to run each function group in process; the result lands as one
+   --enable-alpha-plugins` would. Kustomize runs the installer's transform step, the one `installer
+   transformer` runs, as an exec plugin to run each function group in process; the result lands as one
    resource per file in `out/manifests/`. For multi-package installs,
    each dep is rendered into its own subtree under `out/<dep-name>/`.
 
@@ -810,8 +810,8 @@ Supported toolchain values:
 
 ### What the installer does with it
 
-At render time, the `installer transformer` plugin (which kustomize
-invokes as an exec transformer) recognizes ConfigMaps carrying the
+At render time, the installer's transform step (which kustomize runs as
+an exec transformer, and `installer transformer` runs standalone) recognizes ConfigMaps carrying the
 toolchain annotation and:
 
 - Derives the carrier shape (`confighub.com/appconfig-mode`:

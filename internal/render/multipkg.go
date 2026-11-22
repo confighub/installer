@@ -53,9 +53,8 @@ type DepsOptions struct {
 	// If nil, DefaultFetcher is used.
 	Fetcher Fetcher
 
-	// TransformerBinary is propagated to each per-dep Render call. Defaults
-	// to os.Executable() inside Render when empty.
-	TransformerBinary string
+	// TransformerCommand is propagated to each per-dep Render call.
+	TransformerCommand []string
 }
 
 // DepResult records the outcome of one dependency render.
@@ -115,10 +114,10 @@ func RenderDependencies(ctx context.Context, opts DepsOptions) ([]DepResult, err
 			return nil, err
 		}
 		res, err := Render(ctx, Options{
-			Loaded:            loaded,
-			Selection:         sel,
-			Inputs:            inputs,
-			TransformerBinary: opts.TransformerBinary,
+			Loaded:             loaded,
+			Selection:          sel,
+			Inputs:             inputs,
+			TransformerCommand: opts.TransformerCommand,
 		}, depOut)
 		if err != nil {
 			return nil, fmt.Errorf("render dep %s: %w", d.Name, err)

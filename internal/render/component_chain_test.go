@@ -54,10 +54,9 @@ func TestComponentScopedTransformers(t *testing.T) {
 			work := t.TempDir()
 			out := filepath.Join(work, "out")
 			res, err := render.Render(context.Background(), render.Options{
-				Loaded:            loaded,
-				Selection:         sel,
-				Inputs:            inputs,
-				TransformerBinary: installerBin,
+				Loaded:    loaded,
+				Selection: sel,
+				Inputs:    inputs,
 			}, out)
 			if err != nil {
 				t.Fatalf("Render: %v", err)

@@ -21,7 +21,7 @@ secrets/
 secrets/
 --- out/base/compose/installer-transformer.sh
 #!/bin/sh
-exec "$EXE" transformer
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
 --- out/base/compose/kustomization.yaml
 # Reproduce this render with:
 #   kustomize build --enable-exec --enable-alpha-plugins .
@@ -128,7 +128,7 @@ spec:
   base: default
 --- out/compose/installer-transformer.sh
 #!/bin/sh
-exec "$EXE" transformer
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
 --- out/compose/kustomization.yaml
 # Reproduce this render with:
 #   kustomize build --enable-exec --enable-alpha-plugins .

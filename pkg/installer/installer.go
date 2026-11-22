@@ -46,6 +46,12 @@ type Options struct {
 	Warn func(error)
 	// ClientVersion is sent with uploads; "" means the installer's version.
 	ClientVersion string
+	// TransformerCommand is the command kustomize runs for render's transform
+	// step, which has to run RunTransformer on its stdin and write the result
+	// to stdout, as `installer transformer` does. Nil re-executes the running
+	// program, which then has to call RunTransformerIfRequested first thing in
+	// main.
+	TransformerCommand []string
 }
 
 // Installer runs the install lifecycle with one set of Options.

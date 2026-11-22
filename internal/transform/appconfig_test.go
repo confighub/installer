@@ -1,7 +1,7 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-package cli
+package transform
 
 import (
 	"context"
@@ -39,7 +39,7 @@ functionConfig:
   metadata: {name: noop}
   spec: {groups: []}
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -99,7 +99,7 @@ functionConfig:
   metadata: {name: noop}
   spec: {groups: []}
 `
-			out, err := runTransformer(context.Background(), []byte(input))
+			out, err := Run(context.Background(), []byte(input))
 			if err != nil {
 				t.Fatalf("runTransformer: %v", err)
 			}
@@ -138,7 +138,7 @@ functionConfig:
   metadata: {name: noop}
   spec: {groups: []}
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -174,7 +174,7 @@ functionConfig:
   metadata: {name: noop}
   spec: {groups: []}
 `
-	_, err := runTransformer(context.Background(), []byte(input))
+	_, err := Run(context.Background(), []byte(input))
 	if err == nil {
 		t.Fatal("expected error for ambiguous file-mode ConfigMap")
 	}
@@ -213,7 +213,7 @@ functionConfig:
           - name: set-int-path
             args: ["AppProperties", "server.port", "9090"]
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -260,7 +260,7 @@ functionConfig:
           - name: set-string-path
             args: ["NoSchema", "ADMIN_JWK", '{"kty":"OKP","x":"abc"}']
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}

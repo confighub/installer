@@ -31,6 +31,7 @@ import (
 
 	"github.com/confighub/installer/internal/fakehub"
 	"github.com/confighub/installer/internal/hubclient"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 var update = flag.Bool("update", false, "rewrite the lifecycle golden files")
@@ -39,16 +40,8 @@ var update = flag.Bool("update", false, "rewrite the lifecycle golden files")
 var hub *fakehub.Server
 
 func TestMain(m *testing.M) {
-	// Render runs the function chain as a kustomize exec plugin that executes
-	// this binary with the transformer subcommand.
-	if len(os.Args) > 1 && os.Args[1] == "transformer" {
-		root := NewRoot()
-		root.SetArgs(os.Args[1:])
-		if err := root.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
+	// Render re-executes this binary for kustomize's transform step.
+	installer.RunTransformerIfRequested()
 	os.Exit(runTests(m))
 }
 

@@ -14,9 +14,13 @@ import (
 
 	"github.com/confighub/installer/internal/cli"
 	"github.com/confighub/installer/internal/version"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 func main() {
+	// Render re-executes this binary for kustomize's transform step.
+	installer.RunTransformerIfRequested()
+
 	// When cub installs or upgrades this plugin it invokes the binary as a
 	// hook; HandleHook writes cub-plugin.yaml into CUB_PLUGIN_DIR and we exit
 	// without running the normal command tree.

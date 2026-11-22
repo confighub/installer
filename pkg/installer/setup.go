@@ -152,6 +152,11 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	if opts.Preset != "" && len(opts.Select) > 0 {
 		return nil, ErrPresetAndSelect
 	}
+	if opts.Render {
+		if err := i.checkTransformer(); err != nil {
+			return nil, err
+		}
+	}
 	workDir := opts.WorkDir
 	if workDir == "" {
 		workDir = "."
@@ -549,6 +554,9 @@ func (i *Installer) recordedSourceRef(ctx context.Context, space string) (string
 // Render renders the work-dir's package from the selection, inputs and facts
 // in out/record, and its locked dependencies, as `installer render` does.
 func (i *Installer) Render(ctx context.Context, workDir string) (*RenderResult, error) {
+	if err := i.checkTransformer(); err != nil {
+		return nil, err
+	}
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {
 		return nil, err
@@ -605,10 +613,11 @@ func (i *Installer) render(ctx context.Context, workDir string, loaded *ipkg.Loa
 	outDir := filepath.Join(workDir, "out")
 	manifestsDir := filepath.Join(outDir, "manifests")
 	r, err := render.Render(ctx, render.Options{
-		Loaded:    loaded,
-		Selection: sel,
-		Inputs:    inputs,
-		Facts:     facts,
+		Loaded:             loaded,
+		Selection:          sel,
+		Inputs:             inputs,
+		Facts:              facts,
+		TransformerCommand: i.opts.TransformerCommand,
 	}, outDir)
 	if err != nil {
 		return nil, err
@@ -631,9 +640,10 @@ func (i *Installer) render(ctx context.Context, workDir string, loaded *ipkg.Loa
 		return result, nil
 	}
 	depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
-		Lock:         lock,
-		ParentInputs: inputs,
-		WorkDir:      workDir,
+		Lock:               lock,
+		ParentInputs:       inputs,
+		WorkDir:            workDir,
+		TransformerCommand: i.opts.TransformerCommand,
 	})
 	if err != nil {
 		return nil, err

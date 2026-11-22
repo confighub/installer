@@ -15,7 +15,7 @@ import (
 )
 
 // Options controls Render. All fields are required except Facts and
-// TransformerBinary.
+// TransformerCommand.
 type Options struct {
 	Loaded    *ipkg.Loaded
 	Selection *api.Selection
@@ -23,12 +23,12 @@ type Options struct {
 	// Facts is the parsed facts.yaml. Nil when the package has no collector
 	// or the wizard has not been re-run after one was added.
 	Facts *api.Facts
-	// TransformerBinary is the absolute path baked into the
-	// out/compose/installer-transformer wrapper script. Defaults to
-	// os.Executable() — the binary currently running Render. Tests inject a
-	// freshly-built installer binary so the go test binary (which doesn't
-	// implement the `transformer` subcommand) isn't invoked by kustomize.
-	TransformerBinary string
+	// TransformerCommand is the command the out/compose/installer-transformer.sh
+	// wrapper runs for kustomize's transform step. Nil runs os.Executable() —
+	// the program running Render — with INSTALLER_RUN_TRANSFORMER=1, which
+	// the program has to answer by running the transform step (see
+	// transform.Requested).
+	TransformerCommand []string
 }
 
 // Result is what Render produces.
@@ -47,9 +47,8 @@ type Result struct {
 }
 
 // Render reads the package + selection + inputs, drives kustomize (which
-// invokes `installer transformer` as an exec plugin to apply the function
-// chain and validators), and writes per-resource files plus the spec docs
-// to outDir.
+// runs the transform step as an exec plugin to apply the function chain and
+// validators), and writes per-resource files plus the spec docs to outDir.
 //
 // outDir is created if missing. out/manifests/ and out/secrets/ are replaced
 // by what this render produces, keeping a Kptfile in out/manifests/, so a
@@ -69,13 +68,9 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, fmt.Errorf("Render: Inputs is required")
 	}
 
-	transformerBin := opts.TransformerBinary
-	if transformerBin == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return nil, fmt.Errorf("locate installer binary: %w", err)
-		}
-		transformerBin = exe
+	transformerCmd, err := transformerWrapperCommand(opts.TransformerCommand)
+	if err != nil {
+		return nil, err
 	}
 
 	// 0. Apply per-image overrides (if any), as `kustomize edit set image`
@@ -103,16 +98,16 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	}
 
 	// 2. Compose out/compose/ and run kustomize against it. Kustomize
-	//    invokes the wrapper, which execs `installer transformer`,
-	//    which runs each transformer group through chainexec in-process.
+	//    invokes the wrapper, which re-executes this program for the
+	//    transform step, which runs each transformer group through chainexec.
 	composeDir := filepath.Join(outDir, "compose")
 	if err := composeKustomization(composeInputs{
-		Loaded:            opts.Loaded,
-		Selection:         opts.Selection,
-		Chain:             chain,
-		Namespace:         opts.Inputs.Spec.Namespace,
-		TransformerBinary: transformerBin,
-		Images:            images,
+		Loaded:             opts.Loaded,
+		Selection:          opts.Selection,
+		Chain:              chain,
+		Namespace:          opts.Inputs.Spec.Namespace,
+		TransformerCommand: transformerCmd,
+		Images:             images,
 	}, composeDir); err != nil {
 		return nil, err
 	}

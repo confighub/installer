@@ -14,7 +14,7 @@ INFO invoke set-namespace: succeeded
 secrets/
 --- out/compose/installer-transformer.sh
 #!/bin/sh
-exec "$EXE" transformer
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
 --- out/compose/kustomization.yaml
 # Reproduce this render with:
 #   kustomize build --enable-exec --enable-alpha-plugins .
@@ -210,7 +210,7 @@ INFO invoke set-namespace: succeeded
 secrets/
 --- compose/installer-transformer.sh
 #!/bin/sh
-exec "$EXE" transformer
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
 --- compose/kustomization.yaml
 # Reproduce this render with:
 #   kustomize build --enable-exec --enable-alpha-plugins .

@@ -16,22 +16,13 @@ import (
 
 	"github.com/confighub/sdk/core/cubapi"
 
-	"github.com/confighub/installer/internal/cli"
 	"github.com/confighub/installer/internal/fakehub"
 	"github.com/confighub/installer/pkg/installer"
 )
 
 func TestMain(m *testing.M) {
-	// Render runs the function chain as a kustomize exec plugin that executes
-	// this binary with the transformer subcommand.
-	if len(os.Args) > 1 && os.Args[1] == "transformer" {
-		root := cli.NewRoot()
-		root.SetArgs(os.Args[1:])
-		if err := root.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
+	// Render re-executes this binary for kustomize's transform step.
+	installer.RunTransformerIfRequested()
 	home, err := os.MkdirTemp("", "installer-pkg-home-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -338,5 +329,40 @@ func TestDefaultOutput(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "warning: fetch the installer record for hello-app from ConfigHub: hello-app is installed in 2 Spaces (one, two)") {
 		t.Errorf("ErrOut = %q", errOut.String())
+	}
+}
+
+// TransformerCommand replaces re-executing the program for the transform step.
+func TestTransformerCommand(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := []string{"/usr/bin/env", "INSTALLER_RUN_TRANSFORMER=1", exe}
+	inst, err := installer.New(installer.Options{TransformerCommand: command})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	res, err := inst.Setup(context.Background(), installer.SetupOptions{
+		WorkDir: work, Pull: example(t, "hello-app"), Namespace: "demo", Render: true,
+	})
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if len(res.Render.Manifests) != 3 {
+		t.Errorf("manifests = %v", res.Render.Manifests)
+	}
+	wrapper, err := os.ReadFile(filepath.Join(work, "out", "compose", "installer-transformer.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("#!/bin/sh\nexec \"/usr/bin/env\" \"INSTALLER_RUN_TRANSFORMER=1\" %q\n", exe)
+	if string(wrapper) != want {
+		t.Errorf("wrapper = %q, want %q", wrapper, want)
+	}
+	// The set-namespace transformer ran.
+	if _, err := os.Stat(filepath.Join(work, "out", "manifests", "deployment-demo-hello-app.yaml")); err != nil {
+		t.Error(err)
 	}
 }

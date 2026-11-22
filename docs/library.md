@@ -1,6 +1,6 @@
 # Embedding the installer as a Go library — Design and plan
 
-Status: phase 1 implemented; phases 2–4 proposed.
+Status: phases 1 and 2 implemented; phases 3 and 4 proposed.
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -431,7 +431,21 @@ Acceptance: every script in `test/e2e/` passes unchanged, and the CLI's
 output is unchanged apart from line order where a line moved between
 the package and the CLI.
 
-### Phase 2 — The transform step without a subcommand
+### Phase 2 — The transform step without a subcommand (done)
+
+Done as described below. `internal/transform` also has `Requested` and
+`Main`, the re-exec check and the process entry point, which
+`RunTransformerIfRequested` wraps and test binaries call directly in
+`TestMain`. `Setup` with `Render`, and `Render`, return
+`ErrNoTransformer` when the program neither called
+`RunTransformerIfRequested` nor set `TransformerCommand`. The example the
+plan names is a Go `Example` that renders `collector-app`, which has a
+function chain and an AppConfig/Env ConfigMap, with a collector that
+needs no cub context; `hello-app` is rendered through the public package
+by the other `pkg/installer` tests. The only change to the lifecycle
+golden files is the wrapper's line.
+
+The original plan:
 
 - New: `internal/transform` — `runTransformer` and the AppConfig handling
   moved from `internal/cli/transformer.go` and `internal/cli/appconfig.go`,
