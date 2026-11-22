@@ -37,14 +37,16 @@ type Source interface {
 
 // OCISource is the production Source: List + Inspect against a live registry
 // via internal/pkg.
-type OCISource struct{}
-
-func (OCISource) ListVersions(ctx context.Context, repo string) ([]string, error) {
-	return ipkg.List(ctx, repo)
+type OCISource struct {
+	Registry ipkg.Registry
 }
 
-func (OCISource) Inspect(ctx context.Context, ref string) (*ipkg.InspectResult, error) {
-	return ipkg.Inspect(ctx, ref)
+func (s OCISource) ListVersions(ctx context.Context, repo string) ([]string, error) {
+	return s.Registry.List(ctx, repo)
+}
+
+func (s OCISource) Inspect(ctx context.Context, ref string) (*ipkg.InspectResult, error) {
+	return s.Registry.Inspect(ctx, ref)
 }
 
 // stripOCIPrefix strips the optional oci:// scheme from a package ref.

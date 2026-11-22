@@ -56,6 +56,12 @@ var (
 	// ErrStaleLock: the work-dir's lock no longer matches the package's
 	// dependencies. Setup with SetupOptions.Render writes a new one.
 	ErrStaleLock = errors.New("stale dependency lock")
+	// ErrNoConfigHub: the operation needs ConfigHub and Options.ConfigHub is
+	// nil.
+	ErrNoConfigHub = errors.New("no ConfigHub client")
+	// ErrNotAuthenticated: ConfigHub refused Options.ConfigHub's credentials.
+	ErrNotAuthenticated = errors.New("not authenticated to ConfigHub")
+
 	// ErrSpaceWithDependencies: UploadOptions.Space is set for a package that
 	// declares dependencies, which each need a Space of their own;
 	// UploadOptions.SpacePattern names them.

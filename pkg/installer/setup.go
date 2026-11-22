@@ -172,7 +172,7 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	pullRef := opts.Pull
 	if opts.OutputOCI != "" && strings.HasPrefix(opts.Pull, "oci://") {
 		sourceReference = opts.Pull
-		sourceDigest, err = ipkg.ResolveManifestDigest(ctx, opts.Pull)
+		sourceDigest, err = i.registry.ResolveManifestDigest(ctx, opts.Pull)
 		if err != nil {
 			return nil, fmt.Errorf("resolve source package digest: %w", err)
 		}
@@ -199,7 +199,7 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	// leaves the work-dir as it was.
 	var staged *ipkg.StagedPull
 	if pullRef != "" {
-		staged, err = ipkg.StagePull(ctx, pullRef, absWork)
+		staged, err = i.registry.StagePull(ctx, pullRef, absWork)
 		if err != nil {
 			if recordedPull {
 				return nil, optionErrorf(ErrRecordedSourcePull, err, "pull %s, from the installer record in Space %s: %v",
@@ -242,6 +242,7 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 		}
 	}
 	raw.ImageOverrides = copyStrings(opts.SetImage)
+	raw.CollectorStderr = i.err
 	if prior != nil && prior.Inputs != nil {
 		raw.PriorImageOverrides = prior.Inputs.Spec.ImageOverrides
 	}
@@ -283,14 +284,15 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	}
 
 	if opts.OutputOCI != "" {
-		published, err := ipkg.PublishRenderedOCI(ctx, ipkg.RenderedOCIOptions{
-			WorkDir:         absWork,
-			Destination:     opts.OutputOCI,
-			SourceReference: sourceReference,
-			SourceDigest:    sourceDigest,
-			Package:         loaded.Package,
-			Selection:       res.Selection,
-			Inputs:          res.Inputs,
+		published, err := i.registry.PublishRenderedOCI(ctx, ipkg.RenderedOCIOptions{
+			WorkDir:          absWork,
+			Destination:      opts.OutputOCI,
+			SourceReference:  sourceReference,
+			SourceDigest:     sourceDigest,
+			Package:          loaded.Package,
+			Selection:        res.Selection,
+			Inputs:           res.Inputs,
+			InstallerVersion: i.opts.ClientVersion,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("write rendered OCI: %w", err)
@@ -503,7 +505,8 @@ func unanswered(inputs []api.Input, answers map[string]string) []api.Input {
 // writes <workDir>/out/record/lock.yaml, following the optional dependencies
 // the selection turns on.
 func (i *Installer) lockDependencies(ctx context.Context, workDir string, pkg *api.Package, sel *api.Selection) (*api.Lock, error) {
-	res, err := deps.Resolve(ctx, pkg, deps.OCISource{}, deps.Options{Selection: sel})
+	res, err := deps.Resolve(ctx, pkg, deps.OCISource{Registry: i.registry},
+		deps.Options{Selection: sel, Verifier: i.registry.Verifier})
 	if err != nil {
 		return nil, fmt.Errorf("deps update: %w", err)
 	}
@@ -516,10 +519,14 @@ func (i *Installer) lockDependencies(ctx context.Context, workDir string, pkg *a
 
 // recordFetcher returns a wizard.RecordFetcher that reads the installer record
 // an earlier upload wrote, in space or, when space is "", the package's only
-// install in the organization.
+// install in the organization. Without a ConfigHub client it returns nil
+// unless a Space is named: re-entering from ConfigHub is then not asked for.
 func (i *Installer) recordFetcher(space string) wizard.RecordFetcher {
+	if i.opts.ConfigHub == nil && space == "" {
+		return nil
+	}
 	return func(ctx context.Context, packageName string) ([]byte, error) {
-		c, err := i.client(ctx)
+		c, err := i.client()
 		if err != nil {
 			return nil, err
 		}
@@ -643,6 +650,7 @@ func (i *Installer) render(ctx context.Context, workDir string, loaded *ipkg.Loa
 		Lock:               lock,
 		ParentInputs:       inputs,
 		WorkDir:            workDir,
+		Registry:           i.registry,
 		TransformerCommand: i.opts.TransformerCommand,
 	})
 	if err != nil {

@@ -1,6 +1,6 @@
 # Embedding the installer as a Go library — Design and plan
 
-Status: phases 1 and 2 implemented; phases 3 and 4 proposed.
+Status: phases 1–3 implemented; phase 4 proposed.
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -155,7 +155,9 @@ package installer
 // prompts, and uses the Docker credential store and no signing policy.
 type Options struct {
 	// ConfigHub is the client for reading installer records and uploading.
-	// Setup needs it when SetupOptions.Space is set; uploads always do.
+	// Without it, Setup re-enters only from the work-dir, and fails with
+	// ErrNoConfigHub when SetupOptions.Space needs a record; uploads always
+	// need it, and verify its session first (ErrNotAuthenticated).
 	ConfigHub *cubapi.Client
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
@@ -469,7 +471,40 @@ The original plan:
 Acceptance: a program that imports only `pkg/installer` and `pkg/api`
 renders a package with a function chain and AppConfig.
 
-### Phase 3 — Process-wide settings become options
+### Phase 3 — Process-wide settings become options (done)
+
+Done as described below, with these details:
+
+- Registry access is an `ipkg.Registry` value (credentials, plain HTTP,
+  and a `sign.Verifier` holding the policy and cosign binary) whose
+  methods replace the package-level pull, push, inspect, list and tag
+  functions, so nothing below the CLI can reach the defaults by accident.
+  `deps` and `render` take it too, for resolving and fetching
+  dependencies.
+- The CLI's environment reads are in `internal/cli/env.go`, including
+  the memoized cub client, which moved out of `internal/hubclient`.
+  Commands that pull load the signing policy, as before only pulls
+  enforced it.
+- Uploads verify the client's session themselves (`GET /me`, as the
+  CLI's preflight did), returning `ErrNotAuthenticated`; the CLI adds
+  "run `cub auth login`".
+- Without a client, a fresh setup doesn't look for an installer record.
+  For the CLI, that means a user with no cub configuration no longer gets
+  a warning that the record couldn't be fetched; every other message is
+  unchanged.
+- `ClientVersion` defaults to the version linked into the installer
+  binary, or else the installer module's version in the program's build
+  info. The CLI passes its own version, so a development build still
+  reports `dev`.
+- With `Registry.Credentials` nil the Docker credential store is used,
+  which reads `~/.docker/config.json`; that is the one home-directory
+  file a zero `Options` reads, by design. `RunTransformerIfRequested`
+  reads `INSTALLER_RUN_TRANSFORMER`, the re-exec protocol of phase 2.
+- `TestIgnoresEnvironmentAndHome` sets the signing policy, cosign and cub
+  variables and files the CLI reads, each of which would change what
+  setup does, and checks that an `Installer` ignores them.
+
+The original plan:
 
 - Modify: `internal/pkg` — registry access takes a `RegistryOptions` in
   place of `authClient()`, the Docker store and `ORAS_OCI_INSECURE`.

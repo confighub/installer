@@ -21,17 +21,19 @@ import (
 // returns the absolute path to the package root (containing installer.yaml).
 type Fetcher func(ctx context.Context, ref, digest, destDir string) (string, error)
 
-// DefaultFetcher pulls a locked dependency via ipkg.Pull. The ref is
+// RegistryFetcher pulls a locked dependency from reg. The ref is
 // digest-pinned (oci://...:tag@sha256:...) so the registry's response is
 // verified against the lock. If destDir already contains a package, the
 // fetch is skipped — the caller's cache hit.
-func DefaultFetcher(ctx context.Context, ref, digest, destDir string) (string, error) {
-	pkgRoot := filepath.Join(destDir, "package")
-	if _, err := os.Stat(filepath.Join(pkgRoot, "installer.yaml")); err == nil {
-		return pkgRoot, nil
+func RegistryFetcher(reg ipkg.Registry) Fetcher {
+	return func(ctx context.Context, ref, digest, destDir string) (string, error) {
+		pkgRoot := filepath.Join(destDir, "package")
+		if _, err := os.Stat(filepath.Join(pkgRoot, "installer.yaml")); err == nil {
+			return pkgRoot, nil
+		}
+		pinned := ref + "@" + digest
+		return reg.Pull(ctx, pinned, destDir)
 	}
-	pinned := ref + "@" + digest
-	return ipkg.Pull(ctx, pinned, destDir)
 }
 
 // DepsOptions configures RenderDependencies.
@@ -50,8 +52,10 @@ type DepsOptions struct {
 	WorkDir string
 
 	// Fetcher resolves a locked dep's ref+digest to a local package root.
-	// If nil, DefaultFetcher is used.
+	// If nil, RegistryFetcher(Registry) is used.
 	Fetcher Fetcher
+	// Registry is where the default Fetcher pulls dependencies from.
+	Registry ipkg.Registry
 
 	// TransformerCommand is propagated to each per-dep Render call.
 	TransformerCommand []string
@@ -84,7 +88,7 @@ func RenderDependencies(ctx context.Context, opts DepsOptions) ([]DepResult, err
 	}
 	fetch := opts.Fetcher
 	if fetch == nil {
-		fetch = DefaultFetcher
+		fetch = RegistryFetcher(opts.Registry)
 	}
 
 	vendorDir := filepath.Join(opts.WorkDir, "out", "vendor")

@@ -35,11 +35,12 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			if err != nil {
 				return err
 			}
-			inst, err := newInstaller()
+			ctx := commandContext(cmd)
+			inst, err := newInstaller(ctx, true)
 			if err != nil {
 				return err
 			}
-			if _, err := inst.Render(commandContext(cmd), absWork); err != nil {
+			if _, err := inst.Render(ctx, absWork); err != nil {
 				if errors.Is(err, installer.ErrNoLock) || errors.Is(err, installer.ErrStaleLock) {
 					return fmt.Errorf("%v; run `%s deps update --work-dir %s`", err, InvocationName(), absWork)
 				}

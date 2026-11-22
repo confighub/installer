@@ -59,7 +59,12 @@ listed in the output.`,
 			}
 
 			ctx := context.Background()
-			res, err := deps.Resolve(ctx, loaded.Package, deps.OCISource{}, deps.Options{Selection: sel})
+			reg, err := registry(true)
+			if err != nil {
+				return err
+			}
+			res, err := deps.Resolve(ctx, loaded.Package, deps.OCISource{Registry: reg},
+				deps.Options{Selection: sel, Verifier: reg.Verifier})
 			if err != nil {
 				return err
 			}

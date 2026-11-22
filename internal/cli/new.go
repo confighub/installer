@@ -244,7 +244,7 @@ func findKubernetesResourcesInstall(orgID string) (*userconfig.InstallRecord, er
 // which depends on how upload named it and on the install namespace. The
 // Namespace example is the one Namespace, whatever it is named.
 func fetchExampleData(ctx context.Context, space string, example canonicalExample) ([]byte, error) {
-	c, err := hubclient.Default.Client(ctx)
+	c, err := confighub.Client(ctx)
 	if err != nil {
 		return nil, err
 	}

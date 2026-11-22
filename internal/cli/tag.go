@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newTagCmd() *cobra.Command {
@@ -26,7 +24,11 @@ Example:
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			if err := ipkg.Tag(ctx, args[0], args[1]); err != nil {
+			reg, err := registry(false)
+			if err != nil {
+				return err
+			}
+			if err := reg.Tag(ctx, args[0], args[1]); err != nil {
 				return err
 			}
 			fmt.Printf("Tagged %s as %s\n", args[0], args[1])

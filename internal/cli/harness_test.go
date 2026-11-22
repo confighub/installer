@@ -30,7 +30,6 @@ import (
 	"github.com/confighub/sdk/core/cubapi"
 
 	"github.com/confighub/installer/internal/fakehub"
-	"github.com/confighub/installer/internal/hubclient"
 	"github.com/confighub/installer/pkg/installer"
 )
 
@@ -86,7 +85,7 @@ type result struct {
 func runInstaller(t *testing.T, args ...string) result {
 	t.Helper()
 	// A fresh client per command, as each run of the binary has.
-	hubclient.Default = cubapi.MemoizedClient{UserAgent: "installer"}
+	confighub = cubapi.MemoizedClient{UserAgent: "installer"}
 
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
@@ -209,6 +208,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, norm: &normalizer{}, repo: repo}
 	e.norm.add(repo, "$REPO")
 	e.norm.add(hub.URL, "$HUB")
+	e.norm.add(os.Getenv("HOME"), "$HOME")
 	if exe, err := os.Executable(); err == nil {
 		e.norm.add(exe, "$EXE")
 	}

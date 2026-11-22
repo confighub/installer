@@ -28,14 +28,14 @@ import (
 // Strategy:
 //   1. Spin up registry:2 on a free-ish port (5556 — distinct from the
 //      manual end-to-end registry on 5555).
-//   2. Push a minimal installer artifact via ipkg.Push.
+//   2. Push a minimal installer artifact via ipkg.Registry.Push.
 //   3. Generate a cosign key pair with empty password.
 //   4. Sign the artifact (keyed).
 //   5. Verify with the matching key — must succeed.
 //   6. Verify with a different key — must fail.
-//   7. EnforceVerification with a policy that lists the matching key —
+//   7. Verifier.Enforce with a policy that lists the matching key —
 //      must succeed.
-//   8. EnforceVerification with a policy that lists only a different key —
+//   8. Verifier.Enforce with a policy that lists only a different key —
 //      must fail.
 func TestCosignSignAndVerify(t *testing.T) {
 	if _, err := exec.LookPath("cosign"); err != nil {
@@ -61,7 +61,7 @@ func TestCosignSignAndVerify(t *testing.T) {
 	pkgRoot := writeMinimalPackage(t)
 	ctx := context.Background()
 	ref := "oci://" + registryAddr + "/" + artifactRepoPath + ":" + artifactTag
-	if _, err := ipkg.Push(ctx, pkgRoot, ref); err != nil {
+	if _, err := (ipkg.Registry{}).Push(ctx, pkgRoot, ref); err != nil {
 		t.Fatalf("Push: %v", err)
 	}
 
@@ -95,7 +95,7 @@ func TestCosignSignAndVerify(t *testing.T) {
 		t.Fatalf("Verify with wrong key should fail")
 	}
 
-	// 7. EnforceVerification with a policy that lists the matching key —
+	// 7. Verifier.Enforce with a policy that lists the matching key —
 	// must succeed.
 	policyDir := t.TempDir()
 	policyOK := filepath.Join(policyDir, "ok.yaml")
@@ -106,12 +106,11 @@ spec:
   trustedKeys:
     - publicKey: %s
 `, pub))
-	t.Setenv(sign.EnvPolicyPath, policyOK)
-	if err := sign.EnforceVerification(ctx, ref); err != nil {
-		t.Fatalf("EnforceVerification(match) failed: %v", err)
+	if err := enforcePolicyFile(ctx, t, policyOK, ref); err != nil {
+		t.Fatalf("Enforce(match) failed: %v", err)
 	}
 
-	// 8. EnforceVerification with a policy that lists only the wrong key
+	// 8. Verifier.Enforce with a policy that lists only the wrong key
 	// — must fail.
 	policyBad := filepath.Join(policyDir, "bad.yaml")
 	mustWrite(t, policyBad, fmt.Sprintf(`apiVersion: installer.confighub.com/v1alpha1
@@ -121,10 +120,9 @@ spec:
   trustedKeys:
     - publicKey: %s
 `, otherPub))
-	t.Setenv(sign.EnvPolicyPath, policyBad)
-	err := sign.EnforceVerification(ctx, ref)
+	err := enforcePolicyFile(ctx, t, policyBad, ref)
 	if err == nil || !strings.Contains(err.Error(), "no trust entry verified") {
-		t.Fatalf("EnforceVerification(wrong-key) should fail, got %v", err)
+		t.Fatalf("Enforce(wrong-key) should fail, got %v", err)
 	}
 }
 
@@ -196,4 +194,14 @@ func mustWrite(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// enforcePolicyFile enforces the signing policy at path on ref.
+func enforcePolicyFile(ctx context.Context, t *testing.T, path, ref string) error {
+	t.Helper()
+	p, err := sign.LoadPolicyFile(path)
+	if err != nil {
+		return err
+	}
+	return (&sign.Verifier{Policy: p, Cosign: sign.CosignFromEnv()}).Enforce(ctx, ref)
 }

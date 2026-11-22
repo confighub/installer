@@ -10,16 +10,36 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
 	"oras.land/oras-go/v2/registry/remote/retry"
+
+	"github.com/confighub/installer/internal/sign"
 )
 
-// authClient builds an oras auth.Client that reads credentials from the
-// docker-config-style store (~/.docker/config.json plus native helpers like
-// osxkeychain). Anonymous access works when no credentials are configured —
-// the store returns auth.EmptyCredential.
-func authClient() (*auth.Client, error) {
-	store, err := credentialStore()
-	if err != nil {
-		return nil, err
+// Registry is how the installer reaches OCI registries: the credentials it
+// presents, whether it uses plain HTTP, and the signature check every package
+// pulled from one has to pass. The zero value uses the Docker credential
+// store, HTTPS except for localhost, and checks no signatures.
+type Registry struct {
+	// Credentials authenticate to registries; nil uses the docker-config
+	// store (~/.docker/config.json plus native helpers like osxkeychain).
+	Credentials credentials.Store
+	// PlainHTTP uses HTTP for every registry. localhost and 127.0.0.1 always
+	// use HTTP.
+	PlainHTTP bool
+	// Verifier checks each package pulled from a registry, including
+	// dependencies; nil checks none.
+	Verifier *sign.Verifier
+}
+
+// authClient builds an oras auth.Client that presents reg's credentials.
+// Anonymous access works when no credentials are configured — the store
+// returns auth.EmptyCredential.
+func (reg Registry) authClient() (*auth.Client, error) {
+	store := reg.Credentials
+	if store == nil {
+		var err error
+		if store, err = credentialStore(); err != nil {
+			return nil, err
+		}
 	}
 	return &auth.Client{
 		Client:     retry.DefaultClient,
@@ -28,8 +48,8 @@ func authClient() (*auth.Client, error) {
 	}, nil
 }
 
-// credentialStore returns the same docker-config-backed store used by
-// authClient. Exposed so login / logout can Put / Delete entries.
+// credentialStore returns the docker-config-backed store authClient uses
+// when a Registry names none, and login and logout write to.
 func credentialStore() (credentials.Store, error) {
 	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{
 		AllowPlaintextPut: true,

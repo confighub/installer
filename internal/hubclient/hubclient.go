@@ -1,9 +1,9 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-// Package hubclient is the installer's connection to ConfigHub and the
-// lookups several commands share: finding a Space, and finding the installer
-// record an upload left in one.
+// Package hubclient is the ConfigHub lookups several parts of the installer
+// share: finding a Space, and finding the installer record an upload left in
+// one.
 package hubclient
 
 import (
@@ -17,10 +17,6 @@ import (
 
 	"github.com/confighub/installer/internal/upload"
 )
-
-// Default is the installer binary's connection to ConfigHub: the cub plugin
-// environment when run as `cub installer`, otherwise the active cub context.
-var Default = cubapi.MemoizedClient{UserAgent: "installer"}
 
 // ExistingSpace returns the Space with slug, or nil when there is none yet.
 func ExistingSpace(ctx context.Context, c *cubapi.Client, slug string) (*goclientnew.Space, error) {

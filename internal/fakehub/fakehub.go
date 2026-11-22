@@ -60,6 +60,7 @@ type Server struct {
 	units      []*Unit
 	requests   []Request
 	uploadHook UploadHook
+	refuseAuth bool
 }
 
 // OrganizationID is the organization every entity belongs to.
@@ -80,6 +81,15 @@ func (s *Server) Reset() {
 	s.spaces, s.components, s.targets, s.changeSets, s.units = nil, nil, nil, nil, nil
 	s.requests = nil
 	s.uploadHook = nil
+	s.refuseAuth = false
+}
+
+// RefuseAuth makes every request fail as unauthenticated, as a server does
+// for an expired token.
+func (s *Server) RefuseAuth(refuse bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseAuth = refuse
 }
 
 // SetUploadHook sets the hook that decides upload results; nil restores the
@@ -210,6 +220,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, Request{Method: r.Method, Path: p, Query: query, Body: body})
 
+	if s.refuseAuth {
+		writeError(w, http.StatusUnauthorized, "token expired")
+		return
+	}
 	segments := strings.Split(strings.Trim(p, "/"), "/")
 	switch {
 	case r.Method == http.MethodGet && p == "/me":

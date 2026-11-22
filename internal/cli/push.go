@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newPushCmd() *cobra.Command {
@@ -31,7 +29,11 @@ To attach a cosign signature, run "installer sign <ref>" after push.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			res, err := ipkg.Push(ctx, args[0], args[1])
+			reg, err := registry(false)
+			if err != nil {
+				return err
+			}
+			res, err := reg.Push(ctx, args[0], args[1])
 			if err != nil {
 				return err
 			}

@@ -53,7 +53,7 @@ Use --json for the record as stored, as JSON.`,
 				return fmt.Errorf("name the Space with --space, or the package")
 			}
 			ctx := commandContext(cmd)
-			c, err := hubclient.Default.Client(ctx)
+			c, err := confighub.Client(ctx)
 			if err != nil {
 				return err
 			}

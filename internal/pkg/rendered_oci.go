@@ -25,7 +25,6 @@ import (
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/content/oci"
 
-	"github.com/confighub/installer/internal/version"
 	"github.com/confighub/installer/pkg/api"
 )
 
@@ -38,6 +37,9 @@ type RenderedOCIOptions struct {
 	Package         *api.Package
 	Selection       *api.Selection
 	Inputs          *api.Inputs
+	// InstallerVersion is stamped into the artifact as the version that
+	// rendered it.
+	InstallerVersion string
 }
 
 // RenderedOCIResult describes a verified local write or registry push.
@@ -60,7 +62,7 @@ type renderedFile struct {
 // PublishRenderedOCI writes the non-secret rendered manifests as an OCI
 // artifact. An oci:// destination is pushed to a registry. Any other
 // destination is written as a local OCI image layout tagged "latest".
-func PublishRenderedOCI(ctx context.Context, opts RenderedOCIOptions) (*RenderedOCIResult, error) {
+func (reg Registry) PublishRenderedOCI(ctx context.Context, opts RenderedOCIOptions) (*RenderedOCIResult, error) {
 	if opts.WorkDir == "" {
 		return nil, fmt.Errorf("rendered OCI: work-dir is required")
 	}
@@ -81,7 +83,7 @@ func PublishRenderedOCI(ctx context.Context, opts RenderedOCIOptions) (*Rendered
 		if err != nil {
 			return nil, err
 		}
-		repo, err := newRepo(repoRef)
+		repo, err := reg.newRepo(repoRef)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +113,7 @@ func PublishRenderedOCI(ctx context.Context, opts RenderedOCIOptions) (*Rendered
 }
 
 // ResolveManifestDigest resolves an OCI reference without pulling its layers.
-func ResolveManifestDigest(ctx context.Context, ref string) (string, error) {
+func (reg Registry) ResolveManifestDigest(ctx context.Context, ref string) (string, error) {
 	if !strings.HasPrefix(ref, "oci://") {
 		return "", nil
 	}
@@ -119,7 +121,7 @@ func ResolveManifestDigest(ctx context.Context, ref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	repo, err := newRepo(repoRef)
+	repo, err := reg.newRepo(repoRef)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +189,7 @@ func stageAndCopyRendered(ctx context.Context, opts RenderedOCIOptions, tag stri
 		ocispec.AnnotationTitle:        opts.Package.Metadata.Name,
 		api.AnnotationName:             opts.Package.Metadata.Name,
 		api.AnnotationVersion:          opts.Package.InstallerMetadata.Version,
-		api.AnnotationInstallerVersion: version.Version,
+		api.AnnotationInstallerVersion: opts.InstallerVersion,
 		api.AnnotationBase:             opts.Selection.Spec.Base,
 		api.AnnotationObjectSetDigest:  objectSetDigest,
 	}
@@ -328,7 +330,7 @@ func renderedConfig(
 	}
 	return &api.RenderedConfigBlob{
 		SchemaVersion:    "v1",
-		InstallerVersion: version.Version,
+		InstallerVersion: opts.InstallerVersion,
 		Source: api.RenderedSource{
 			Reference:      opts.SourceReference,
 			ManifestDigest: opts.SourceDigest,

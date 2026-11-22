@@ -9,6 +9,7 @@ package testregistry
 import (
 	"io"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 
@@ -23,8 +24,29 @@ type Registry struct {
 	Host string
 }
 
+// Option configures a Registry.
+type Option func(http.Handler) http.Handler
+
+// BasicAuth makes the registry refuse requests without these credentials.
+func BasicAuth(username, password string) Option {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if u, p, ok := r.BasicAuth(); !ok || u != username || p != password {
+				w.Header().Set("WWW-Authenticate", `Basic realm="testregistry"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // New starts a registry. Close it when done.
-func New() *Registry {
-	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+func New(opts ...Option) *Registry {
+	var h http.Handler = registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	for _, opt := range opts {
+		h = opt(h)
+	}
+	srv := httptest.NewServer(h)
 	return &Registry{Server: srv, Host: strings.TrimPrefix(srv.URL, "http://")}
 }

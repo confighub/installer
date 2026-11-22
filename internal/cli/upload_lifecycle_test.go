@@ -257,3 +257,31 @@ func TestLifecycleRecordReentry(t *testing.T) {
 
 	tr.check("record-reentry")
 }
+
+// What the commands that talk to ConfigHub say when there is no session to
+// talk with: an expired one, or no cub configuration at all.
+func TestLifecycleNoSession(t *testing.T) {
+	e := newEnv(t)
+	work := e.setupHello("WORK")
+	tr := e.transcript()
+
+	tr.section("ConfigHub refuses the session")
+	hub.RefuseAuth(true)
+	tr.fail("plan", "--work-dir", work, "--space", "hello")
+	tr.fail("upload", "--work-dir", work, "--space", "hello", "--yes")
+	// Setup only warns: it starts fresh.
+	tr.ok("setup", "--pull", e.helloV1(), "--work-dir", e.dir("FRESH"), "--non-interactive", "--namespace", "demo")
+	hub.RefuseAuth(false)
+	tr.requests()
+
+	tr.section("no cub configuration")
+	t.Setenv("CUB_SERVER", "")
+	t.Setenv("CUB_TOKEN", "")
+	tr.fail("plan", "--work-dir", work, "--space", "hello")
+	// A fresh install doesn't look for an installer record.
+	tr.ok("setup", "--pull", e.helloV1(), "--work-dir", e.dir("LOCAL"), "--non-interactive", "--namespace", "demo")
+	tr.fail("setup", "--space", "hello", "--work-dir", e.dir("NOCLIENT"), "--non-interactive")
+	tr.requests()
+
+	tr.check("no-session")
+}

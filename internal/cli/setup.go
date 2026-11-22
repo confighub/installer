@@ -68,7 +68,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		terminal = &installer.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 	}
 
-	inst, err := newInstaller()
+	inst, err := newInstaller(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		OutputOCI: opts.outputOCI,
 	})
 	if err != nil {
-		return setupError(err, absWork)
+		return setupError(inst.explain(err), absWork)
 	}
 	if !opts.runRender {
 		fmt.Printf("Next: %s render --work-dir %s\n", InvocationName(), absWork)
@@ -125,16 +125,6 @@ func setupError(err error, workDir string) error {
 		return fmt.Errorf("%s", wizard.FormatNewRequiredHint(InvocationName(), workDir, newRequired.Inputs))
 	}
 	return err
-}
-
-// newInstaller returns the Installer the CLI's commands run: printing to the
-// process's stdout and stderr, and using the cub environment's ConfigHub client.
-func newInstaller() (*installer.Installer, error) {
-	return installer.New(installer.Options{
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-		Warn:   warn,
-	})
 }
 
 // warn prints a warning, adding the flag that remedies it.

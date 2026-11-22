@@ -35,7 +35,7 @@ Plan writes nothing.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
 			flags.noteChanged(cmd)
-			inst, err := newInstaller()
+			inst, err := newInstaller(ctx, false)
 			if err != nil {
 				return err
 			}

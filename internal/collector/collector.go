@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,8 @@ type Inputs struct {
 	SelectedComponents []string
 	// InputValues are the user's typed input answers (key → value).
 	InputValues map[string]any
+	// Stderr receives the collector's stderr; nil discards it.
+	Stderr io.Writer
 }
 
 // Run executes pkg.Spec.Collector with the given Inputs and parses stdout as
@@ -51,7 +54,7 @@ type Inputs struct {
 //
 // The collector inherits the parent environment (so `cub`, kubectl auth, etc.
 // keep working) plus the INSTALLER_* env vars documented on api.Collector.
-// Stderr is forwarded verbatim to the caller's stderr.
+// Stderr is forwarded verbatim to in.Stderr.
 func Run(ctx context.Context, pkg *api.Package, in Inputs) (map[string]any, error) {
 	if pkg.Spec.Collector == nil || pkg.Spec.Collector.Command == "" {
 		return nil, nil
@@ -86,7 +89,7 @@ func Run(ctx context.Context, pkg *api.Package, in Inputs) (map[string]any, erro
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = in.Stderr
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

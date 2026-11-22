@@ -48,12 +48,12 @@ type PushResult struct {
 // src may be either a .tgz file produced by internal/bundle or a source
 // directory; directories are bundled to a temp file first. ref must be of the
 // form oci://host/repo:tag — pushing to a digest is not supported.
-func Push(ctx context.Context, src, ref string) (*PushResult, error) {
+func (reg Registry) Push(ctx context.Context, src, ref string) (*PushResult, error) {
 	repoRef, tag, _, err := parseRef(ref, true /*requireTag*/)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := newRepo(repoRef)
+	repo, err := reg.newRepo(repoRef)
 	if err != nil {
 		return nil, err
 	}
@@ -158,12 +158,12 @@ type InspectResult struct {
 // Inspect fetches only the manifest + config blob for a native installer
 // artifact. The layer is not pulled, making this cheap enough for the
 // resolver to call on every dependency candidate.
-func Inspect(ctx context.Context, ref string) (*InspectResult, error) {
+func (reg Registry) Inspect(ctx context.Context, ref string) (*InspectResult, error) {
 	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := newRepo(repoRef)
+	repo, err := reg.newRepo(repoRef)
 	if err != nil {
 		return nil, err
 	}
@@ -223,12 +223,12 @@ func inspectFromTarget(ctx context.Context, target oras.Target, ref string, want
 
 // List returns the tags of repoRef. The endpoint is `/tags/list` per the OCI
 // distribution spec; the registry decides whether catalogs are public.
-func List(ctx context.Context, repoRef string) ([]string, error) {
+func (reg Registry) List(ctx context.Context, repoRef string) ([]string, error) {
 	parsed, err := parseRepoOnly(repoRef)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := newRepo(parsed)
+	repo, err := reg.newRepo(parsed)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func List(ctx context.Context, repoRef string) ([]string, error) {
 // Tag points dstTag at the same manifest digest as srcRef. The original tag,
 // if any, is preserved. srcRef is a full ref (oci://host/repo:tag or
 // oci://host/repo@sha256:...); dstTag is a bare tag name.
-func Tag(ctx context.Context, srcRef, dstTag string) error {
+func (reg Registry) Tag(ctx context.Context, srcRef, dstTag string) error {
 	if dstTag == "" {
 		return errors.New("destination tag required")
 	}
@@ -256,7 +256,7 @@ func Tag(ctx context.Context, srcRef, dstTag string) error {
 	if err != nil {
 		return err
 	}
-	repo, err := newRepo(repoRef)
+	repo, err := reg.newRepo(repoRef)
 	if err != nil {
 		return err
 	}
@@ -323,25 +323,18 @@ func parseRepoOnly(ref string) (string, error) {
 	return ref, nil
 }
 
-func newRepo(repoRef string) (*remote.Repository, error) {
+func (reg Registry) newRepo(repoRef string) (*remote.Repository, error) {
 	repo, err := remote.NewRepository(repoRef)
 	if err != nil {
 		return nil, fmt.Errorf("repo %s: %w", repoRef, err)
 	}
-	client, err := authClient()
+	client, err := reg.authClient()
 	if err != nil {
 		return nil, err
 	}
 	repo.Client = client
-	// Allow http for plaintext registries (local zot, registry:2 in tests).
-	// oras-go defaults to https; the PlainHTTP toggle is controlled by env
-	// var ORAS_OCI_INSECURE for parity with the oras CLI.
-	if os.Getenv("ORAS_OCI_INSECURE") == "1" {
-		repo.PlainHTTP = true
-	}
-	if strings.HasPrefix(repoRef, "localhost") || strings.HasPrefix(repoRef, "127.0.0.1") {
-		repo.PlainHTTP = true
-	}
+	repo.PlainHTTP = reg.PlainHTTP ||
+		strings.HasPrefix(repoRef, "localhost") || strings.HasPrefix(repoRef, "127.0.0.1")
 	return repo, nil
 }
 

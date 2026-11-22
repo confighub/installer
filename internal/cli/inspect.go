@@ -10,8 +10,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-
-	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newInspectCmd() *cobra.Command {
@@ -28,7 +26,11 @@ package layer when only metadata is needed.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			res, err := ipkg.Inspect(ctx, args[0])
+			reg, err := registry(false)
+			if err != nil {
+				return err
+			}
+			res, err := reg.Inspect(ctx, args[0])
 			if err != nil {
 				return err
 			}

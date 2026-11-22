@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
 func newListCmd() *cobra.Command {
@@ -24,7 +22,11 @@ Example:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			tags, err := ipkg.List(ctx, args[0])
+			reg, err := registry(false)
+			if err != nil {
+				return err
+			}
+			tags, err := reg.List(ctx, args[0])
 			if err != nil {
 				return err
 			}

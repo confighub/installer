@@ -6,8 +6,10 @@
 // dependencies; for v1 we keep the installer binary small by invoking
 // cosign as an external process.
 //
-// Policy is loaded from ~/.config/installer/policy.yaml. When the file is
-// absent or Enforce is false, EnforceVerification is a no-op.
+// A Verifier enforces a signing policy on what is pulled. The CLI loads the
+// policy from ~/.config/installer/policy.yaml, or INSTALLER_SIGNING_POLICY,
+// with LoadPolicy; when there is none, or Enforce is false, nothing is
+// checked.
 package sign
 
 import (
@@ -50,7 +52,7 @@ type SignOptions struct {
 // caller's environment, so SIGSTORE_*, COSIGN_*, and OIDC tokens are
 // honored.
 func Sign(ctx context.Context, ref string, opts SignOptions) error {
-	bin := cosignBin()
+	bin := CosignFromEnv()
 	if _, err := exec.LookPath(bin); err != nil {
 		return fmt.Errorf("cosign binary %q not found on PATH: %w", bin, err)
 	}
@@ -83,6 +85,8 @@ type VerifyOptions struct {
 	TrustedKey *api.TrustedKey
 	// TrustedKeyless forces a keyless verification.
 	TrustedKeyless *api.TrustedKeyless
+	// Cosign is the cosign binary to run; "" is cosign on PATH.
+	Cosign string
 }
 
 // Verify runs cosign verify with the given trust entry. Exactly one of
@@ -91,7 +95,10 @@ func Verify(ctx context.Context, ref string, opts VerifyOptions) error {
 	if (opts.TrustedKey == nil) == (opts.TrustedKeyless == nil) {
 		return errors.New("Verify: exactly one of TrustedKey or TrustedKeyless must be set")
 	}
-	bin := cosignBin()
+	bin := opts.Cosign
+	if bin == "" {
+		bin = defaultCosign
+	}
 	if _, err := exec.LookPath(bin); err != nil {
 		return fmt.Errorf("cosign binary %q not found on PATH: %w", bin, err)
 	}
@@ -117,31 +124,36 @@ func Verify(ctx context.Context, ref string, opts VerifyOptions) error {
 	return nil
 }
 
-// EnforceVerification consults the loaded policy and verifies ref. If the
-// policy is absent, or Enforce is false, returns nil. Otherwise tries every
-// matching trust entry; succeeds on first match.
-func EnforceVerification(ctx context.Context, ref string) error {
-	p, err := LoadPolicy()
-	if err != nil {
-		return err
-	}
-	if p == nil || !p.Spec.Enforce {
+// Verifier enforces a signing policy.
+type Verifier struct {
+	// Policy is the signing policy; nil enforces none.
+	Policy *api.SigningPolicy
+	// Cosign is the cosign binary to run; "" is cosign on PATH.
+	Cosign string
+}
+
+// Enforce verifies ref under the policy. With no Verifier, no policy, or a
+// policy that doesn't enforce, it returns nil. Otherwise it tries every
+// matching trust entry and succeeds on the first that verifies.
+func (v *Verifier) Enforce(ctx context.Context, ref string) error {
+	if v == nil || v.Policy == nil || !v.Policy.Spec.Enforce {
 		return nil
 	}
+	p := v.Policy
 	keys, kls := matchEntries(p, ref)
 	if len(keys) == 0 && len(kls) == 0 {
 		return fmt.Errorf("signing policy enforces verification but no trust entry matches %s; add a TrustedKey/TrustedKeyless with this repo's prefix", ref)
 	}
 	var attempts []string
 	for _, k := range keys {
-		if err := Verify(ctx, ref, VerifyOptions{TrustedKey: &k}); err == nil {
+		if err := Verify(ctx, ref, VerifyOptions{TrustedKey: &k, Cosign: v.Cosign}); err == nil {
 			return nil
 		} else {
 			attempts = append(attempts, fmt.Sprintf("trustedKey %s: %v", describeKey(k), err))
 		}
 	}
 	for _, k := range kls {
-		if err := Verify(ctx, ref, VerifyOptions{TrustedKeyless: &k}); err == nil {
+		if err := Verify(ctx, ref, VerifyOptions{TrustedKeyless: &k, Cosign: v.Cosign}); err == nil {
 			return nil
 		} else {
 			attempts = append(attempts, fmt.Sprintf("trustedKeyless %s@%s: %v", k.Identity, k.Issuer, err))
@@ -150,11 +162,15 @@ func EnforceVerification(ctx context.Context, ref string) error {
 	return fmt.Errorf("no trust entry verified %s:\n  %s", ref, strings.Join(attempts, "\n  "))
 }
 
-// LoadPolicy reads the policy file. Returns (nil, nil) if the file is
-// absent. The path is taken from EnvPolicyPath if set, else
-// DefaultPolicyPath (tilde-expanded).
+// LoadPolicy reads the policy file the CLI uses: EnvPolicyPath if set, else
+// DefaultPolicyPath. Returns (nil, nil) if the file is absent.
 func LoadPolicy() (*api.SigningPolicy, error) {
-	path := os.Getenv(EnvPolicyPath)
+	return LoadPolicyFile(os.Getenv(EnvPolicyPath))
+}
+
+// LoadPolicyFile reads the policy file at path, or at DefaultPolicyPath
+// (tilde-expanded) when path is "". Returns (nil, nil) if the file is absent.
+func LoadPolicyFile(path string) (*api.SigningPolicy, error) {
 	if path == "" {
 		expanded, err := expandTilde(DefaultPolicyPath)
 		if err != nil {
@@ -222,11 +238,16 @@ func refForCosign(ref string) string {
 	return strings.TrimPrefix(ref, "oci://")
 }
 
-func cosignBin() string {
+// defaultCosign is the cosign binary run when none is named.
+const defaultCosign = "cosign"
+
+// CosignFromEnv is the cosign binary the CLI runs: EnvCosignBinary if set,
+// else cosign on PATH.
+func CosignFromEnv() string {
 	if b := os.Getenv(EnvCosignBinary); b != "" {
 		return b
 	}
-	return "cosign"
+	return defaultCosign
 }
 
 func describeKey(k api.TrustedKey) string {

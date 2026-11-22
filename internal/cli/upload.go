@@ -116,13 +116,18 @@ func (f *uploadFlags) options() (installer.UploadOptions, error) {
 
 // prepareUpload builds the upload the flags describe, adding the flag that
 // remedies a failure when there is one.
-func prepareUpload(ctx context.Context, inst *installer.Installer, f uploadFlags) (*installer.UploadPlan, error) {
+func prepareUpload(ctx context.Context, inst *cliInstaller, f uploadFlags) (*installer.UploadPlan, error) {
 	opts, err := f.options()
 	if err != nil {
 		return nil, err
 	}
 	plan, err := inst.PrepareUpload(ctx, opts)
-	if err != nil {
+	switch {
+	case errors.Is(err, installer.ErrNoConfigHub) && inst.hubErr != nil:
+		return nil, notAuthenticated(inst.hubErr)
+	case errors.Is(err, installer.ErrNotAuthenticated):
+		return nil, notAuthenticated(err)
+	case err != nil:
 		return nil, uploadError(err, f.workDir)
 	}
 	return plan, nil
@@ -185,7 +190,7 @@ When the upload would empty any Unit it lists them and asks first, unless
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
 			flags.noteChanged(cmd)
-			inst, err := newInstaller()
+			inst, err := newInstaller(ctx, false)
 			if err != nil {
 				return err
 			}

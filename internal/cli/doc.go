@@ -47,7 +47,11 @@ Package references:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref := args[0]
 			ctx := context.Background()
-			dir, err := ipkg.Pull(ctx, ref, outDir)
+			reg, err := registry(true)
+			if err != nil {
+				return err
+			}
+			dir, err := reg.Pull(ctx, ref, outDir)
 			if err != nil {
 				return err
 			}

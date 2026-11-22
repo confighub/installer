@@ -19,7 +19,6 @@ import (
 	"oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
 
-	"github.com/confighub/installer/internal/sign"
 	"github.com/confighub/installer/pkg/api"
 )
 
@@ -36,10 +35,10 @@ import (
 // Most callers should use PullToWorkDir instead — it wraps Pull with an
 // atomic-rename pattern so a failed fetch never leaves the prior
 // <workDir>/package/ in an indeterminate state.
-func Pull(ctx context.Context, ref, dest string) (string, error) {
+func (reg Registry) Pull(ctx context.Context, ref, dest string) (string, error) {
 	switch {
 	case strings.HasPrefix(ref, "oci://"):
-		return pullOCI(ctx, strings.TrimPrefix(ref, "oci://"), dest)
+		return reg.pullOCI(ctx, strings.TrimPrefix(ref, "oci://"), dest)
 	case strings.HasPrefix(ref, "file://"):
 		return pullLocal(strings.TrimPrefix(ref, "file://"), dest)
 	default:
@@ -57,8 +56,8 @@ func Pull(ctx context.Context, ref, dest string) (string, error) {
 //
 // On success, <workDir>/package/installer.yaml is guaranteed to exist.
 // Returns the absolute path to <workDir>/package/.
-func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
-	staged, err := StagePull(ctx, ref, workDir)
+func (reg Registry) PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
+	staged, err := reg.StagePull(ctx, ref, workDir)
 	if err != nil {
 		return "", err
 	}
@@ -73,6 +72,7 @@ type StagedPull struct {
 	// Root is the fetched package's directory, which Load reads.
 	Root string
 
+	reg     Registry
 	ref     string
 	workDir string
 	stage   string
@@ -80,7 +80,7 @@ type StagedPull struct {
 
 // StagePull fetches ref into a temp directory inside workDir, leaving
 // <workDir>/package/ as it is. Promote puts it in place; Discard removes it.
-func StagePull(ctx context.Context, ref, workDir string) (*StagedPull, error) {
+func (reg Registry) StagePull(ctx context.Context, ref, workDir string) (*StagedPull, error) {
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func StagePull(ctx context.Context, ref, workDir string) (*StagedPull, error) {
 	if err != nil {
 		return nil, err
 	}
-	loaded, err := Pull(ctx, ref, stage)
+	loaded, err := reg.Pull(ctx, ref, stage)
 	if err != nil {
 		_ = os.RemoveAll(stage)
 		return nil, err
@@ -101,7 +101,7 @@ func StagePull(ctx context.Context, ref, workDir string) (*StagedPull, error) {
 		_ = os.RemoveAll(stage)
 		return nil, fmt.Errorf("pulled artifact missing %s: %w", ManifestFile, err)
 	}
-	return &StagedPull{Root: loaded, ref: ref, workDir: absWork, stage: stage}, nil
+	return &StagedPull{Root: loaded, reg: reg, ref: ref, workDir: absWork, stage: stage}, nil
 }
 
 // Discard removes the staged package, if Promote hasn't put it in place.
@@ -150,7 +150,7 @@ func (s *StagedPull) Promote(ctx context.Context) (string, error) {
 	s.Root = finalDest
 	s.Discard()
 
-	if err := writeSource(ctx, s.ref, s.workDir); err != nil {
+	if err := s.reg.writeSource(ctx, s.ref, s.workDir); err != nil {
 		return "", err
 	}
 	return finalDest, nil
@@ -164,11 +164,11 @@ const SourceFile = "source.yaml"
 // <workDir>/out/record/source.yaml, which upload carries in the installer
 // record. A local path is made absolute, and an oci:// reference is pinned to
 // the digest it resolved to.
-func writeSource(ctx context.Context, ref, workDir string) error {
+func (reg Registry) writeSource(ctx context.Context, ref, workDir string) error {
 	spec := api.SourceSpec{Ref: ref}
 	switch {
 	case strings.HasPrefix(ref, "oci://"):
-		digest, err := ResolveManifestDigest(ctx, ref)
+		digest, err := reg.ResolveManifestDigest(ctx, ref)
 		if err != nil {
 			return fmt.Errorf("resolve the digest of %s: %w", ref, err)
 		}
@@ -242,12 +242,12 @@ func pullLocal(src, dest string) (string, error) {
 	return resolveSingleSubdir(dest), nil
 }
 
-func pullOCI(ctx context.Context, ref, dest string) (string, error) {
+func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, error) {
 	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
 		return "", err
 	}
-	repo, err := newRepo(repoRef)
+	repo, err := reg.newRepo(repoRef)
 	if err != nil {
 		return "", err
 	}
@@ -264,12 +264,12 @@ func pullOCI(ctx context.Context, ref, dest string) (string, error) {
 		return "", fmt.Errorf("digest mismatch on %s: pinned %s but registry returned %s", ref, want, desc.Digest)
 	}
 
-	// Policy gate: if ~/.config/installer/policy.yaml enforces
-	// verification, refuse to extract an unverified artifact. We verify
+	// Policy gate: if the Registry's signing policy enforces verification,
+	// refuse to extract an unverified artifact. We verify
 	// the resolved digest so a registry that returns a different artifact
 	// after our resolve can't slip past.
 	pinnedRef := joinRefForVerify(repoRef, desc.Digest.String())
-	if err := sign.EnforceVerification(ctx, pinnedRef); err != nil {
+	if err := reg.Verifier.Enforce(ctx, pinnedRef); err != nil {
 		return "", fmt.Errorf("verify %s: %w", ref, err)
 	}
 

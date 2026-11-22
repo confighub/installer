@@ -10,6 +10,7 @@ package wizard
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -45,6 +46,9 @@ type RawAnswers struct {
 	// without --set-image preserves the operator's existing
 	// overrides.
 	PriorImageOverrides map[string]string
+	// CollectorStderr receives the package collector's stderr; nil
+	// discards it.
+	CollectorStderr io.Writer
 }
 
 // Result bundles the documents the wizard produces. Facts is nil if the
@@ -105,6 +109,7 @@ func Run(ctx context.Context, pkg *api.Package, raw RawAnswers, packageDir, outD
 		Base:               sel.Spec.Base,
 		SelectedComponents: sel.Spec.Components,
 		InputValues:        values,
+		Stderr:             raw.CollectorStderr,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("collector: %w", err)
