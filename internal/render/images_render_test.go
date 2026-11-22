@@ -81,10 +81,9 @@ spec:
 	}
 
 	res, err := render.Render(context.Background(), render.Options{
-		Loaded:            loaded,
-		Selection:         sel,
-		Inputs:            inputs,
-		TransformerBinary: installerBin,
+		Loaded:    loaded,
+		Selection: sel,
+		Inputs:    inputs,
 	}, filepath.Join(t.TempDir(), "out"))
 	if err != nil {
 		t.Fatalf("Render: %v", err)

@@ -12,8 +12,8 @@
 //     Inputs (Go templates) and writing them to
 //     out/compose/{transformers,validators}.yaml as KRM function configs.
 //  3. Shelling out to `kustomize build --enable-exec --enable-alpha-plugins`,
-//     which invokes `installer transformer` (via a wrapper script in
-//     out/compose/) to run each function group in process.
+//     which runs the transform step (a wrapper script in out/compose/
+//     that re-executes the installer) to run each function group in process.
 //  4. Splitting the resulting multi-doc YAML into per-resource files with
 //     deterministic naming, written to out/manifests/.
 //  5. Persisting the resolved FunctionChain alongside selection.yaml and
@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/transform"
 	"github.com/confighub/installer/pkg/api"
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/kustomize/api/types"
@@ -43,8 +45,10 @@ type composeInputs struct {
 	// written into the ConfigHubTransformers functionConfig so the transform
 	// pass can guarantee a Namespace resource exists. Empty disables that
 	// guarantee.
-	Namespace         string
-	TransformerBinary string // absolute path to the installer binary
+	Namespace string
+	// TransformerCommand is the shell command line the transform wrapper
+	// execs, as transformerWrapperCommand builds it.
+	TransformerCommand string
 	// Images is the images: block of the composed kustomization: the
 	// --set-image overrides, as applyImageOverrides returns them.
 	Images []types.Image
@@ -56,8 +60,8 @@ type composeInputs struct {
 // sets the --set-image overrides in its images: block, wires
 // transformers.yaml as a transformer and validators.yaml as a validator
 // (when each is non-empty), and writes a one-line
-// installer-transformer.sh wrapper script that execs the running installer
-// binary's transformer subcommand.
+// installer-transformer.sh wrapper script that runs the transform step:
+// by default, the running program re-executed with INSTALLER_RUN_TRANSFORMER=1.
 //
 // composeDir is the only directory written; callers persist it under
 // <work-dir>/out/compose/ so `cd out/compose && kustomize build` reproduces
@@ -114,7 +118,7 @@ func composeKustomization(in composeInputs, composeDir string) error {
 	// kustomization's validators: list — `installer transformer`
 	// supports it.
 	if needsWrapper {
-		if err := writeTransformerWrapper(composeDir, in.TransformerBinary); err != nil {
+		if err := writeTransformerWrapper(composeDir, in.TransformerCommand); err != nil {
 			return err
 		}
 	}
@@ -182,13 +186,46 @@ func writeKRMFunctionConfig(composeDir, filename, kind, name, namespace string, 
 }
 
 // writeTransformerWrapper writes a one-line shell wrapper that execs the
-// installer binary's transformer subcommand. The absolute path is baked in
-// at render time so `cd out/compose && kustomize build` reproduces without
-// any extra env setup; users can edit the wrapper to point elsewhere if the
-// binary moves.
-func writeTransformerWrapper(composeDir, installerBin string) error {
-	body := fmt.Sprintf("#!/bin/sh\nexec %q transformer\n", installerBin)
+// transform step's command. The absolute path is baked in at render time so
+// `cd out/compose && kustomize build` reproduces without any extra env setup;
+// users can edit the wrapper to point elsewhere if the binary moves.
+func writeTransformerWrapper(composeDir, command string) error {
+	body := fmt.Sprintf("#!/bin/sh\n%s\n", command)
 	return os.WriteFile(filepath.Join(composeDir, "installer-transformer.sh"), []byte(body), 0o755)
+}
+
+// transformerWrapperCommand is the shell command line the transform wrapper
+// runs: command, or by default the running program re-executed with
+// INSTALLER_RUN_TRANSFORMER=1.
+func transformerWrapperCommand(command []string) (string, error) {
+	if len(command) > 0 {
+		quoted := make([]string, len(command))
+		for i, arg := range command {
+			quoted[i] = shellQuote(arg)
+		}
+		return "exec " + strings.Join(quoted, " "), nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate the running program to run the transform step: %w", err)
+	}
+	return fmt.Sprintf("%s=1 exec %s", transform.EnvRunTransformer, shellQuote(exe)), nil
+}
+
+// shellQuote double-quotes s for sh, escaping what is special inside double
+// quotes.
+func shellQuote(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\', '$', '`':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // wrapSelection returns a kustomization, to be written in dir, that

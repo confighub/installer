@@ -53,7 +53,7 @@ func TestEndToEnd_HelloApp(t *testing.T) {
 		t.Errorf("solver and wizard disagree on base")
 	}
 
-	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,
@@ -134,7 +134,7 @@ func TestComposeBuildsWithKustomizeBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wizard.Run: %v", err)
 	}
-	if _, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	if _, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: wres.Selection,
 		Inputs:    wres.Inputs,
@@ -208,7 +208,7 @@ func TestEndToEnd_KubeRay(t *testing.T) {
 	}
 	sel, inputs := wres.Selection, wres.Inputs
 
-	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,
@@ -301,7 +301,7 @@ func TestEndToEnd_GAIE(t *testing.T) {
 	}
 	sel, inputs := wres.Selection, wres.Inputs
 
-	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: sel,
 		Inputs:    inputs,
@@ -429,7 +429,7 @@ spec:
 	if err != nil {
 		t.Fatalf("wizard.Run: %v", err)
 	}
-	result, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	result, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: wres.Selection,
 		Inputs:    wres.Inputs,
@@ -492,7 +492,7 @@ spec:
 	manifestsDir := filepath.Join(outDir, "manifests")
 	writeFile(t, filepath.Join(manifestsDir, "Kptfile"), "apiVersion: kpt.dev/v1\nkind: Kptfile\n")
 	writeFile(t, filepath.Join(pkgDir, "bases/default/app.env"), "GREETING=bye\n")
-	if _, err := render.Render(context.Background(), render.Options{TransformerBinary: installerBin,
+	if _, err := render.Render(context.Background(), render.Options{
 		Loaded:    loaded,
 		Selection: wres.Selection,
 		Inputs:    wres.Inputs,

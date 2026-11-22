@@ -67,20 +67,18 @@ Exactly one mode must be specified. Requires the cosign binary on PATH.`,
 				// Force enforcement for the duration of this verify call,
 				// even if the file says enforce:false.
 				p.Spec.Enforce = true
-				// Re-use EnforceVerification's matching logic by writing
-				// the loaded policy back via env… simpler: just iterate
-				// the entries here and call Verify per match.
+				// Every entry is tried, matching its repos or not.
 				return verifyAgainstPolicy(ctx, ref, p)
 			case key != "":
 				return sign.Verify(ctx, ref, sign.VerifyOptions{
-					TrustedKey: &api.TrustedKey{PublicKey: key},
+					TrustedKey: &api.TrustedKey{PublicKey: key}, Cosign: sign.CosignFromEnv(),
 				})
 			default:
 				if identity == "" || issuer == "" {
 					return fmt.Errorf("--identity and --issuer must both be set for keyless verification")
 				}
 				return sign.Verify(ctx, ref, sign.VerifyOptions{
-					TrustedKeyless: &api.TrustedKeyless{Identity: identity, Issuer: issuer},
+					TrustedKeyless: &api.TrustedKeyless{Identity: identity, Issuer: issuer}, Cosign: sign.CosignFromEnv(),
 				})
 			}
 		},
@@ -98,7 +96,7 @@ func verifyAgainstPolicy(ctx context.Context, ref string, p *api.SigningPolicy) 
 	}
 	var attempts []string
 	for _, k := range p.Spec.TrustedKeys {
-		if err := sign.Verify(ctx, ref, sign.VerifyOptions{TrustedKey: &k}); err == nil {
+		if err := sign.Verify(ctx, ref, sign.VerifyOptions{TrustedKey: &k, Cosign: sign.CosignFromEnv()}); err == nil {
 			fmt.Printf("Verified %s via trustedKey %s\n", ref, k.PublicKey)
 			return nil
 		} else {
@@ -106,7 +104,7 @@ func verifyAgainstPolicy(ctx context.Context, ref string, p *api.SigningPolicy) 
 		}
 	}
 	for _, k := range p.Spec.TrustedKeyless {
-		if err := sign.Verify(ctx, ref, sign.VerifyOptions{TrustedKeyless: &k}); err == nil {
+		if err := sign.Verify(ctx, ref, sign.VerifyOptions{TrustedKeyless: &k, Cosign: sign.CosignFromEnv()}); err == nil {
 			fmt.Printf("Verified %s via trustedKeyless %s@%s\n", ref, k.Identity, k.Issuer)
 			return nil
 		} else {

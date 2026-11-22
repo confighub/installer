@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/confighub/installer/internal/cubctx"
+	"github.com/confighub/installer/internal/hubclient"
 	"github.com/confighub/installer/internal/kustomize"
 	"github.com/confighub/installer/internal/userconfig"
 )
@@ -247,7 +248,7 @@ func fetchExampleData(ctx context.Context, space string, example canonicalExampl
 	if err != nil {
 		return nil, err
 	}
-	found, err := existingSpace(ctx, c, space)
+	found, err := hubclient.ExistingSpace(ctx, c, space)
 	if err != nil {
 		return nil, err
 	}

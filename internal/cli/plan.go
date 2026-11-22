@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/confighub/sdk/core/cubapi"
 	goclientnew "github.com/confighub/sdk/core/openapi/goclient-new"
 	"github.com/spf13/cobra"
 
 	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 func newPlanCmd() *cobra.Command {
@@ -35,26 +35,32 @@ Plan writes nothing.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := commandContext(cmd)
 			flags.noteChanged(cmd)
-			prepared, err := prepareUpload(ctx, flags)
+			inst, err := newInstaller(ctx, false)
 			if err != nil {
 				return err
 			}
+			plan, err := prepareUpload(ctx, inst, flags)
+			if err != nil {
+				return err
+			}
+			// A failed dry run still shows the packages previewed before it.
+			previewErr := inst.PreviewUpload(ctx, plan, installer.PreviewOptions{Mutations: true})
 			var results []*goclientnew.UploadResult
-			for i := range prepared.requests {
-				pkg := prepared.packages[i]
-				req, omitted := prepared.dryRunRequest(i)
-				result, err := cubapi.Upload(ctx, prepared.client, req, true, cubapi.WithUploadMutations)
-				if err != nil {
-					return fmt.Errorf("plan %s: %w", pkg.Name, err)
+			for _, pkg := range plan.Packages {
+				if pkg.Preview == nil {
+					break
 				}
-				upload.Report(os.Stdout, result, true)
-				if len(omitted) > 0 {
-					fmt.Printf("  DependsOn %s is left out of this dry run: upload creates those Components first\n", strings.Join(omitted, ", "))
+				upload.Report(os.Stdout, pkg.Preview, true)
+				if len(pkg.PreviewOmitted) > 0 {
+					fmt.Printf("  DependsOn %s is left out of this dry run: upload creates those Components first\n", strings.Join(pkg.PreviewOmitted, ", "))
 				}
-				if err := upload.ReportImages(os.Stdout, pkg); err != nil {
+				if err := upload.ReportImages(os.Stdout, upload.Package{ManifestsDir: pkg.ManifestsDir, SpaceSlug: pkg.Space}); err != nil {
 					return err
 				}
-				results = append(results, result)
+				results = append(results, pkg.Preview)
+			}
+			if previewErr != nil {
+				return previewErr
 			}
 			fmt.Printf("\n%s\n", upload.Summarize(results).Plan())
 			return nil

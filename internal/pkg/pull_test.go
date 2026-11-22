@@ -26,7 +26,7 @@ func TestPullToWorkDirRecordsSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := PullToWorkDir(context.Background(), rel, workDir); err != nil {
+	if _, err := (Registry{}).PullToWorkDir(context.Background(), rel, workDir); err != nil {
 		t.Fatalf("PullToWorkDir: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(workDir, "out", api.RecordDir, SourceFile))

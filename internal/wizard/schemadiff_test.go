@@ -133,19 +133,19 @@ func TestDiffComponents_EmptyPriorMatchesEmptyDefaults(t *testing.T) {
 }
 
 func TestFormatNewRequiredHint(t *testing.T) {
-	hint := FormatNewRequiredHint("/tmp/wd", []api.Input{
+	hint := FormatNewRequiredHint("installer", "/tmp/wd", []api.Input{
 		{Name: "license", Type: "string", Prompt: "Your license key", Required: true},
 		{Name: "port", Type: "int", Required: true},
 	})
 	if hint == "" {
 		t.Fatal("expected non-empty hint")
 	}
-	for _, want := range []string{"license", "port", "Your license key", "/tmp/wd", "installer wizard"} {
+	for _, want := range []string{"license", "port", "Your license key", "installer setup --work-dir /tmp/wd", "--input <name>=<value>"} {
 		if !contains(hint, want) {
 			t.Errorf("hint missing %q\n%s", want, hint)
 		}
 	}
-	if FormatNewRequiredHint("/wd", nil) != "" {
+	if FormatNewRequiredHint("installer", "/wd", nil) != "" {
 		t.Errorf("empty list should produce empty hint")
 	}
 }

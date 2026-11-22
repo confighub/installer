@@ -1,0 +1,266 @@
+===== installer upload --work-dir $FIRST --space hello --yes =====
+--- stdout
+== hello-app@0.1.0 → Space hello ==
+Space hello (Create)
+  Create    installer
+  Create    deployment-demo-hello-app
+  Create    ingress-demo-hello-app
+  Create    namespace-demo
+  Create    service-demo-hello-app
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:upload-hello --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 5 created, 0 updated, 0 emptied, 0 revived, 0 adopted.
+
+===== re-enter from the record in a named Space, with no package =====
+
+===== installer setup --space hello --work-dir $SECOND --non-interactive --input team=infra =====
+--- stdout
+Pulling $PKG_V1, which the installer record in Space hello says the install came from.
+Loaded prior install state from confighub.
+Wizard wrote $SECOND/out/record/selection.yaml and inputs.yaml
+Base: default; components: [ingress]
+Namespace: demo
+Rendered 4 manifest(s) to $SECOND/out/manifests
+Next: installer upload --work-dir $SECOND
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+GET /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000004/data
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+GET /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000004/data
+
+===== tree re-entered record =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: infra
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: ingress-demo-hello-app.yaml
+      slug: ingress-demo-hello-app
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+  components:
+    - ingress
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V1
+
+===== installer upload --work-dir $SECOND --space hello --yes =====
+--- stdout
+== hello-app@0.1.0 → Space hello ==
+Space hello (Update)
+  Update    installer
+  Unchanged 4 Unit(s)
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:upload-hello --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted.
+
+===== re-enter from the package's only install, found across the organization =====
+
+===== installer setup --pull $PKG_V1 --work-dir $THIRD --non-interactive =====
+--- stdout
+Loaded prior install state from confighub.
+Wizard wrote $THIRD/out/record/selection.yaml and inputs.yaml
+Base: default; components: [ingress]
+Namespace: demo
+Rendered 4 manifest(s) to $THIRD/out/manifests
+Next: installer upload --work-dir $THIRD
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app'
+GET /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000004/data
+
+===== tree found record =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: infra
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: ingress-demo-hello-app.yaml
+      slug: ingress-demo-hello-app
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+  components:
+    - ingress
+--- source.yaml (content not compared)
+
+===== a Space with no installer record is a fresh install =====
+
+===== installer setup --space elsewhere --pull $PKG_V1 --work-dir $FRESH --non-interactive --namespace fresh =====
+--- stdout
+Wizard wrote $FRESH/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: fresh
+Rendered 3 manifest(s) to $FRESH/out/manifests
+Next: installer upload --work-dir $FRESH
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'elsewhere'
+
+===== installer setup --space elsewhere --work-dir $NOPULL --non-interactive =====
+--- stdout
+--- stderr
+Error: Space elsewhere does not exist or has no installer record; pass --pull <ref> to install a package
+--- error
+Space elsewhere does not exist or has no installer record; pass --pull <ref> to install a package
+
+===== ConfigHub requests =====
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'elsewhere'
+
+===== several installs are not chosen between =====
+
+===== installer upload --work-dir $FIRST --space hello-two --yes =====
+--- stdout
+== hello-app@0.1.0 → Space hello-two ==
+Space hello-two (Create)
+  Create    installer
+  Create    deployment-demo-hello-app
+  Create    ingress-demo-hello-app
+  Create    namespace-demo
+  Create    service-demo-hello-app
+
+Revert this upload of hello-two with:
+  cub unit update --patch --space hello-two --restore Before:ChangeSet:upload-hello-two --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 5 created, 0 updated, 0 emptied, 0 revived, 0 adopted.
+
+===== installer setup --pull $PKG_V1 --work-dir $AMBIGUOUS --non-interactive --namespace x =====
+--- stdout
+Wizard wrote $AMBIGUOUS/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: x
+Rendered 3 manifest(s) to $AMBIGUOUS/out/manifests
+Next: installer upload --work-dir $AMBIGUOUS
+--- stderr
+warning: fetch the installer record for hello-app from ConfigHub: hello-app is installed in 2 Spaces (hello, hello-two); pass --space to choose one
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app'
+
+===== a record that names no source =====
+
+===== installer setup --space nosource --work-dir $NOSOURCE --non-interactive =====
+--- stdout
+--- stderr
+Error: the installer record in Space nosource doesn't say where its package came from; pass --pull <ref>
+--- error
+the installer record in Space nosource doesn't say where its package came from; pass --pull <ref>
+
+===== ConfigHub requests =====
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'nosource'
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND SpaceID = '00000000-0000-0000-0000-000000000017'
+GET /space/00000000-0000-0000-0000-000000000017/unit/00000000-0000-0000-0000-000000000019/data
+
+===== show, for a Space holding two packages' records =====
+
+===== installer show --space shared =====
+--- stdout
+--- stderr
+Error: Space shared holds installer records of 2 packages; name the package: `installer show <package> --space shared`
+--- error
+Space shared holds installer records of 2 packages; name the package: `installer show <package> --space shared`

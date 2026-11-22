@@ -1,7 +1,7 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-package cli
+package transform
 
 import (
 	"context"
@@ -44,7 +44,7 @@ functionConfig:
           - name: set-namespace
             args: ["demo"]
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -104,7 +104,7 @@ functionConfig:
           - name: set-namespace
             args: ["demo"]
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -161,7 +161,7 @@ functionConfig:
           - name: set-namespace
             args: ["demo"]
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -208,7 +208,7 @@ functionConfig:
         invocations:
           - name: vet-merge-keys
 `
-	out, err := runTransformer(context.Background(), []byte(input))
+	out, err := Run(context.Background(), []byte(input))
 	if err != nil {
 		t.Fatalf("runTransformer: %v", err)
 	}
@@ -244,7 +244,7 @@ functionConfig:
   spec:
     groups: []
 `
-	_, err := runTransformer(context.Background(), []byte(input))
+	_, err := Run(context.Background(), []byte(input))
 	if err == nil {
 		t.Fatal("expected error for unknown functionConfig kind")
 	}
@@ -261,7 +261,7 @@ func TestTransformer_RejectsMissingFunctionConfig(t *testing.T) {
 kind: ResourceList
 items: []
 `
-	_, err := runTransformer(context.Background(), []byte(input))
+	_, err := Run(context.Background(), []byte(input))
 	if err == nil {
 		t.Fatal("expected error when functionConfig is missing")
 	}

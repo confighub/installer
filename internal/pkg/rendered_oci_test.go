@@ -87,7 +87,7 @@ func TestPublishRenderedOCILocalLayout(t *testing.T) {
 	opts := testRenderedOCIOptions(t)
 	opts.Destination = filepath.Join(t.TempDir(), "rendered.oci")
 
-	result, err := PublishRenderedOCI(context.Background(), opts)
+	result, err := Registry{}.PublishRenderedOCI(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}

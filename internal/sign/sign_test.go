@@ -132,26 +132,26 @@ func TestMatchEntries(t *testing.T) {
 	}
 }
 
-func TestEnforceVerification_NoPolicy(t *testing.T) {
+func TestEnforce_NoPolicy(t *testing.T) {
 	t.Setenv(EnvPolicyPath, filepath.Join(t.TempDir(), "absent.yaml"))
-	if err := EnforceVerification(t.Context(), "oci://anything:v1"); err != nil {
+	if err := enforceFromEnv(t, "oci://anything:v1"); err != nil {
 		t.Fatalf("absent policy should be a no-op: %v", err)
 	}
 }
 
-func TestEnforceVerification_DisabledPolicy(t *testing.T) {
+func TestEnforce_DisabledPolicy(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "policy.yaml")
 	if err := os.WriteFile(p, []byte(policyYAMLNoEnforce), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(EnvPolicyPath, p)
-	if err := EnforceVerification(t.Context(), "oci://anything:v1"); err != nil {
+	if err := enforceFromEnv(t, "oci://anything:v1"); err != nil {
 		t.Fatalf("disabled policy should be a no-op: %v", err)
 	}
 }
 
-func TestEnforceVerification_NoMatchingEntry(t *testing.T) {
+func TestEnforce_NoMatchingEntry(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "policy.yaml")
 	if err := os.WriteFile(p, []byte(`apiVersion: installer.confighub.com/v1alpha1
@@ -165,7 +165,7 @@ spec:
 		t.Fatal(err)
 	}
 	t.Setenv(EnvPolicyPath, p)
-	err := EnforceVerification(t.Context(), "oci://other.io/foo:v1")
+	err := enforceFromEnv(t, "oci://other.io/foo:v1")
 	if err == nil || !strings.Contains(err.Error(), "no trust entry matches") {
 		t.Fatalf("expected no-match error, got %v", err)
 	}
@@ -199,4 +199,15 @@ func TestExpandTilde(t *testing.T) {
 	if got, _ := expandTilde("/abs/path"); got != "/abs/path" {
 		t.Errorf("non-tilde unchanged: %q", got)
 	}
+}
+
+// enforceFromEnv enforces the policy the CLI would load, as the installer's
+// commands do.
+func enforceFromEnv(t *testing.T, ref string) error {
+	t.Helper()
+	p, err := LoadPolicy()
+	if err != nil {
+		return err
+	}
+	return (&Verifier{Policy: p, Cosign: CosignFromEnv()}).Enforce(t.Context(), ref)
 }

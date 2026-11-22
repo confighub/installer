@@ -1,0 +1,156 @@
+===== no package and no --pull =====
+
+===== installer setup --work-dir $EMPTY --non-interactive --namespace x =====
+--- stdout
+--- stderr
+Error: no package found in $EMPTY/package — pass --pull <ref> to fetch one, --space <slug> to re-enter an install from its installer record, or `installer pull <ref> --work-dir $EMPTY` first
+--- error
+no package found in $EMPTY/package — pass --pull <ref> to fetch one, --space <slug> to re-enter an install from its installer record, or `installer pull <ref> --work-dir $EMPTY` first
+
+===== a --pull that cannot be read =====
+
+===== installer setup --work-dir $BADPULL --pull $PKG_V1/missing --non-interactive --namespace x =====
+--- stdout
+--- stderr
+Error: pull $PKG_V1/missing: stat $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
+--- error
+pull $PKG_V1/missing: stat $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
+
+===== fresh install without --namespace =====
+
+===== installer setup --pull $PKG_V1 --work-dir $NONS --non-interactive =====
+--- stdout
+--- stderr
+Error: --namespace is required in non-interactive mode
+--- error
+--namespace is required in non-interactive mode
+
+===== --components with --select =====
+
+===== installer setup --pull $PKG_V1 --work-dir $BOTH --non-interactive --namespace x --components all --select monitoring =====
+--- stdout
+--- stderr
+Error: --components and --select are mutually exclusive
+--- error
+--components and --select are mutually exclusive
+
+===== --reuse with nothing to reuse =====
+
+===== installer setup --pull $PKG_V1 --work-dir $NOREUSE --reuse =====
+--- stdout
+--- stderr
+Error: --reuse requires a prior install — none found in this work-dir
+--- error
+--reuse requires a prior install — none found in this work-dir
+
+===== an unknown component =====
+
+===== installer setup --pull $PKG_V1 --work-dir $NOCOMP --non-interactive --namespace x --select no-such-component =====
+--- stdout
+--- stderr
+Error: resolve selection: unknown component "no-such-component" (declared in hello-app)
+--- error
+resolve selection: unknown component "no-such-component" (declared in hello-app)
+
+===== a malformed --input =====
+
+===== installer setup --pull $PKG_V1 --work-dir $BADINPUT --non-interactive --namespace x --input team =====
+--- stdout
+--- stderr
+Error: --input "team" must be key=value
+--- error
+--input "team" must be key=value
+
+===== a malformed --set-image =====
+
+===== installer setup --pull $PKG_V1 --work-dir $BADIMAGE --non-interactive --namespace x --set-image nginxdemos/hello =====
+--- stdout
+--- stderr
+Error: --set-image "nginxdemos/hello" must be name=ref (both non-empty)
+--- error
+--set-image "nginxdemos/hello" must be name=ref (both non-empty)
+
+===== upgrade adds a required input =====
+
+===== installer setup --pull $PKG_REQUIRED --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+--- stderr
+Error: the new package adds 1 required input(s) that the prior install did not answer:
+  - owner (string): Who owns the app
+pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to be asked.
+--- error
+the new package adds 1 required input(s) that the prior install did not answer:
+  - owner (string): Who owns the app
+pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to be asked.
+
+===== tree package after the failed upgrade =====
+--- bases/default/deployment.yaml (content not compared)
+--- bases/default/kustomization.yaml (content not compared)
+--- bases/default/namespace.yaml (content not compared)
+--- bases/default/service.yaml (content not compared)
+--- components/ingress-tls/kustomization.yaml (content not compared)
+--- components/ingress/ingress.yaml (content not compared)
+--- components/ingress/kustomization.yaml (content not compared)
+--- components/monitoring/kustomization.yaml (content not compared)
+--- components/monitoring/servicemonitor.yaml (content not compared)
+--- installer.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: hello-app
+installerMetadata:
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: A minimal app — Namespace, Deployment, Service.
+
+  inputs:
+    - name: team
+      type: string
+      default: core
+      description: Team that owns the app.
+
+  components:
+    - name: monitoring
+      path: components/monitoring
+      description: Adds a ServiceMonitor for Prometheus scraping.
+      externalRequires:
+        - kind: CRD
+          name: servicemonitors.monitoring.coreos.com
+          suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+    - name: ingress
+      path: components/ingress
+      description: Adds an Ingress so the app is reachable from outside the cluster.
+    - name: ingress-tls
+      path: components/ingress-tls
+      description: Annotates the Ingress to request a cert from cert-manager.
+      requires: [ingress]
+      externalRequires:
+        - kind: WebhookCertProvider
+          name: cert-manager
+          issuerKind: ClusterIssuer
+
+  transformers:
+    # Rename the Namespace resource and set metadata.namespace on every
+    # namespace-scoped resource. The namespace comes from the wizard's
+    # --namespace flag.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set the namespace on every namespaced resource.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+
+===== upgrade changes an input's type =====
+
+===== installer setup --pull $PKG_RETYPED --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+--- stderr
+Error: input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again
+--- error
+input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again

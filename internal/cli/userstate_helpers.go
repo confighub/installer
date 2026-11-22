@@ -8,8 +8,8 @@ import (
 	"fmt"
 
 	"github.com/confighub/installer/internal/cubctx"
-	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/internal/userconfig"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 // recordedPackages is the allowlist of package names whose upload
@@ -29,9 +29,9 @@ var recordedPackages = map[string]bool{
 //
 // Used by `installer upload` so `installer new` can locate the
 // kubernetes-resources package without operator intervention.
-func recordUploadInUserState(ctx context.Context, packages []upload.Package) error {
-	var parent upload.Package
-	for _, pkg := range packages {
+func recordUploadInUserState(ctx context.Context, result *installer.UploadResult) error {
+	var parent installer.UploadedPackage
+	for _, pkg := range result.Packages {
 		if pkg.IsParent {
 			parent = pkg
 		}
@@ -56,12 +56,12 @@ func recordUploadInUserState(ctx context.Context, packages []upload.Package) err
 		PackageVersion: parent.Version,
 		OrganizationID: cc.OrganizationID,
 		Server:         cc.ServerURL,
-		SpaceSlug:      parent.SpaceSlug,
+		SpaceSlug:      parent.Space,
 	})
 	if err := userconfig.Save(path, state); err != nil {
 		return err
 	}
 	fmt.Printf("Recorded %s install in %s (org %s, space %s)\n",
-		parent.Name, path, cc.OrganizationID, parent.SpaceSlug)
+		parent.Name, path, cc.OrganizationID, parent.Space)
 	return nil
 }

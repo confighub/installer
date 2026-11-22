@@ -27,7 +27,11 @@ prior <work-dir>/package/ intact.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			dir, err := ipkg.PullToWorkDir(ctx, args[0], workDir)
+			reg, err := registry(true)
+			if err != nil {
+				return err
+			}
+			dir, err := reg.PullToWorkDir(ctx, args[0], workDir)
 			if err != nil {
 				return err
 			}

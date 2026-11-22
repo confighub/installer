@@ -23,6 +23,9 @@ type Options struct {
 	// (whenComponent). When nil, optional deps are NOT followed and are
 	// listed in Result.SkippedOptional so the caller can surface them.
 	Selection *api.Selection
+	// Verifier checks each resolved dependency's manifest before it is
+	// pinned in the lock; nil checks none.
+	Verifier *sign.Verifier
 }
 
 // Result is what Resolve returns.
@@ -49,6 +52,7 @@ type Result struct {
 func Resolve(ctx context.Context, pkg *api.Package, src Source, opts Options) (*Result, error) {
 	r := &resolver{
 		src:             src,
+		verifier:        opts.Verifier,
 		selected:        selectedComponents(opts.Selection),
 		hasSelection:    opts.Selection != nil,
 		rootConflicts:   pkg.Spec.Conflicts,
@@ -108,6 +112,7 @@ type constraintEntry struct {
 
 type resolver struct {
 	src             Source
+	verifier        *sign.Verifier
 	selected        map[string]struct{}
 	hasSelection    bool
 	rootConflicts   []api.ConflictRef
@@ -196,7 +201,7 @@ func (r *resolver) visit(ctx context.Context, parent *api.Package, parentName st
 	// the resolved manifest digest before pinning it in the lock. We
 	// build a digest-pinned ref so retagging upstream cannot bypass.
 	pinned := pinDigestRef(ref, res.ManifestDigest)
-	if err := sign.EnforceVerification(ctx, pinned); err != nil {
+	if err := r.verifier.Enforce(ctx, pinned); err != nil {
 		return fmt.Errorf("%s/%s: verify %s: %w", parentName, dep.Name, pinned, err)
 	}
 

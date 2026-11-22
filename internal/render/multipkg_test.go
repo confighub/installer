@@ -130,7 +130,7 @@ func TestRenderDependencies(t *testing.T) {
 		return writeDepPackage(t, destDir), nil
 	}
 
-	results, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
+	results, err := render.RenderDependencies(ctx, render.DepsOptions{
 		Lock:         lock,
 		ParentInputs: parentInputs,
 		WorkDir:      work,
@@ -202,7 +202,7 @@ func TestRenderDependenciesNamespaceFallbackToParent(t *testing.T) {
 		},
 	}
 
-	results, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
+	results, err := render.RenderDependencies(ctx, render.DepsOptions{
 		Lock:         lock,
 		ParentInputs: parentInputs,
 		WorkDir:      work,
@@ -246,7 +246,7 @@ func TestRenderDependenciesDeterministic(t *testing.T) {
 	}
 	run := func() map[string]string {
 		work := t.TempDir()
-		_, err := render.RenderDependencies(ctx, render.DepsOptions{TransformerBinary: installerBin,
+		_, err := render.RenderDependencies(ctx, render.DepsOptions{
 			Lock:         lock,
 			ParentInputs: parentInputs,
 			WorkDir:      work,

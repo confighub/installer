@@ -513,10 +513,10 @@ Setup's schema-diff machinery diffs your old vs new schema:
 
 - New input with default → silently adopted.
 - New required input without default → operator prompted (or
-  fail-fast in non-interactive mode).
+  fail-fast in non-interactive mode unless `--input` answers it).
 - Removed input → silently dropped.
-- Changed input type → setup fails, operator must re-run setup
-  interactively.
+- Changed input type → operator prompted again (or fail-fast in
+  non-interactive mode unless `--input` answers it).
 - New `default: true` component → adopted only if operator's prior
   selection matched the old default preset.
 

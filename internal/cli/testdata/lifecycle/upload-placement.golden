@@ -1,0 +1,463 @@
+===== an existing Space keeps its Component and Variant =====
+
+===== installer upload --work-dir $WORK --space hello --yes --target tgt --changeset cs --layer App --environment Prod --region r1 --owner Eng --space-label team=a --space-annotation note=x --unit-label l=1 --unit-annotation a=2 =====
+--- stdout
+== hello-app@0.1.0 → Space hello ==
+Space hello (Update)
+  Create    installer
+  Create    deployment-demo-hello-app
+  Create    namespace-demo
+  Create    service-demo-hello-app
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:cs --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 4 created, 0 updated, 0 emptied, 0 revived, 0 adopted.
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=Slug = 'cs' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 'tgt' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+POST /upload
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetID": "00000000-0000-0000-0000-000000000003",
+    "Components": [
+      {
+        "Name": "custom",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceAnnotations": {
+          "note": "x"
+        },
+        "SpaceLabels": {
+          "Component": "custom",
+          "Environment": "Prod",
+          "Layer": "App",
+          "Owner": "Eng",
+          "Region": "r1",
+          "Variant": "prod",
+          "team": "a"
+        },
+        "TargetID": "00000000-0000-0000-0000-000000000002",
+        "UnitAnnotations": {
+          "a": "2"
+        },
+        "UnitLabels": {
+          "l": "1"
+        }
+      }
+    ],
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+    inputs:
+      namespace: demo
+      values:
+        team: core
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include_hidden=* & where=SpaceID = '00000000-0000-0000-0000-000000000001' AND Labels.UploadSource = 'hello-app' AND Annotations.UploadResource = 'AppConfig/YAML/installer'
+PATCH /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000007
+  body: {"HiddenReason":"InstallerRecord"}
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=ChangeSetID = '00000000-0000-0000-0000-000000000003'
+
+===== ConfigHub state =====
+Components: custom
+Space hello
+  labels: {Component=custom, Environment=Prod, Layer=App, Namespace=demo, Owner=Eng, Region=r1, Variant=prod, team=a}
+  annotations: {note=x}
+  release target: 00000000-0000-0000-0000-000000000002
+  Unit installer labels={UploadSource=hello-app, l=1} annotations={UploadResource=AppConfig/YAML/installer, a=2} hidden=InstallerRecord
+  Unit deployment-demo-hello-app labels={UploadSource=hello-app, l=1} annotations={UploadResource=file/manifests/deployment-demo-hello-app.yaml, a=2}
+  Unit namespace-demo labels={UploadSource=hello-app, l=1} annotations={UploadResource=file/manifests/namespace-demo.yaml, a=2}
+  Unit service-demo-hello-app labels={UploadSource=hello-app, l=1} annotations={UploadResource=file/manifests/service-demo-hello-app.yaml, a=2}
+
+===== flags override them =====
+
+===== installer plan --work-dir $WORK --space hello --component renamed --variant dev --target other/t2 =====
+--- stdout
+Space hello (Unchanged)
+  Unchanged 4 Unit(s)
+
+Images in hello (post-render):
+      Deployment/hello-app [app] nginxdemos/hello:plain-text
+
+No changes.
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & select=SpaceID,Slug & where=Slug = 'other'
+GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 't2' AND SpaceID = '00000000-0000-0000-0000-000000000004'
+POST /upload ? dry_run=true & include=Mutations
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "Components": [
+      {
+        "Name": "renamed",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "renamed",
+          "Variant": "dev"
+        },
+        "TargetID": "00000000-0000-0000-0000-000000000005"
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+    inputs:
+      namespace: demo
+      values:
+        team: core
+
+===== a new Space's Target and ChangeSet named by Space =====
+
+===== installer plan --work-dir $WORK --space fresh --target other/t2 --changeset hello/cs =====
+--- stdout
+Space fresh (Create)
+  Create    installer
+  Create    deployment-demo-hello-app
+  Create    namespace-demo
+  Create    service-demo-hello-app
+
+Images in fresh (post-render):
+      Deployment/hello-app [app] nginxdemos/hello:plain-text
+
+Plan: 4 to create, 0 to update, 0 to empty, 0 to revive, 0 to adopt.
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & select=SpaceID,Slug & where=Slug = 'hello'
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=Slug = 'cs' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'fresh'
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & select=SpaceID,Slug & where=Slug = 'other'
+GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 't2' AND SpaceID = '00000000-0000-0000-0000-000000000004'
+POST /upload ? dry_run=true & include=Mutations
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetID": "00000000-0000-0000-0000-000000000003",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "fresh",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        },
+        "TargetID": "00000000-0000-0000-0000-000000000005"
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+    inputs:
+      namespace: demo
+      values:
+        team: core
+
+===== refusals =====
+
+===== installer plan --work-dir $WORK --space missing --target tgt =====
+--- stdout
+--- stderr
+Error: Target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
+--- error
+Target "tgt" names a Target in Space missing, which does not exist yet; name it as <space>/<target> or by UUID
+
+===== installer plan --work-dir $WORK --space missing --changeset cs =====
+--- stdout
+--- stderr
+Error: ChangeSet "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
+--- error
+ChangeSet "cs" names a ChangeSet in Space missing, which does not exist yet; name it as <space>/<changeset> or by UUID
+
+===== installer plan --work-dir $WORK --space hello --target no-such-target =====
+--- stdout
+--- stderr
+Error: resolve Target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
+--- error
+resolve Target no-such-target: target "no-such-target" not found in space 00000000-0000-0000-0000-000000000001
+
+===== installer plan --work-dir $WORK --space hello --space-label Component=x =====
+--- stdout
+--- stderr
+Error: --space-label "Component=x": "Component" is a reserved well-known label; set it with --component
+--- error
+--space-label "Component=x": "Component" is a reserved well-known label; set it with --component
+
+===== installer plan --work-dir $WORK --space hello --space-label novalue =====
+--- stdout
+--- stderr
+Error: --space-label "novalue" must be key=value
+--- error
+--space-label "novalue" must be key=value
+
+===== installer plan --work-dir $WORK --space hello --space-annotation TargetID=x =====
+--- stdout
+--- stderr
+Error: --space-annotation "TargetID=x": "TargetID" is reserved; set it with --target
+--- error
+--space-annotation "TargetID=x": "TargetID" is reserved; set it with --target
+
+===== installer plan --work-dir $WORK --space hello --unit-label novalue =====
+--- stdout
+--- stderr
+Error: --unit-label "novalue" must be key=value
+--- error
+--unit-label "novalue" must be key=value
+
+===== installer plan --work-dir $WORK --space hello --unit-annotation novalue =====
+--- stdout
+--- stderr
+Error: --unit-annotation "novalue" must be key=value
+--- error
+--unit-annotation "novalue" must be key=value
+
+===== installer plan --work-dir $WORK --space hello --variant  =====
+--- stdout
+--- stderr
+Error: --variant must not be empty
+--- error
+--variant must not be empty
+
+===== installer plan --work-dir $NOPKG --space hello =====
+--- stdout
+--- stderr
+Error: load package: read $NOPKG/package/installer.yaml: open $NOPKG/package/installer.yaml: no such file or directory
+--- error
+load package: read $NOPKG/package/installer.yaml: open $NOPKG/package/installer.yaml: no such file or directory
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'missing'
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'missing'
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 'no-such-target' AND SpaceID = '00000000-0000-0000-0000-000000000001'

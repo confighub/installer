@@ -4,17 +4,13 @@
 package cli
 
 import (
-	"context"
+	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/confighub/installer/internal/deps"
-	ipkg "github.com/confighub/installer/internal/pkg"
-	"github.com/confighub/installer/internal/render"
-	"github.com/confighub/installer/pkg/api"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 func newRenderCmd() *cobra.Command {
@@ -39,114 +35,21 @@ identical bytes. Re-render after editing selection.yaml or inputs.yaml.`,
 			if err != nil {
 				return err
 			}
-			pkgDir := filepath.Join(absWork, "package")
-			outDir := filepath.Join(absWork, "out")
-			recordDir := filepath.Join(outDir, api.RecordDir)
-			manifestsDir := filepath.Join(outDir, "manifests")
-
-			loaded, err := ipkg.Load(pkgDir)
-			if err != nil {
-				return fmt.Errorf("load package from %s: %w", pkgDir, err)
-			}
-
-			sel, err := readSelection(filepath.Join(recordDir, "selection.yaml"))
+			ctx := commandContext(cmd)
+			inst, err := newInstaller(ctx, true)
 			if err != nil {
 				return err
 			}
-			inputs, err := readInputs(filepath.Join(recordDir, "inputs.yaml"))
-			if err != nil {
+			if _, err := inst.Render(ctx, absWork); err != nil {
+				if errors.Is(err, installer.ErrNoLock) || errors.Is(err, installer.ErrStaleLock) {
+					return fmt.Errorf("%v; run `%s deps update --work-dir %s`", err, InvocationName(), absWork)
+				}
 				return err
 			}
-
-			facts, err := readFactsOptional(filepath.Join(recordDir, "facts.yaml"))
-			if err != nil {
-				return err
-			}
-
-			var lock *api.Lock
-			if len(loaded.Package.Spec.Dependencies) > 0 {
-				lock, err = deps.ReadLock(absWork)
-				if err != nil {
-					return err
-				}
-				if lock == nil {
-					return fmt.Errorf("package declares dependencies but %s does not exist; run `%s deps update --work-dir %s`",
-						deps.LockPath(absWork), InvocationName(), absWork)
-				}
-				if deps.IsStale(lock, loaded.Package) {
-					return fmt.Errorf("lock at %s is stale (installer.yaml's dependencies have changed); run `%s deps update --work-dir %s`",
-						deps.LockPath(absWork), InvocationName(), absWork)
-				}
-			}
-
-			ctx := context.Background()
-			result, err := render.Render(ctx, render.Options{
-				Loaded:    loaded,
-				Selection: sel,
-				Inputs:    inputs,
-				Facts:     facts,
-			}, outDir)
-			if err != nil {
-				return err
-			}
-
-			if warning := result.UnusedNamespaceWarning(inputs.Spec.Namespace); warning != "" {
-				fmt.Fprintln(os.Stderr, warning)
-			}
-			fmt.Printf("Rendered %d manifest(s) to %s\n", len(result.Manifests), manifestsDir)
-			if len(result.Secrets) > 0 {
-				fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(result.Secrets), outDir)
-			}
-			fmt.Printf("Spec docs in %s\n", recordDir)
-
-			if lock != nil {
-				depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
-					Lock:         lock,
-					ParentInputs: inputs,
-					WorkDir:      absWork,
-				})
-				if err != nil {
-					return err
-				}
-				for _, dr := range depResults {
-					fmt.Printf("Rendered dep %s: %d manifest(s) to %s\n", dr.Name, len(dr.Manifests), filepath.Join(dr.OutDir, "manifests"))
-					if len(dr.Secrets) > 0 {
-						fmt.Printf("  secrets: %d (not uploaded)\n", len(dr.Secrets))
-					}
-				}
-			}
-
 			fmt.Printf("Next: %s upload --work-dir %s --space <slug>\n", InvocationName(), absWork)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "work-dir", ".", "working directory (reads ./package + ./out/record, writes ./out/manifests)")
 	return cmd
-}
-
-func readFactsOptional(path string) (*api.Facts, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return api.ParseFacts(data)
-}
-
-func readSelection(path string) (*api.Selection, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return api.ParseSelection(data)
-}
-
-func readInputs(path string) (*api.Inputs, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return api.ParseInputs(data)
 }

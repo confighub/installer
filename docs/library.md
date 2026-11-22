@@ -1,6 +1,6 @@
 # Embedding the installer as a Go library — Design and plan
 
-Status: proposed.
+Status: phases 1–3 implemented; phase 4 proposed.
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -155,13 +155,19 @@ package installer
 // prompts, and uses the Docker credential store and no signing policy.
 type Options struct {
 	// ConfigHub is the client for reading installer records and uploading.
-	// Setup needs it when SetupOptions.Space is set; uploads always do.
+	// Without it, Setup re-enters only from the work-dir, and fails with
+	// ErrNoConfigHub when SetupOptions.Space needs a record; uploads always
+	// need it, and verify its session first (ErrNotAuthenticated).
 	ConfigHub *cubapi.Client
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
-	// ErrOut receives warnings and the stderr of the package's collector
-	// and of cosign; nil discards them.
+	// ErrOut receives warnings, unless Warn is set, and the stderr of the
+	// package's collector and of cosign; nil discards them.
 	ErrOut io.Writer
+	// Warn receives each warning, such as an installer record that can't be
+	// read, after which setup starts fresh; nil prints "warning: <err>" to
+	// ErrOut. The error may be a sentinel, for the host to add its remedy.
+	Warn func(error)
 	// Registry configures access to OCI registries.
 	Registry RegistryOptions
 	// SigningPolicy is enforced on every package pulled, including
@@ -247,7 +253,15 @@ type UploadOptions struct {
 	UnitLabels, UnitAnnotations               map[string]string
 }
 
-// PlanUpload builds the upload requests and runs them as dry runs, as
+// PrepareUpload builds one upload request per package. It reads ConfigHub
+// (Spaces, Components, the Target and ChangeSet) and writes nothing.
+func (i *Installer) PrepareUpload(ctx context.Context, opts UploadOptions) (*UploadPlan, error)
+
+// PreviewUpload runs each request as a dry run and records the result in
+// its package's Preview; Mutations asks for the paths each write changes.
+func (i *Installer) PreviewUpload(ctx context.Context, plan *UploadPlan, opts PreviewOptions) error
+
+// PlanUpload is PrepareUpload, then PreviewUpload with Mutations, as
 // `installer plan` does. It writes nothing.
 func (i *Installer) PlanUpload(ctx context.Context, opts UploadOptions) (*UploadPlan, error)
 
@@ -255,7 +269,7 @@ type UploadPlan struct {
 	Packages []PlannedPackage // each locked dependency, then the parent
 }
 
-// Emptied lists the Units the upload would empty, as <space>/<unit>.
+// Emptied lists the Units the previewed upload would empty, as <space>/<unit>.
 func (p *UploadPlan) Emptied() []string
 
 // Upload sends the plan's requests and hides each installer record Unit.
@@ -271,18 +285,28 @@ func (r *UploadResult) Failed() bool
 func (r *UploadResult) Changed() bool
 ```
 
+Preparing and previewing are separate because the CLI uses them
+differently: `installer upload --yes` sends no dry runs, `installer upload`
+previews without Mutations to find the Units it would empty, and
+`installer plan` previews with them, which costs the server more.
+
 The CLI keeps what only the CLI needs: flag parsing, deciding whether to
 pass a `Terminal` (stdin is a terminal and `--non-interactive` isn't
-given), the confirmation before emptying Units (`PlanUpload`, then
-`Emptied`, then `Upload`), the "Next:" hints, the revert hint printed from
-each Space's ChangeSet, and recording the install in
-`~/.confighub/installer/state.yaml` for `installer new`.
+given), the confirmation before emptying Units (`PrepareUpload`, then
+`PreviewUpload` and `Emptied`, then `Upload`), the "Next:" hints, the
+revert hint printed from each Space's ChangeSet, and recording the install
+in `~/.confighub/installer/state.yaml` for `installer new`.
 
 Where an error's remedy is a CLI flag, the package returns a sentinel
-error (`ErrNoPackage`, `ErrSpaceWithDependencies`, `ErrNoInstallerRecord`,
-`ErrNoRecordedSource`) wrapped with the details, and states the condition
-in terms of the options. The CLI matches it with `errors.Is` and adds the
-flag to use.
+error (`ErrNoPackage`, `ErrRecordedSourcePull`, `ErrNoInstallerRecord`,
+`ErrNoRecordedSource`, `ErrSeveralPackages`, `ErrSeveralInstalls`,
+`ErrPresetAndSelect`, `ErrNoPriorInstall`, `ErrNamespaceRequired`,
+`ErrInputTypesChanged`, `ErrNewRequiredInputs`, `ErrNoLock`,
+`ErrStaleLock`, `ErrSpaceWithDependencies`) wrapped with the details, and
+states the condition in terms of the options. The CLI matches it with
+`errors.Is` and adds the flag or command to use. Flag syntax (`--input
+k=v`, `--space-label k=v`, reserved label keys) is the CLI's to check
+before it calls the package.
 
 ### The transform step
 
@@ -338,12 +362,12 @@ BSD licensed.
 
 For cub specifically:
 
-- **kustomize versions have to line up.** The installer requires
-  `sigs.k8s.io/kustomize/api` and `kyaml` v0.19.0. cub pins kustomize
-  v5.5.0 (`api` v0.18.0, `kyaml` v0.18.1) with `replace` directives,
-  which apply to every module in cub's build, so the installer would be
-  built and run against v0.18. Either the installer builds and passes its
-  tests against v0.18, or cub's pin moves to v0.19 or later.
+- **kustomize versions have to line up.** cub pins kustomize with
+  `replace` directives, which apply to every module in cub's build. The
+  installer requires `sigs.k8s.io/kustomize/api` and `kyaml` v0.20.1
+  (kustomize v5.7.1), so cub's pin moves from v5.5.0 (`api` v0.18.0,
+  `kyaml` v0.18.1) to v5.7.1 before cub links the installer. When either
+  moves later, the other has to follow.
 - **cub builds against the SDK at its own revision, not a release.** The
   installer requires released SDK modules (`sdk/core` and
   `sdk/function-impl`), and in cub's build those are replaced by the
@@ -360,7 +384,31 @@ For cub specifically:
 
 ## Plan
 
-### Phase 1 — `pkg/installer` with the lifecycle moved in
+### Phase 1 — `pkg/installer` with the lifecycle moved in (done)
+
+Done as described below, with these differences:
+
+- Upload is `PrepareUpload`, `PreviewUpload` and `Upload`, with
+  `PlanUpload` combining the first two (see API above).
+- `Options.ConfigHub` exists; when it is nil the package falls back to the
+  cub environment's client, as the CLI did. Phase 3 removes the fallback.
+- `Options.Warn` lets the CLI add flags to warnings.
+- The shared ConfigHub lookups (finding a Space, finding an installer
+  record) are in `internal/hubclient`, which `show` and `new` use too.
+- Three upload errors name the option instead of the flag (`Target "x"
+  names a Target in Space ...`, `resolve Target x: ...`, and the same for
+  ChangeSet), and a multi-package upload prints every Space's revert hint
+  after all the reports instead of after each.
+
+Before the move, `internal/cli`'s lifecycle tests were added: they run
+setup, wizard, render, plan and upload through the cobra tree against
+`internal/fakehub`, a fake ConfigHub, and `internal/testregistry`, an
+in-memory OCI registry, and compare the output, the work-dir and every
+request sent to ConfigHub with golden files. Apart from the changes above,
+the golden files are unchanged by the move. `pkg/installer`'s own tests
+use only the public API.
+
+The original plan:
 
 - New: `pkg/installer/{installer.go, setup.go, upload.go, errors.go}` —
   `Options`, `New`, `Setup`, `Render`, `PlanUpload`, `Upload`, and the
@@ -385,7 +433,21 @@ Acceptance: every script in `test/e2e/` passes unchanged, and the CLI's
 output is unchanged apart from line order where a line moved between
 the package and the CLI.
 
-### Phase 2 — The transform step without a subcommand
+### Phase 2 — The transform step without a subcommand (done)
+
+Done as described below. `internal/transform` also has `Requested` and
+`Main`, the re-exec check and the process entry point, which
+`RunTransformerIfRequested` wraps and test binaries call directly in
+`TestMain`. `Setup` with `Render`, and `Render`, return
+`ErrNoTransformer` when the program neither called
+`RunTransformerIfRequested` nor set `TransformerCommand`. The example the
+plan names is a Go `Example` that renders `collector-app`, which has a
+function chain and an AppConfig/Env ConfigMap, with a collector that
+needs no cub context; `hello-app` is rendered through the public package
+by the other `pkg/installer` tests. The only change to the lifecycle
+golden files is the wrapper's line.
+
+The original plan:
 
 - New: `internal/transform` — `runTransformer` and the AppConfig handling
   moved from `internal/cli/transformer.go` and `internal/cli/appconfig.go`,
@@ -409,7 +471,40 @@ the package and the CLI.
 Acceptance: a program that imports only `pkg/installer` and `pkg/api`
 renders a package with a function chain and AppConfig.
 
-### Phase 3 — Process-wide settings become options
+### Phase 3 — Process-wide settings become options (done)
+
+Done as described below, with these details:
+
+- Registry access is an `ipkg.Registry` value (credentials, plain HTTP,
+  and a `sign.Verifier` holding the policy and cosign binary) whose
+  methods replace the package-level pull, push, inspect, list and tag
+  functions, so nothing below the CLI can reach the defaults by accident.
+  `deps` and `render` take it too, for resolving and fetching
+  dependencies.
+- The CLI's environment reads are in `internal/cli/env.go`, including
+  the memoized cub client, which moved out of `internal/hubclient`.
+  Commands that pull load the signing policy, as before only pulls
+  enforced it.
+- Uploads verify the client's session themselves (`GET /me`, as the
+  CLI's preflight did), returning `ErrNotAuthenticated`; the CLI adds
+  "run `cub auth login`".
+- Without a client, a fresh setup doesn't look for an installer record.
+  For the CLI, that means a user with no cub configuration no longer gets
+  a warning that the record couldn't be fetched; every other message is
+  unchanged.
+- `ClientVersion` defaults to the version linked into the installer
+  binary, or else the installer module's version in the program's build
+  info. The CLI passes its own version, so a development build still
+  reports `dev`.
+- With `Registry.Credentials` nil the Docker credential store is used,
+  which reads `~/.docker/config.json`; that is the one home-directory
+  file a zero `Options` reads, by design. `RunTransformerIfRequested`
+  reads `INSTALLER_RUN_TRANSFORMER`, the re-exec protocol of phase 2.
+- `TestIgnoresEnvironmentAndHome` sets the signing policy, cosign and cub
+  variables and files the CLI reads, each of which would change what
+  setup does, and checks that an `Installer` ignores them.
+
+The original plan:
 
 - Modify: `internal/pkg` — registry access takes a `RegistryOptions` in
   place of `authClient()`, the Docker store and `ORAS_OCI_INSECURE`.
@@ -433,7 +528,7 @@ unchanged.
 
 ### Phase 4 — Release and cub adoption
 
-- Settle the kustomize version with cub's pin, as above.
+- Move cub's kustomize pin to v5.7.1, as above.
 - Add the CI job that builds and tests against the SDK's main branch.
 - Release the installer with phases 1–3.
 - In cub: require that release, call `RunTransformerIfRequested` at the

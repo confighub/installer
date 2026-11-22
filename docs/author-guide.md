@@ -680,8 +680,8 @@ what isn't.
    `.Selection` / `.Package` / `.Namespace` / `.Facts`, writes them as
    KRM function configs, and builds it with the kustomize built into
    the installer, as `kustomize build --enable-exec
-   --enable-alpha-plugins` would. Kustomize invokes the `installer transformer` subcommand as an exec plugin
-   to run each function group in process; the result lands as one
+   --enable-alpha-plugins` would. Kustomize runs the installer's transform step, the one `installer
+   transformer` runs, as an exec plugin to run each function group in process; the result lands as one
    resource per file in `out/manifests/`. For multi-package installs,
    each dep is rendered into its own subtree under `out/<dep-name>/`.
 
@@ -810,8 +810,8 @@ Supported toolchain values:
 
 ### What the installer does with it
 
-At render time, the `installer transformer` plugin (which kustomize
-invokes as an exec transformer) recognizes ConfigMaps carrying the
+At render time, the installer's transform step (which kustomize runs as
+an exec transformer, and `installer transformer` runs standalone) recognizes ConfigMaps carrying the
 toolchain annotation and:
 
 - Derives the carrier shape (`confighub.com/appconfig-mode`:
@@ -1080,7 +1080,7 @@ As an author, this gives you a few rules of the road:
 - **New input with a default**: silently adopted on upgrade. Safe.
 - **New required input without a default**: surfaces as an
   interactive prompt; in non-interactive mode, the upgrade fails fast
-  naming the new input. Avoid this when you can — provide a sensible
+  naming the new input unless `--input` answers it. Avoid this when you can — provide a sensible
   default and let the operator change it later if needed.
 
 ### Removing inputs
@@ -1090,8 +1090,8 @@ not need to do anything.
 
 ### Changing input types
 
-Errors out setup. The operator must re-run `installer setup`
-interactively to re-answer. Avoid type changes; if you need one, ship
+The operator answers the input again: setup prompts for it, or, in
+non-interactive mode, fails unless `--input` answers it. Avoid type changes; if you need one, ship
 a new input under a different name and remove the old in a later
 release.
 

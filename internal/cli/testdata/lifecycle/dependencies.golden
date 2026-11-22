@@ -1,0 +1,334 @@
+===== installer setup --pull $STACK --work-dir $WORK --non-interactive --namespace e2e-ns =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: e2e-ns
+Locked 1 dependency(ies) to $WORK/out/record/lock.yaml
+Rendered 2 manifest(s) to $WORK/out/manifests
+Rendered dep base: 2 manifest(s) to $WORK/out/base/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+INFO invoke set-name: succeeded
+INFO invoke set-namespace: succeeded
+
+===== tree after setup =====
+--- out/.gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- out/base/.gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- out/base/compose/installer-transformer.sh
+#!/bin/sh
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
+--- out/base/compose/kustomization.yaml
+# Reproduce this render with:
+#   kustomize build --enable-exec --enable-alpha-plugins .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - ../../vendor/base@0.1.0/package/bases/default
+transformers:
+    - transformers.yaml
+--- out/base/compose/transformers.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ConfigHubTransformers
+metadata:
+    name: example-base-transformers
+    annotations:
+        config.kubernetes.io/function: |
+            exec:
+              path: ./installer-transformer.sh
+spec:
+    namespace: e2e-ns
+    groups:
+        - toolchain: Kubernetes/YAML
+          whereResource: ConfigHub.ResourceType = 'v1/Namespace'
+          invocations:
+            - name: set-name
+              args:
+                - e2e-ns
+        - toolchain: Kubernetes/YAML
+          invocations:
+            - name: set-namespace
+              args:
+                - e2e-ns
+--- out/base/manifests/configmap-e2e-ns-example-base-defaults.yaml
+apiVersion: v1
+data:
+  hello: world
+kind: ConfigMap
+metadata:
+  name: example-base-defaults
+  namespace: e2e-ns
+--- out/base/manifests/namespace-e2e-ns.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e-ns
+--- out/base/record/function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: example-base-function-chain
+spec:
+  package: example-base
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      whereResource: ConfigHub.ResourceType = 'v1/Namespace'
+      invocations:
+        - name: set-name
+          args:
+            - e2e-ns
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - e2e-ns
+--- out/base/record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: example-base-inputs
+spec:
+  package: example-base
+  packageVersion: 0.1.0
+  namespace: e2e-ns
+  values: {}
+--- out/base/record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: example-base-manifest-index
+spec:
+  package: example-base
+  packageVersion: 0.1.0
+  files:
+    - filename: configmap-e2e-ns-example-base-defaults.yaml
+      slug: configmap-e2e-ns-example-base-defaults
+      apiVersion: v1
+      kind: ConfigMap
+      name: example-base-defaults
+      namespace: e2e-ns
+    - filename: namespace-e2e-ns.yaml
+      slug: namespace-e2e-ns
+      apiVersion: v1
+      kind: Namespace
+      name: e2e-ns
+--- out/base/record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: example-base-selection
+spec:
+  package: example-base
+  packageVersion: 0.1.0
+  base: default
+--- out/compose/installer-transformer.sh
+#!/bin/sh
+INSTALLER_RUN_TRANSFORMER=1 exec "$EXE"
+--- out/compose/kustomization.yaml
+# Reproduce this render with:
+#   kustomize build --enable-exec --enable-alpha-plugins .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - ../../package/bases/default
+transformers:
+    - transformers.yaml
+--- out/compose/transformers.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ConfigHubTransformers
+metadata:
+    name: example-stack-transformers
+    annotations:
+        config.kubernetes.io/function: |
+            exec:
+              path: ./installer-transformer.sh
+spec:
+    namespace: e2e-ns
+    groups:
+        - toolchain: Kubernetes/YAML
+          invocations:
+            - name: set-namespace
+              args:
+                - e2e-ns
+--- out/manifests/deployment-e2e-ns-example-stack.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-stack
+  namespace: e2e-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: example-stack
+  template:
+    metadata:
+      labels:
+        app: example-stack
+    spec:
+      containers:
+        - envFrom:
+            - configMapRef:
+                name: example-base-defaults
+          image: nginxdemos/hello:plain-text
+          name: app
+          ports:
+            - containerPort: 80
+              name: http
+--- out/manifests/namespace-e2e-ns.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e-ns
+--- out/record/function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: example-stack-function-chain
+spec:
+  package: example-stack
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - e2e-ns
+--- out/record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: example-stack-inputs
+spec:
+  package: example-stack
+  packageVersion: 0.1.0
+  namespace: e2e-ns
+  values: {}
+--- out/record/lock.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Lock
+metadata:
+  name: example-stack
+  annotations:
+    installer.confighub.com/root-dependencies-hash: 
+spec:
+  package:
+    name: example-stack
+    version: 0.1.0
+  resolved:
+    - name: base
+      ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
+      digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+      version: 0.1.0
+      requestedBy:
+        - root
+--- out/record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: example-stack-manifest-index
+spec:
+  package: example-stack
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-e2e-ns-example-stack.yaml
+      slug: deployment-e2e-ns-example-stack
+      apiVersion: apps/v1
+      kind: Deployment
+      name: example-stack
+      namespace: e2e-ns
+    - filename: namespace-e2e-ns.yaml
+      slug: namespace-e2e-ns
+      apiVersion: v1
+      kind: Namespace
+      name: e2e-ns
+--- out/record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: example-stack-selection
+spec:
+  package: example-stack
+  packageVersion: 0.1.0
+  base: default
+--- out/record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: example-stack-source
+spec:
+  ref: $STACK
+--- out/vendor/base@0.1.0/package/bases/default/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-base-defaults
+data:
+  hello: world
+--- out/vendor/base@0.1.0/package/bases/default/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap.yaml
+--- out/vendor/base@0.1.0/package/bases/default/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app
+--- out/vendor/base@0.1.0/package/installer.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: example-base
+installerMetadata:
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: Shared Namespace + ConfigMap for downstream packages.
+
+  transformers:
+    # Rename the Namespace resource to the install-time --namespace.
+    - toolchain: Kubernetes/YAML
+      whereResource: "ConfigHub.ResourceType = 'v1/Namespace'"
+      invocations:
+        - name: set-name
+          args: ["{{ .Namespace }}"]
+    # Set metadata.namespace on every namespaced resource.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
+--- package/README.md (content not compared)
+--- package/bases/default/deployment.yaml (content not compared)
+--- package/bases/default/kustomization.yaml (content not compared)
+--- package/installer.yaml (content not compared)
+
+===== installer render --work-dir $WORK =====
+--- stdout
+Rendered 2 manifest(s) to $WORK/out/manifests
+Spec docs in $WORK/out/record
+Rendered dep base: 2 manifest(s) to $WORK/out/base/manifests
+Next: installer upload --work-dir $WORK --space <slug>
+--- stderr
+INFO invoke set-namespace: succeeded
+INFO invoke set-name: succeeded
+INFO invoke set-namespace: succeeded
+
+===== a stale lock =====
+
+===== installer render --work-dir $WORK =====
+--- stdout
+--- stderr
+Error: lock at $WORK/out/record/lock.yaml is stale (installer.yaml's dependencies have changed); run `installer deps update --work-dir $WORK`
+--- error
+lock at $WORK/out/record/lock.yaml is stale (installer.yaml's dependencies have changed); run `installer deps update --work-dir $WORK`

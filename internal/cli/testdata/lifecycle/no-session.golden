@@ -1,0 +1,64 @@
+===== ConfigHub refuses the session =====
+
+===== installer plan --work-dir $WORK --space hello =====
+--- stdout
+--- stderr
+Error: not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+--- error
+not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+
+===== installer upload --work-dir $WORK --space hello --yes =====
+--- stdout
+--- stderr
+Error: not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+--- error
+not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+
+===== installer setup --pull $PKG_V1 --work-dir $FRESH --non-interactive --namespace demo =====
+--- stdout
+Wizard wrote $FRESH/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $FRESH/out/manifests
+Next: installer upload --work-dir $FRESH
+--- stderr
+warning: fetch the installer record for hello-app from ConfigHub: authentication problem. Try logging in (again).
+Detailed message: token expired. 
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /me
+GET /me
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app'
+
+===== no cub configuration =====
+
+===== installer plan --work-dir $WORK --space hello =====
+--- stdout
+--- stderr
+Error: not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: no active context configured; run `cub auth login` or `cub context`
+--- error
+not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: no active context configured; run `cub auth login` or `cub context`
+
+===== installer setup --pull $PKG_V1 --work-dir $LOCAL --non-interactive --namespace demo =====
+--- stdout
+Wizard wrote $LOCAL/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $LOCAL/out/manifests
+Next: installer upload --work-dir $LOCAL
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== installer setup --space hello --work-dir $NOCLIENT --non-interactive =====
+--- stdout
+--- stderr
+Error: read the installer record in Space hello: no active context configured; run `cub auth login` or `cub context`
+--- error
+read the installer record in Space hello: no active context configured; run `cub auth login` or `cub context`
+
+===== ConfigHub requests =====

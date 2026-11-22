@@ -5,6 +5,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,12 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/confighub/installer/internal/deps"
-	ipkg "github.com/confighub/installer/internal/pkg"
-	"github.com/confighub/installer/internal/render"
-	"github.com/confighub/installer/internal/upload"
 	"github.com/confighub/installer/internal/wizard"
-	"github.com/confighub/installer/pkg/api"
+	"github.com/confighub/installer/pkg/installer"
 )
 
 // flowOptions configures the shared pull+wizard+render flow used by
@@ -45,10 +42,21 @@ type flowOptions struct {
 	outputOCI string
 }
 
-// runFlow is the shared body of `installer setup` and `installer wizard`.
-// It pulls (if pullRef is set), loads prior state, builds answers,
-// runs the wizard, optionally re-resolves deps, and optionally renders.
+// runFlow is the shared body of `installer setup` and `installer wizard`: it
+// turns the flags into installer.SetupOptions, runs Setup, and prints what to
+// run next.
 func runFlow(ctx context.Context, opts flowOptions) error {
+	if opts.preset != "" && len(opts.selectFlags) > 0 {
+		return fmt.Errorf("--components and --select are mutually exclusive")
+	}
+	inputs, err := wizard.ParseInputFlags(opts.inputFlags)
+	if err != nil {
+		return err
+	}
+	images, err := wizard.ParseSetImageFlags(opts.setImage)
+	if err != nil {
+		return err
+	}
 	if opts.workDir == "" {
 		opts.workDir = "."
 	}
@@ -56,417 +64,83 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	if err != nil {
 		return err
 	}
+	var terminal *installer.Terminal
+	if !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd())) {
+		terminal = &installer.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	}
 
-	pkgDir := filepath.Join(absWork, "package")
-	sourceReference := ""
-	sourceDigest := ""
-	pullRef := opts.pullRef
-	if opts.outputOCI != "" && strings.HasPrefix(opts.pullRef, "oci://") {
-		sourceReference = opts.pullRef
-		sourceDigest, err = ipkg.ResolveManifestDigest(ctx, opts.pullRef)
-		if err != nil {
-			return fmt.Errorf("resolve source package digest: %w", err)
-		}
-		if !strings.Contains(pullRef, "@") {
-			pullRef += "@" + sourceDigest
-		}
-	}
-	// A work-dir with no package re-enters the install in --space from its
-	// installer record alone, pulling the package the record says it came from.
-	recordedPull := false
-	if pullRef == "" && opts.recoverSpace != "" {
-		if _, err := os.Stat(filepath.Join(pkgDir, ipkg.ManifestFile)); os.IsNotExist(err) {
-			pullRef, err = recordedSourceRef(ctx, opts.recoverSpace)
-			if err != nil {
-				return err
-			}
-			recordedPull = true
-			fmt.Printf("Pulling %s, which the installer record in Space %s says the install came from.\n", pullRef, opts.recoverSpace)
-		}
-	}
-	if pullRef != "" {
-		if _, err := ipkg.PullToWorkDir(ctx, pullRef, absWork); err != nil {
-			if recordedPull {
-				return fmt.Errorf("pull %s, from the installer record in Space %s: %w; pass --pull <ref> to pull the package from elsewhere",
-					pullRef, opts.recoverSpace, err)
-			}
-			return fmt.Errorf("pull %s: %w", pullRef, err)
-		}
-	}
-	loaded, err := ipkg.Load(pkgDir)
+	// The signing policy is read only when something may be pulled from a
+	// registry: the package, the one an installer record names, or render's
+	// dependencies.
+	inst, err := newInstaller(ctx, strings.HasPrefix(opts.pullRef, "oci://") || opts.recoverSpace != "" || opts.runRender)
 	if err != nil {
-		if pullRef == "" && os.IsNotExist(rootCause(err)) {
-			return fmt.Errorf(
-				"no package found in %s — pass --pull <ref> to fetch one, --space <slug> to re-enter an install from its installer record, or `%s pull <ref> --work-dir %s` first",
-				pkgDir, InvocationName(), absWork)
-		}
-		return fmt.Errorf("load package from %s: %w", pkgDir, err)
+		return err
 	}
-
-	interactive := !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd()))
-
-	prior, source, err := wizard.LoadPriorState(ctx, absWork, loaded.Package.Metadata.Name, installerRecordFetcher(opts.recoverSpace), func(msg string) {
-		fmt.Fprintln(os.Stderr, "warning:", msg)
+	_, err = inst.Setup(ctx, installer.SetupOptions{
+		WorkDir:   absWork,
+		Pull:      opts.pullRef,
+		Space:     opts.recoverSpace,
+		Base:      opts.baseName,
+		Namespace: opts.namespace,
+		Select:    opts.selectFlags,
+		Preset:    opts.preset,
+		Inputs:    inputs,
+		SetImage:  images,
+		Reuse:     opts.reuse,
+		Terminal:  terminal,
+		Render:    opts.runRender,
+		OutputOCI: opts.outputOCI,
 	})
 	if err != nil {
-		return fmt.Errorf("load prior state: %w", err)
+		return setupError(inst.explain(err), absWork)
 	}
-	if source != wizard.SourceNone {
-		fmt.Printf("Loaded prior install state from %s.\n", source)
-	}
-
-	raw, err := buildAnswers(loaded.Package, prior, interactive, absWork, opts)
-	if err != nil {
-		return err
-	}
-	imgOverrides, err := wizard.ParseSetImageFlags(opts.setImage)
-	if err != nil {
-		return err
-	}
-	raw.ImageOverrides = imgOverrides
-	if prior != nil && prior.Inputs != nil {
-		raw.PriorImageOverrides = prior.Inputs.Spec.ImageOverrides
-	}
-
-	outDir := filepath.Join(absWork, "out")
-	res, err := wizard.Run(ctx, loaded.Package, raw, loaded.Root, outDir)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Wizard wrote %s/record/selection.yaml and inputs.yaml\n", outDir)
-	if res.Facts != nil {
-		fmt.Printf("Collector produced %d fact(s) in %s/record/facts.yaml\n", len(res.Facts.Spec.Values), outDir)
-	}
-	fmt.Printf("Base: %s; components: %v\n", res.Selection.Spec.Base, res.Selection.Spec.Components)
-	fmt.Printf("Namespace: %s\n", raw.Namespace)
-
 	if !opts.runRender {
 		fmt.Printf("Next: %s render --work-dir %s\n", InvocationName(), absWork)
 		return nil
 	}
-
-	if len(loaded.Package.Spec.Dependencies) > 0 {
-		if err := runDepsUpdate(ctx, absWork, loaded.Package, res.Selection); err != nil {
-			return err
-		}
-	}
-
-	if err := runRenderInWorkDir(ctx, absWork, loaded, res); err != nil {
-		return err
-	}
-
-	if opts.outputOCI != "" {
-		published, err := ipkg.PublishRenderedOCI(ctx, ipkg.RenderedOCIOptions{
-			WorkDir:         absWork,
-			Destination:     opts.outputOCI,
-			SourceReference: sourceReference,
-			SourceDigest:    sourceDigest,
-			Package:         loaded.Package,
-			Selection:       res.Selection,
-			Inputs:          res.Inputs,
-		})
-		if err != nil {
-			return fmt.Errorf("write rendered OCI: %w", err)
-		}
-		fmt.Printf("Wrote rendered OCI %s\n", published.Ref)
-		fmt.Printf("  manifest:  %s\n", published.ManifestDigest)
-		fmt.Printf("  objects:   %s (%d manifest files)\n", published.ObjectSetDigest, published.ManifestCount)
-		fmt.Printf("  pull-back: verified\n")
-	}
-
 	fmt.Printf("Next: %s upload --work-dir %s\n", InvocationName(), absWork)
 	return nil
 }
 
-// buildAnswers picks between the fresh-install builder (when no prior
-// state exists) and the upgrade-style builder (when it does). The two
-// builders both validate flag combinations and translate prior values
-// + CLI flags into the wizard.RawAnswers the wizard expects.
-func buildAnswers(pkg *api.Package, prior *wizard.PriorState, interactive bool, workDir string, opts flowOptions) (wizard.RawAnswers, error) {
-	if hasPriorChoices(prior) {
-		return buildUpgradeAnswers(pkg, prior, interactive, workDir, opts)
+// setupError adds the flag that remedies a Setup failure, when there is one.
+func setupError(err error, workDir string) error {
+	var newRequired *installer.NewRequiredInputsError
+	switch {
+	case errors.Is(err, installer.ErrNoPackage):
+		return fmt.Errorf("%v — pass --pull <ref> to fetch one, --space <slug> to re-enter an install from its installer record, or `%s pull <ref> --work-dir %s` first",
+			err, InvocationName(), workDir)
+	case errors.Is(err, installer.ErrRecordedSourcePull):
+		return fmt.Errorf("%v; pass --pull <ref> to pull the package from elsewhere", err)
+	case errors.Is(err, installer.ErrNoInstallerRecord):
+		return fmt.Errorf("%v; pass --pull <ref> to install a package", err)
+	case errors.Is(err, installer.ErrNoRecordedSource):
+		return fmt.Errorf("%v; pass --pull <ref>", err)
+	case errors.Is(err, installer.ErrSeveralPackages):
+		return fmt.Errorf("%v; pass --pull <ref> to say which package", err)
+	case errors.Is(err, installer.ErrPresetAndSelect):
+		return fmt.Errorf("--components and --select are mutually exclusive")
+	case errors.Is(err, installer.ErrNoPriorInstall):
+		return fmt.Errorf("--reuse requires a prior install — none found in this work-dir")
+	case errors.Is(err, installer.ErrNamespaceRequired):
+		return fmt.Errorf("--namespace is required in non-interactive mode")
+	case errors.Is(err, installer.ErrInputTypesChanged):
+		return fmt.Errorf("%v — pass --input <name>=<value> for each, or run `%s setup --work-dir %s` on a terminal to answer them again", err, InvocationName(), workDir)
+	case errors.As(err, &newRequired):
+		return fmt.Errorf("%s", wizard.FormatNewRequiredHint(InvocationName(), workDir, newRequired.Inputs))
 	}
-	return buildFreshAnswers(pkg, prior, interactive, opts)
+	return err
 }
 
-// hasPriorChoices reports whether the prior state contains usable
-// selection or inputs to carry forward — gates whether the upgrade
-// schema-diff path runs.
-func hasPriorChoices(prior *wizard.PriorState) bool {
-	if prior == nil {
-		return false
+// warn prints a warning, adding the flag that remedies it.
+func warn(err error) {
+	msg := err.Error()
+	switch {
+	case errors.Is(err, installer.ErrSeveralInstalls):
+		msg += "; pass --space to choose one"
+	case errors.Is(err, installer.ErrSeveralPackages):
+		msg += "; pass --pull <ref> to say which package"
 	}
-	return prior.Selection != nil || prior.Inputs != nil
-}
-
-// buildFreshAnswers assembles wizard.RawAnswers for the no-prior-state
-// case, in priority order: --reuse → interactive prompts → CLI flags.
-// Validates flag combinations.
-func buildFreshAnswers(pkg *api.Package, prior *wizard.PriorState, interactive bool, opts flowOptions) (wizard.RawAnswers, error) {
-	if opts.preset != "" && len(opts.selectFlags) > 0 {
-		return wizard.RawAnswers{}, fmt.Errorf("--components and --select are mutually exclusive")
-	}
-	if opts.reuse {
-		if prior == nil || (prior.Selection == nil && prior.Inputs == nil) {
-			return wizard.RawAnswers{}, fmt.Errorf("--reuse requires a prior install — none found in this work-dir")
-		}
-		return wizard.RawAnswersFromPrior(pkg, prior), nil
-	}
-
-	if interactive {
-		raw, err := wizard.Ask(pkg, prior, wizard.AskOptions{})
-		if err != nil {
-			return wizard.RawAnswers{}, err
-		}
-		if opts.baseName != "" {
-			raw.BaseName = opts.baseName
-		}
-		if opts.namespace != "" {
-			raw.Namespace = opts.namespace
-		}
-		if len(opts.selectFlags) > 0 {
-			raw.SelectedComponents = opts.selectFlags
-		}
-		flagInputs, err := wizard.ParseInputFlags(opts.inputFlags)
-		if err != nil {
-			return wizard.RawAnswers{}, err
-		}
-		for k, v := range flagInputs {
-			raw.Inputs[k] = v
-		}
-		return raw, nil
-	}
-
-	if opts.namespace == "" {
-		return wizard.RawAnswers{}, fmt.Errorf("--namespace is required in non-interactive mode")
-	}
-	flagInputs, err := wizard.ParseInputFlags(opts.inputFlags)
-	if err != nil {
-		return wizard.RawAnswers{}, err
-	}
-	raw := wizard.RawAnswers{
-		Inputs:             flagInputs,
-		SelectedComponents: opts.selectFlags,
-		BaseName:           opts.baseName,
-		Namespace:          opts.namespace,
-	}
-	if opts.preset != "" {
-		picked, err := wizard.ResolvePreset(pkg, opts.preset)
-		if err != nil {
-			return wizard.RawAnswers{}, err
-		}
-		raw.SelectedComponents = picked
-	}
-	return raw, nil
-}
-
-// buildUpgradeAnswers translates prior state + the new package's input
-// schema into a RawAnswers via schema-diff: silently carry forward
-// values that still apply, adopt new defaults, drop removed inputs,
-// prompt (interactive) or fail fast (non-interactive) for new
-// required-without-default. The same machinery the old `installer
-// upgrade` command used; now applied to every re-entry.
-//
-// CLI flags from this run override the carried-forward values:
-// --namespace, --base, --select, --input override prior; --components
-// preset overrides --select.
-func buildUpgradeAnswers(newPkg *api.Package, prior *wizard.PriorState, interactive bool, workDir string, opts flowOptions) (wizard.RawAnswers, error) {
-	if opts.preset != "" && len(opts.selectFlags) > 0 {
-		return wizard.RawAnswers{}, fmt.Errorf("--components and --select are mutually exclusive")
-	}
-	if opts.reuse {
-		return wizard.RawAnswersFromPrior(newPkg, prior), nil
-	}
-
-	out := wizard.RawAnswers{Inputs: map[string]string{}}
-
-	priorPkg := prior.PriorPackage
-	if priorPkg == nil {
-		priorPkg = newPkg
-	}
-
-	priorVals := map[string]any{}
-	if prior.Inputs != nil {
-		priorVals = prior.Inputs.Spec.Values
-	}
-	id := wizard.DiffInputs(priorPkg, newPkg, priorVals)
-
-	if len(id.TypeChanged) != 0 {
-		names := make([]string, 0, len(id.TypeChanged))
-		for _, in := range id.TypeChanged {
-			names = append(names, in.Name)
-		}
-		return out, fmt.Errorf("input type(s) changed across upgrade for: %s — re-run interactively (`%s setup --work-dir %s`) to re-answer them",
-			strings.Join(names, ", "), InvocationName(), workDir)
-	}
-	for k, v := range id.Carry {
-		out.Inputs[k] = wizard.StringifyAny(v)
-	}
-	for k, v := range id.AdoptedDefaults {
-		out.Inputs[k] = wizard.StringifyAny(v)
-		fmt.Printf("Adopted new default for input %q: %v\n", k, v)
-	}
-	for _, k := range id.Dropped {
-		fmt.Printf("Dropped removed input %q (was: %v)\n", k, priorVals[k])
-	}
-	if len(id.NewRequired) != 0 {
-		if !interactive {
-			return out, fmt.Errorf("%s", wizard.FormatNewRequiredHint(workDir, id.NewRequired))
-		}
-		for _, in := range id.NewRequired {
-			ra, err := wizard.AskOneInput(in)
-			if err != nil {
-				return out, err
-			}
-			out.Inputs[in.Name] = ra
-			fmt.Printf("Answered new required input %q\n", in.Name)
-		}
-	}
-
-	priorSel := []string{}
-	if prior.Selection != nil {
-		priorSel = prior.Selection.Spec.Components
-	}
-	cd := wizard.DiffComponents(priorPkg, newPkg, priorSel)
-	out.SelectedComponents = cd.Components
-	if len(cd.AdoptedNewDefaults) != 0 {
-		fmt.Printf("Adopted new default-flagged component(s): %s\n", strings.Join(cd.AdoptedNewDefaults, ", "))
-	}
-	if len(cd.RemovedFromPrior) != 0 {
-		fmt.Printf("Dropped component(s) no longer in package: %s\n", strings.Join(cd.RemovedFromPrior, ", "))
-	}
-
-	if prior.Selection != nil {
-		out.BaseName = prior.Selection.Spec.Base
-	}
-	if prior.Inputs != nil {
-		out.Namespace = prior.Inputs.Spec.Namespace
-	}
-
-	// CLI overrides on top of carried-forward values.
-	if opts.baseName != "" {
-		out.BaseName = opts.baseName
-	}
-	if opts.namespace != "" {
-		out.Namespace = opts.namespace
-	}
-	if len(opts.selectFlags) > 0 {
-		out.SelectedComponents = opts.selectFlags
-	}
-	if opts.preset != "" {
-		picked, err := wizard.ResolvePreset(newPkg, opts.preset)
-		if err != nil {
-			return wizard.RawAnswers{}, err
-		}
-		out.SelectedComponents = picked
-	}
-	flagInputs, err := wizard.ParseInputFlags(opts.inputFlags)
-	if err != nil {
-		return wizard.RawAnswers{}, err
-	}
-	for k, v := range flagInputs {
-		out.Inputs[k] = v
-	}
-	return out, nil
-}
-
-// runDepsUpdate resolves the dependency DAG against the OCI registry
-// and writes <work-dir>/out/record/lock.yaml. Honors the package's
-// optional-deps gated by whenComponent, using the supplied selection.
-func runDepsUpdate(ctx context.Context, workDir string, pkg *api.Package, sel *api.Selection) error {
-	res, err := deps.Resolve(ctx, pkg, deps.OCISource{}, deps.Options{Selection: sel})
-	if err != nil {
-		return fmt.Errorf("deps update: %w", err)
-	}
-	if err := deps.WriteLock(workDir, pkg, res.Lock); err != nil {
-		return err
-	}
-	fmt.Printf("Locked %d dependency(ies) to %s\n", len(res.Lock.Spec.Resolved), deps.LockPath(workDir))
-	return nil
-}
-
-// recordedSourceRef returns the reference that pulls the package an install's
-// installer record in space says it came from.
-func recordedSourceRef(ctx context.Context, space string) (string, error) {
-	data, err := installerRecordFetcher(space)(ctx, "")
-	if err != nil {
-		return "", fmt.Errorf("read the installer record in Space %s: %w", space, err)
-	}
-	if data == nil {
-		return "", fmt.Errorf("Space %s does not exist or has no installer record; pass --pull <ref> to install a package", space)
-	}
-	rec, err := upload.ParseRecord(data)
-	if err != nil {
-		return "", err
-	}
-	if rec.Source == nil || rec.Source.Ref == "" {
-		return "", fmt.Errorf("the installer record in Space %s doesn't say where its package came from; pass --pull <ref>", space)
-	}
-	return rec.Source.PinnedRef(), nil
-}
-
-// runRenderInWorkDir runs render.Render (and the per-dep renderer for
-// multi-package installs) against the work-dir's package + spec.
-func runRenderInWorkDir(ctx context.Context, workDir string, loaded *ipkg.Loaded, res *wizard.Result) error {
-	outDir := filepath.Join(workDir, "out")
-	manifestsDir := filepath.Join(outDir, "manifests")
-	r, err := render.Render(ctx, render.Options{
-		Loaded:    loaded,
-		Selection: res.Selection,
-		Inputs:    res.Inputs,
-		Facts:     res.Facts,
-	}, outDir)
-	if err != nil {
-		return err
-	}
-	if warning := r.UnusedNamespaceWarning(res.Inputs.Spec.Namespace); warning != "" {
-		fmt.Fprintln(os.Stderr, warning)
-	}
-	fmt.Printf("Rendered %d manifest(s) to %s\n", len(r.Manifests), manifestsDir)
-	if len(r.Secrets) > 0 {
-		fmt.Printf("Rendered %d secret(s) to %s/secrets (not uploaded)\n", len(r.Secrets), outDir)
-	}
-	if len(loaded.Package.Spec.Dependencies) > 0 {
-		lock, err := deps.ReadLock(workDir)
-		if err != nil {
-			return err
-		}
-		depResults, err := render.RenderDependencies(ctx, render.DepsOptions{
-			Lock:         lock,
-			ParentInputs: res.Inputs,
-			WorkDir:      workDir,
-		})
-		if err != nil {
-			return err
-		}
-		for _, dr := range depResults {
-			fmt.Printf("Rendered dep %s: %d manifest(s) to %s\n", dr.Name, len(dr.Manifests), filepath.Join(dr.OutDir, "manifests"))
-			if len(dr.Secrets) > 0 {
-				fmt.Printf("  secrets: %d (not uploaded)\n", len(dr.Secrets))
-			}
-		}
-	}
-	return nil
-}
-
-// rootCause unwraps wrapped errors until it finds one os.IsNotExist
-// understands. Used to surface "no package directory yet" cleanly.
-func rootCause(err error) error {
-	for {
-		next := unwrapErr(err)
-		if next == nil {
-			return err
-		}
-		err = next
-	}
-}
-
-func unwrapErr(err error) error {
-	type unwrapper interface{ Unwrap() error }
-	if u, ok := err.(unwrapper); ok {
-		return u.Unwrap()
-	}
-	return nil
+	fmt.Fprintln(os.Stderr, "warning:", msg)
 }
 
 // newSetupCmd is the all-in-one consumer entry point: optional pull,

@@ -135,12 +135,17 @@ wrapper, or a symlink) it works against raw kustomize.
     ├── kustomization.yaml     # synthesized: resources, transformers, validators, images
     ├── transformers.yaml             # resolved package-level ConfigHubTransformers
     ├── validators.yaml        # resolved ConfigHubValidators
-    ├── installer-transformer.sh  # exec wrapper (one line, chmod +x)
+    ├── installer-transformer.sh  # exec wrapper: INSTALLER_RUN_TRANSFORMER=1 exec <installer>
     └── components/<name>/...  # pre-resolved component-scoped configs (if any)
 ```
 
 `Render` builds `out/compose/` with kustomize's Go API, so the installer
-needs no `kustomize` binary, and rewrites it on every render. Same render
+needs no `kustomize` binary, and rewrites it on every render. The wrapper
+re-executes the program that rendered, the installer or a program embedding
+it, with `INSTALLER_RUN_TRANSFORMER=1`, which asks it for the transform
+step: the same step `installer transformer` runs. A program embedding the
+installer answers it by calling `installer.RunTransformerIfRequested()` at
+the start of `main` (see [library.md](./library.md)). Same render
 is reproducible with a `kustomize` binary by anyone with
 `installer-transformer.sh` on PATH (or present alongside the
 kustomization in `out/compose/`), byte-for-byte unless that kustomize

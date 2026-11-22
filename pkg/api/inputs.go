@@ -31,7 +31,7 @@ type InputsSpec struct {
 	Values map[string]any `yaml:"values" json:"values"`
 	// ImageOverrides maps kustomize image transformer name → image
 	// reference (e.g., "hello" → "hello:v2"). Populated by the
-	// `--set-image` flag on `installer wizard` / `installer upgrade`.
+	// `--set-image` flag on `installer setup` / `installer wizard`.
 	// At render time the installer sets each entry, as `kustomize edit
 	// set image <name>=<ref>` would, for every container of the chosen
 	// base and selected components, before the kustomize build. A name
