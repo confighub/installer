@@ -362,12 +362,12 @@ BSD licensed.
 
 For cub specifically:
 
-- **kustomize versions have to line up.** The installer requires
-  `sigs.k8s.io/kustomize/api` and `kyaml` v0.19.0. cub pins kustomize
-  v5.5.0 (`api` v0.18.0, `kyaml` v0.18.1) with `replace` directives,
-  which apply to every module in cub's build, so the installer would be
-  built and run against v0.18. Either the installer builds and passes its
-  tests against v0.18, or cub's pin moves to v0.19 or later.
+- **kustomize versions have to line up.** cub pins kustomize with
+  `replace` directives, which apply to every module in cub's build. The
+  installer requires `sigs.k8s.io/kustomize/api` and `kyaml` v0.20.1
+  (kustomize v5.7.1), so cub's pin moves from v5.5.0 (`api` v0.18.0,
+  `kyaml` v0.18.1) to v5.7.1 before cub links the installer. When either
+  moves later, the other has to follow.
 - **cub builds against the SDK at its own revision, not a release.** The
   installer requires released SDK modules (`sdk/core` and
   `sdk/function-impl`), and in cub's build those are replaced by the
@@ -528,7 +528,7 @@ unchanged.
 
 ### Phase 4 — Release and cub adoption
 
-- Settle the kustomize version with cub's pin, as above.
+- Move cub's kustomize pin to v5.7.1, as above.
 - Add the CI job that builds and tests against the SDK's main branch.
 - Release the installer with phases 1–3.
 - In cub: require that release, call `RunTransformerIfRequested` at the
