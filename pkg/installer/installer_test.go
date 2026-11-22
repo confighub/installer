@@ -204,6 +204,7 @@ func TestSetupSentinelErrors(t *testing.T) {
 		{"nothing to reuse", installer.SetupOptions{Pull: hello, Reuse: true}, installer.ErrNoPriorInstall},
 		{"preset and select", installer.SetupOptions{Pull: hello, Namespace: "x", Preset: "all", Select: []string{"monitoring"}}, installer.ErrPresetAndSelect},
 		{"no record to re-enter", installer.SetupOptions{Space: "nowhere"}, installer.ErrNoInstallerRecord},
+		{"rendered OCI without rendering", installer.SetupOptions{Pull: hello, Namespace: "x", OutputOCI: "rendered.oci"}, installer.ErrOutputOCIWithoutRender},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -364,5 +365,62 @@ func TestTransformerCommand(t *testing.T) {
 	// The set-namespace transformer ran.
 	if _, err := os.Stat(filepath.Join(work, "out", "manifests", "deployment-demo-hello-app.yaml")); err != nil {
 		t.Error(err)
+	}
+}
+
+// withInput copies hello-app with one more input, under version.
+func withInput(t *testing.T, version, input string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "pkg")
+	if err := os.CopyFS(dir, os.DirFS(example(t, "hello-app"))); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, "installer.yaml")
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := strings.Replace(string(data), "  version: 0.1.0", "  version: "+version, 1)
+	s = strings.Replace(s, "  components:\n", "  inputs:\n"+input+"\n  components:\n", 1)
+	if err := os.WriteFile(manifest, []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// An upgrade the wizard rejects leaves the installed package in place, so
+// the next attempt is still compared with the package the install was made
+// from.
+func TestFailedUpgradeKeepsPackage(t *testing.T) {
+	ctx := context.Background()
+	inst, err := installer.New(installer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	v1 := withInput(t, "0.1.0", "    - name: port\n      type: string\n      default: http\n")
+	v2 := withInput(t, "0.2.0", "    - name: port\n      type: int\n      default: 80\n")
+	if _, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v1, Namespace: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The answer isn't an int, which the wizard finds after the schema diff.
+	if _, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v2, Inputs: map[string]string{"port": "abc"}}); err == nil {
+		t.Fatal("Setup accepted a non-int answer to an int input")
+	}
+	installed, err := os.ReadFile(filepath.Join(work, "package", "installer.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installed), "version: 0.1.0") {
+		t.Errorf("the failed upgrade replaced the installed package:\n%s", installed)
+	}
+	if _, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v2}); !errors.Is(err, installer.ErrInputTypesChanged) {
+		t.Errorf("retried upgrade: err = %v, want ErrInputTypesChanged", err)
+	}
+	if res, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v2, Inputs: map[string]string{"port": "8080"}}); err != nil {
+		t.Errorf("upgrade answered with an int: %v", err)
+	} else if res.Package.InstallerMetadata.Version != "0.2.0" {
+		t.Errorf("installed version = %q, want 0.2.0", res.Package.InstallerMetadata.Version)
 	}
 }

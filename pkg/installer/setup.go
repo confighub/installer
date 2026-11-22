@@ -152,6 +152,9 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	if opts.Preset != "" && len(opts.Select) > 0 {
 		return nil, ErrPresetAndSelect
 	}
+	if opts.OutputOCI != "" && !opts.Render {
+		return nil, ErrOutputOCIWithoutRender
+	}
 	if opts.Render {
 		if err := i.checkTransformer(); err != nil {
 			return nil, err
@@ -193,10 +196,11 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 			i.printf("Pulling %s, which the installer record in Space %s says the install came from.\n", pullRef, opts.Space)
 		}
 	}
-	// A pulled package is staged beside the work-dir's own until the answers
-	// for it are worked out: the prior install's choices are compared with
-	// the package that made them, and an upgrade that can't be answered
-	// leaves the work-dir as it was.
+	// A pulled package is staged beside the work-dir's own until the wizard
+	// has accepted the answers for it: the prior install's choices are
+	// compared with the package that made them, and a setup that fails before
+	// writing the record leaves the work-dir as it was, so the next attempt
+	// is compared with the same package.
 	var staged *ipkg.StagedPull
 	if pullRef != "" {
 		staged, err = i.registry.StagePull(ctx, pullRef, absWork)
@@ -233,14 +237,6 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	if err != nil {
 		return nil, err
 	}
-	if staged != nil {
-		if _, err := staged.Promote(ctx); err != nil {
-			return nil, fmt.Errorf("pull %s: %w", pullRef, err)
-		}
-		if loaded, err = ipkg.Load(pkgDir); err != nil {
-			return nil, fmt.Errorf("load package from %s: %w", pkgDir, err)
-		}
-	}
 	raw.ImageOverrides = copyStrings(opts.SetImage)
 	raw.CollectorStderr = i.err
 	if prior != nil && prior.Inputs != nil {
@@ -248,9 +244,19 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	}
 
 	outDir := filepath.Join(absWork, "out")
+	// The wizard checks the answers, resolves the selection and runs the
+	// collector, in a staged package, before it writes the record.
 	res, err := wizard.Run(ctx, loaded.Package, raw, loaded.Root, outDir)
 	if err != nil {
 		return nil, err
+	}
+	if staged != nil {
+		if _, err := staged.Promote(ctx); err != nil {
+			return nil, fmt.Errorf("pull %s: %w", pullRef, err)
+		}
+		if loaded, err = ipkg.Load(pkgDir); err != nil {
+			return nil, fmt.Errorf("load package from %s: %w", pkgDir, err)
+		}
 	}
 	i.printf("Wizard wrote %s/record/selection.yaml and inputs.yaml\n", outDir)
 	if res.Facts != nil {

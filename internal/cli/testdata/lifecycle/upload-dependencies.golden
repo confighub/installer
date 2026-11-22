@@ -685,6 +685,35 @@ POST /upload ? dry_run=true & include=Mutations
           requestedBy:
             - root
 
+===== the parent's upload is refused =====
+
+===== installer plan --work-dir $WORK --space-pattern {{.PackageName}}-refused =====
+--- stdout
+Space example-base-refused (Create)
+  Create    installer
+  Create    configmap-e2e-ns-example-base-defaults
+  Create    namespace-e2e-ns
+--- stderr
+Error: plan example-stack: HTTP 400 for req : upload refused
+--- error
+plan example-stack: HTTP 400 for req : upload refused
+
+===== installer upload --work-dir $WORK --space-pattern {{.PackageName}}-refused --yes =====
+--- stdout
+== example-base@0.1.0 → Space example-base-refused ==
+Space example-base-refused (Create)
+  Create    installer
+  Create    configmap-e2e-ns-example-base-defaults
+  Create    namespace-e2e-ns
+== example-stack@0.1.0 → Space example-stack-refused ==
+
+Revert this upload of example-base-refused with:
+  cub unit update --patch --space example-base-refused --restore Before:ChangeSet:upload-example-base-refused --where "Labels.UploadSource = 'example-base'" --include-hidden=InstallerRecord
+--- stderr
+Error: upload example-stack: HTTP 400 for req : upload refused
+--- error
+upload example-stack: HTTP 400 for req : upload refused
+
 ===== refusals =====
 
 ===== installer plan --work-dir $WORK --space one =====

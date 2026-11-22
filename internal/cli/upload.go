@@ -212,11 +212,14 @@ When the upload would empty any Unit it lists them and asks first, unless
 			}
 
 			result, err := inst.Upload(ctx, plan)
+			// What landed before a refused upload can be reverted too.
+			if result != nil {
+				for _, pkg := range result.Packages {
+					printRevert(pkg)
+				}
+			}
 			if err != nil {
 				return err
-			}
-			for _, pkg := range result.Packages {
-				printRevert(pkg)
 			}
 			fmt.Printf("\n%s\n", upload.Summarize(result.Results()).Applied())
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -68,7 +69,10 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		terminal = &installer.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 	}
 
-	inst, err := newInstaller(ctx, true)
+	// The signing policy is read only when something may be pulled from a
+	// registry: the package, the one an installer record names, or render's
+	// dependencies.
+	inst, err := newInstaller(ctx, strings.HasPrefix(opts.pullRef, "oci://") || opts.recoverSpace != "" || opts.runRender)
 	if err != nil {
 		return err
 	}

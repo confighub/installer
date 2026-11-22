@@ -417,8 +417,9 @@ behaves as follows (no operator action needed in most cases):
   non-interactive mode, setup fails naming each one. Answer them with
   `--input <name>=<value>`, or re-run setup interactively.
 
-A setup that fails on any of these leaves the work-dir as it was: the
-pulled package replaces `package/` only once its inputs are answered.
+A setup that fails on any of these, or on an answer or selection the new
+package rejects, leaves the work-dir as it was: the pulled package replaces
+`package/` only once the wizard accepts the answers for it.
 
 For components, similar rules: if your prior selection matched the
 old package's `default` preset exactly, the upgrade adopts the new

@@ -247,7 +247,8 @@ type PreviewOptions struct {
 }
 
 // PreviewUpload runs each of the plan's requests as a dry run and records what
-// it would do in the package's Preview.
+// it would do in the package's Preview. When a dry run fails, the packages
+// before it keep their Previews.
 func (i *Installer) PreviewUpload(ctx context.Context, plan *UploadPlan, opts PreviewOptions) error {
 	var with []func(*goclientnew.UploadParams)
 	if opts.Mutations {
@@ -359,15 +360,16 @@ func (r *UploadResult) Changed() bool {
 
 // Upload sends the plan's requests, each dependency's before the parent's,
 // and hides each installer record Unit. A failed write in one Space doesn't
-// stop the others, and is reported in the result; an upload ConfigHub refuses
-// outright stops the upload with an error.
+// stop the others, and is reported in the result. An upload ConfigHub refuses
+// outright stops the upload with an error, returned with the result of the
+// packages uploaded before it, whose writes are real.
 func (i *Installer) Upload(ctx context.Context, plan *UploadPlan) (*UploadResult, error) {
 	result := &UploadResult{}
 	for _, pkg := range plan.Packages {
 		i.printf("== %s@%s → Space %s ==\n", pkg.Name, pkg.Version, pkg.Space)
 		res, err := cubapi.Upload(ctx, plan.client, pkg.Request, false)
 		if err != nil {
-			return nil, fmt.Errorf("upload %s: %w", pkg.Name, err)
+			return result, fmt.Errorf("upload %s: %w", pkg.Name, err)
 		}
 		upload.Report(i.out, res, false)
 		if err := hideRecord(ctx, plan.client, pkg); err != nil {

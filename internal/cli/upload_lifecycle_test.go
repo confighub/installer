@@ -197,6 +197,18 @@ func TestLifecycleUploadDependencies(t *testing.T) {
 	tr.ok("plan", "--work-dir", work, "--space-pattern", "{{.PackageName}}-{{.Variant}}")
 	tr.requests()
 
+	// When the parent's upload is refused, the dependency's has already
+	// landed, and its revert hint is printed; plan shows the dependency's
+	// preview before the refused one.
+	tr.section("the parent's upload is refused")
+	hub.RefuseUploads(func(req goclientnew.UploadRequest, dryRun bool) bool {
+		return req.Components[0].Name == "example-stack"
+	})
+	tr.fail("plan", "--work-dir", work, "--space-pattern", "{{.PackageName}}-refused")
+	tr.fail("upload", "--work-dir", work, "--space-pattern", "{{.PackageName}}-refused", "--yes")
+	hub.RefuseUploads(nil)
+	hub.ClearRequests()
+
 	tr.section("refusals")
 	tr.fail("plan", "--work-dir", work, "--space", "one")
 	if err := os.Remove(filepath.Join(work, "out", "record", "lock.yaml")); err != nil {
@@ -254,6 +266,19 @@ func TestLifecycleRecordReentry(t *testing.T) {
 	hub.ClearRequests()
 	tr.fail("setup", "--space", "nosource", "--work-dir", e.dir("NOSOURCE"), "--non-interactive")
 	tr.requests()
+
+	tr.section("show, for a Space holding two packages' records")
+	other := e.copyExample("hello-app", "PKG_OTHER")
+	e.edit(filepath.Join(other, "installer.yaml"), func(s string) string {
+		return strings.Replace(s, "  name: hello-app", "  name: other-app", 1)
+	})
+	for _, pkg := range []string{e.helloV1(), other} {
+		w := e.dir("SHARED")
+		mustRun(t, "setup", "--pull", pkg, "--work-dir", w, "--non-interactive", "--namespace", "shared")
+		mustRun(t, "upload", "--work-dir", w, "--space", "shared", "--yes")
+	}
+	hub.ClearRequests()
+	tr.fail("show", "--space", "shared")
 
 	tr.check("record-reentry")
 }

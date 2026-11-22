@@ -43,11 +43,13 @@ Plan writes nothing.`,
 			if err != nil {
 				return err
 			}
-			if err := inst.PreviewUpload(ctx, plan, installer.PreviewOptions{Mutations: true}); err != nil {
-				return err
-			}
+			// A failed dry run still shows the packages previewed before it.
+			previewErr := inst.PreviewUpload(ctx, plan, installer.PreviewOptions{Mutations: true})
 			var results []*goclientnew.UploadResult
 			for _, pkg := range plan.Packages {
+				if pkg.Preview == nil {
+					break
+				}
 				upload.Report(os.Stdout, pkg.Preview, true)
 				if len(pkg.PreviewOmitted) > 0 {
 					fmt.Printf("  DependsOn %s is left out of this dry run: upload creates those Components first\n", strings.Join(pkg.PreviewOmitted, ", "))
@@ -56,6 +58,9 @@ Plan writes nothing.`,
 					return err
 				}
 				results = append(results, pkg.Preview)
+			}
+			if previewErr != nil {
+				return previewErr
 			}
 			fmt.Printf("\n%s\n", upload.Summarize(results).Plan())
 			return nil

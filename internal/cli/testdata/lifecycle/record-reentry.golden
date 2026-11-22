@@ -255,3 +255,12 @@ the installer record in Space nosource doesn't say where its package came from; 
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'nosource'
 GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND SpaceID = '00000000-0000-0000-0000-000000000017'
 GET /space/00000000-0000-0000-0000-000000000017/unit/00000000-0000-0000-0000-000000000019/data
+
+===== show, for a Space holding two packages' records =====
+
+===== installer show --space shared =====
+--- stdout
+--- stderr
+Error: Space shared holds installer records of 2 packages; name the package: `installer show <package> --space shared`
+--- error
+Space shared holds installer records of 2 packages; name the package: `installer show <package> --space shared`

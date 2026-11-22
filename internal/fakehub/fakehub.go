@@ -61,6 +61,7 @@ type Server struct {
 	requests   []Request
 	uploadHook UploadHook
 	refuseAuth bool
+	refuse     func(req goclientnew.UploadRequest, dryRun bool) bool
 }
 
 // OrganizationID is the organization every entity belongs to.
@@ -82,6 +83,15 @@ func (s *Server) Reset() {
 	s.requests = nil
 	s.uploadHook = nil
 	s.refuseAuth = false
+	s.refuse = nil
+}
+
+// RefuseUploads makes the uploads refuse says to refuse fail outright, as
+// ConfigHub does for a request it rejects; nil refuses none.
+func (s *Server) RefuseUploads(refuse func(req goclientnew.UploadRequest, dryRun bool) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = refuse
 }
 
 // RefuseAuth makes every request fail as unauthenticated, as a server does
@@ -508,6 +518,10 @@ func (s *Server) upload(w http.ResponseWriter, q map[string]string, body []byte)
 		return
 	}
 	dryRun := req.DryRun || q["dry_run"] == "true"
+	if s.refuse != nil && s.refuse(req, dryRun) {
+		writeError(w, http.StatusBadRequest, "upload refused")
+		return
+	}
 	if len(req.Components) != 1 {
 		writeError(w, http.StatusBadRequest, "fakehub: exactly one component is supported")
 		return

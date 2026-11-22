@@ -50,6 +50,10 @@ var (
 	// The error is a *NewRequiredInputsError.
 	ErrNewRequiredInputs = errors.New("the new package adds required inputs the prior install did not answer")
 
+	// ErrOutputOCIWithoutRender: SetupOptions.OutputOCI is set without
+	// SetupOptions.Render, which produces what it publishes.
+	ErrOutputOCIWithoutRender = errors.New("publishing a rendered OCI artifact requires rendering")
+
 	// ErrNoLock: the package declares dependencies and the work-dir has no
 	// lock. Setup with SetupOptions.Render writes one.
 	ErrNoLock = errors.New("no dependency lock")

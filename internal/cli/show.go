@@ -60,7 +60,7 @@ Use --json for the record as stored, as JSON.`,
 			found, err := hubclient.FindInstallerRecord(ctx, c, space, packageName)
 			switch {
 			case errors.Is(err, hubclient.ErrSeveralPackages):
-				return fmt.Errorf("%v; pass --pull <ref> to say which package", err)
+				return fmt.Errorf("%v; name the package: `%s show <package> --space %s`", err, InvocationName(), space)
 			case errors.Is(err, hubclient.ErrSeveralInstalls):
 				return fmt.Errorf("%v; pass --space to choose one", err)
 			case err != nil:
