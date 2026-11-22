@@ -501,7 +501,7 @@ func ask(p survey.Prompt, response any, opts AskOptions, extra ...survey.AskOpt)
 }
 
 // StringifyAny is the exported wrapper around stringifyAny — used by
-// `installer upgrade` to round-trip prior typed values back through
+// setup's upgrade path to round-trip prior typed values back through
 // RawAnswers.
 func StringifyAny(v any) string { return stringifyAny(v) }
 

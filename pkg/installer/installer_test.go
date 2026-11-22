@@ -246,6 +246,14 @@ func TestSetupSentinelErrors(t *testing.T) {
 		if len(newRequired.Inputs) != 1 || newRequired.Inputs[0].Name != "owner" {
 			t.Errorf("Inputs = %+v", newRequired.Inputs)
 		}
+		// Answering it lets the upgrade through.
+		res, err := f.inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Inputs: map[string]string{"owner": "me"}})
+		if err != nil {
+			t.Fatalf("Setup with the input answered: %v", err)
+		}
+		if got := res.Inputs.Spec.Values["owner"]; got != "me" {
+			t.Errorf("owner = %v, want me", got)
+		}
 	})
 
 	t.Run("upload needs a lock", func(t *testing.T) {

@@ -220,9 +220,9 @@ func stringSet(ss []string) map[string]struct{} {
 }
 
 // FormatNewRequiredHint renders a multiline message naming each new
-// required input — used by `installer upgrade` in non-interactive
-// mode to fail fast with actionable detail.
-func FormatNewRequiredHint(workDir string, ins []api.Input) string {
+// required input, for setup to fail with when it can't prompt for them.
+// invocation is the command name to suggest, as the CLI was invoked.
+func FormatNewRequiredHint(invocation, workDir string, ins []api.Input) string {
 	if len(ins) == 0 {
 		return ""
 	}
@@ -238,7 +238,7 @@ func FormatNewRequiredHint(workDir string, ins []api.Input) string {
 			msg += fmt.Sprintf("  - %s (%s): %s\n", in.Name, displayType(in), prompt)
 		}
 	}
-	msg += fmt.Sprintf("re-run interactively or run `installer wizard %s` to answer them, then re-run `installer upgrade`.", workDir)
+	msg += fmt.Sprintf("pass --input <name>=<value> for each, or run `%s setup --work-dir %s` on a terminal to be asked.", invocation, workDir)
 	return msg
 }
 

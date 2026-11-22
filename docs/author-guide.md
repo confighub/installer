@@ -1080,7 +1080,7 @@ As an author, this gives you a few rules of the road:
 - **New input with a default**: silently adopted on upgrade. Safe.
 - **New required input without a default**: surfaces as an
   interactive prompt; in non-interactive mode, the upgrade fails fast
-  naming the new input. Avoid this when you can — provide a sensible
+  naming the new input unless `--input` answers it. Avoid this when you can — provide a sensible
   default and let the operator change it later if needed.
 
 ### Removing inputs
@@ -1090,8 +1090,8 @@ not need to do anything.
 
 ### Changing input types
 
-Errors out setup. The operator must re-run `installer setup`
-interactively to re-answer. Avoid type changes; if you need one, ship
+The operator answers the input again: setup prompts for it, or, in
+non-interactive mode, fails unless `--input` answers it. Avoid type changes; if you need one, ship
 a new input under a different name and remove the old in a later
 release.
 

@@ -120,9 +120,9 @@ func setupError(err error, workDir string) error {
 	case errors.Is(err, installer.ErrNamespaceRequired):
 		return fmt.Errorf("--namespace is required in non-interactive mode")
 	case errors.Is(err, installer.ErrInputTypesChanged):
-		return fmt.Errorf("%v — re-run interactively (`%s setup --work-dir %s`) to re-answer them", err, InvocationName(), workDir)
+		return fmt.Errorf("%v — pass --input <name>=<value> for each, or run `%s setup --work-dir %s` on a terminal to answer them again", err, InvocationName(), workDir)
 	case errors.As(err, &newRequired):
-		return fmt.Errorf("%s", wizard.FormatNewRequiredHint(workDir, newRequired.Inputs))
+		return fmt.Errorf("%s", wizard.FormatNewRequiredHint(InvocationName(), workDir, newRequired.Inputs))
 	}
 	return err
 }

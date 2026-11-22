@@ -58,33 +58,65 @@ func Pull(ctx context.Context, ref, dest string) (string, error) {
 // On success, <workDir>/package/installer.yaml is guaranteed to exist.
 // Returns the absolute path to <workDir>/package/.
 func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
+	staged, err := StagePull(ctx, ref, workDir)
+	if err != nil {
+		return "", err
+	}
+	defer staged.Discard()
+	return staged.Promote(ctx)
+}
+
+// StagedPull is a package fetched into a work-dir but not yet put in place
+// as its package/, so a caller can read it beside the package it replaces
+// and decide whether to go ahead.
+type StagedPull struct {
+	// Root is the fetched package's directory, which Load reads.
+	Root string
+
+	ref     string
+	workDir string
+	stage   string
+}
+
+// StagePull fetches ref into a temp directory inside workDir, leaving
+// <workDir>/package/ as it is. Promote puts it in place; Discard removes it.
+func StagePull(ctx context.Context, ref, workDir string) (*StagedPull, error) {
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := os.MkdirAll(absWork, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
-	finalDest := filepath.Join(absWork, "package")
-
 	stage, err := os.MkdirTemp(absWork, ".tmp-pull-")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	stageCleanedUp := false
-	defer func() {
-		if !stageCleanedUp {
-			_ = os.RemoveAll(stage)
-		}
-	}()
-
 	loaded, err := Pull(ctx, ref, stage)
 	if err != nil {
-		return "", err
+		_ = os.RemoveAll(stage)
+		return nil, err
 	}
 	if _, err := os.Stat(filepath.Join(loaded, ManifestFile)); err != nil {
-		return "", fmt.Errorf("pulled artifact missing %s: %w", ManifestFile, err)
+		_ = os.RemoveAll(stage)
+		return nil, fmt.Errorf("pulled artifact missing %s: %w", ManifestFile, err)
 	}
+	return &StagedPull{Root: loaded, ref: ref, workDir: absWork, stage: stage}, nil
+}
+
+// Discard removes the staged package, if Promote hasn't put it in place.
+func (s *StagedPull) Discard() {
+	if s.stage != "" {
+		_ = os.RemoveAll(s.stage)
+		s.stage = ""
+	}
+}
+
+// Promote renames the staged package into <workDir>/package/, replacing any
+// package there, and records where it was pulled from. It returns the
+// absolute path to <workDir>/package/.
+func (s *StagedPull) Promote(ctx context.Context) (string, error) {
+	finalDest := filepath.Join(s.workDir, "package")
 
 	// Park any existing package/ in a sibling so we can roll back on
 	// failure. We use MkdirTemp + Remove to claim a unique name without
@@ -92,7 +124,7 @@ func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
 	// that slot.
 	var prevDest string
 	if _, err := os.Stat(finalDest); err == nil {
-		prevDest, err = os.MkdirTemp(absWork, ".tmp-pkg-prev-")
+		prevDest, err = os.MkdirTemp(s.workDir, ".tmp-pkg-prev-")
 		if err != nil {
 			return "", err
 		}
@@ -104,7 +136,7 @@ func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
 		}
 	}
 
-	if err := os.Rename(loaded, finalDest); err != nil {
+	if err := os.Rename(s.Root, finalDest); err != nil {
 		if prevDest != "" {
 			_ = os.Rename(prevDest, finalDest)
 		}
@@ -113,13 +145,12 @@ func PullToWorkDir(ctx context.Context, ref, workDir string) (string, error) {
 	if prevDest != "" {
 		_ = os.RemoveAll(prevDest)
 	}
-	// Successful swap — the stage dir may still hold an empty wrapper
-	// directory if `loaded` was a subdir of stage. RemoveAll the stage
-	// to be tidy.
-	_ = os.RemoveAll(stage)
-	stageCleanedUp = true
+	// The stage dir may still hold an empty wrapper directory if Root was a
+	// subdir of it.
+	s.Root = finalDest
+	s.Discard()
 
-	if err := writeSource(ctx, ref, absWork); err != nil {
+	if err := writeSource(ctx, s.ref, s.workDir); err != nil {
 		return "", err
 	}
 	return finalDest, nil

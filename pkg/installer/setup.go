@@ -188,18 +188,29 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 			i.printf("Pulling %s, which the installer record in Space %s says the install came from.\n", pullRef, opts.Space)
 		}
 	}
+	// A pulled package is staged beside the work-dir's own until the answers
+	// for it are worked out: the prior install's choices are compared with
+	// the package that made them, and an upgrade that can't be answered
+	// leaves the work-dir as it was.
+	var staged *ipkg.StagedPull
 	if pullRef != "" {
-		if _, err := ipkg.PullToWorkDir(ctx, pullRef, absWork); err != nil {
+		staged, err = ipkg.StagePull(ctx, pullRef, absWork)
+		if err != nil {
 			if recordedPull {
 				return nil, optionErrorf(ErrRecordedSourcePull, err, "pull %s, from the installer record in Space %s: %v",
 					pullRef, opts.Space, err)
 			}
 			return nil, fmt.Errorf("pull %s: %w", pullRef, err)
 		}
+		defer staged.Discard()
 	}
-	loaded, err := ipkg.Load(pkgDir)
-	if err != nil {
-		if pullRef == "" && os.IsNotExist(rootCause(err)) {
+	var loaded *ipkg.Loaded
+	if staged != nil {
+		if loaded, err = ipkg.Load(staged.Root); err != nil {
+			return nil, fmt.Errorf("load package pulled from %s: %w", pullRef, err)
+		}
+	} else if loaded, err = ipkg.Load(pkgDir); err != nil {
+		if os.IsNotExist(rootCause(err)) {
 			return nil, optionErrorf(ErrNoPackage, err, "no package found in %s", pkgDir)
 		}
 		return nil, fmt.Errorf("load package from %s: %w", pkgDir, err)
@@ -216,6 +227,14 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	raw, err := i.buildAnswers(loaded.Package, prior, opts)
 	if err != nil {
 		return nil, err
+	}
+	if staged != nil {
+		if _, err := staged.Promote(ctx); err != nil {
+			return nil, fmt.Errorf("pull %s: %w", pullRef, err)
+		}
+		if loaded, err = ipkg.Load(pkgDir); err != nil {
+			return nil, fmt.Errorf("load package from %s: %w", pkgDir, err)
+		}
 	}
 	raw.ImageOverrides = copyStrings(opts.SetImage)
 	if prior != nil && prior.Inputs != nil {
@@ -381,9 +400,13 @@ func (i *Installer) buildUpgradeAnswers(newPkg *api.Package, prior *wizard.Prior
 	}
 	id := wizard.DiffInputs(priorPkg, newPkg, priorVals)
 
-	if len(id.TypeChanged) != 0 {
-		names := make([]string, 0, len(id.TypeChanged))
-		for _, in := range id.TypeChanged {
+	// An input the options answer needs no carried-forward value, prompt or
+	// default.
+	typeChanged := unanswered(id.TypeChanged, opts.Inputs)
+	newRequired := unanswered(id.NewRequired, opts.Inputs)
+	if len(typeChanged) != 0 && opts.Terminal == nil {
+		names := make([]string, 0, len(typeChanged))
+		for _, in := range typeChanged {
 			names = append(names, in.Name)
 		}
 		return out, optionErrorf(ErrInputTypesChanged, nil, "input type(s) changed across upgrade for: %s", strings.Join(names, ", "))
@@ -398,18 +421,24 @@ func (i *Installer) buildUpgradeAnswers(newPkg *api.Package, prior *wizard.Prior
 	for _, k := range id.Dropped {
 		i.printf("Dropped removed input %q (was: %v)\n", k, priorVals[k])
 	}
-	if len(id.NewRequired) != 0 {
-		if opts.Terminal == nil {
-			return out, &NewRequiredInputsError{Inputs: id.NewRequired}
+	if len(newRequired) != 0 && opts.Terminal == nil {
+		return out, &NewRequiredInputsError{Inputs: newRequired}
+	}
+	for _, in := range typeChanged {
+		ra, err := wizard.AskOneInput(in, opts.Terminal.askOptions())
+		if err != nil {
+			return out, err
 		}
-		for _, in := range id.NewRequired {
-			ra, err := wizard.AskOneInput(in, opts.Terminal.askOptions())
-			if err != nil {
-				return out, err
-			}
-			out.Inputs[in.Name] = ra
-			i.printf("Answered new required input %q\n", in.Name)
+		out.Inputs[in.Name] = ra
+		i.printf("Answered input %q, whose type changed\n", in.Name)
+	}
+	for _, in := range newRequired {
+		ra, err := wizard.AskOneInput(in, opts.Terminal.askOptions())
+		if err != nil {
+			return out, err
 		}
+		out.Inputs[in.Name] = ra
+		i.printf("Answered new required input %q\n", in.Name)
 	}
 
 	priorSel := []string{}
@@ -452,6 +481,17 @@ func (i *Installer) buildUpgradeAnswers(newPkg *api.Package, prior *wizard.Prior
 		out.Inputs[k] = v
 	}
 	return out, nil
+}
+
+// unanswered returns the inputs that answers has no value for.
+func unanswered(inputs []api.Input, answers map[string]string) []api.Input {
+	var out []api.Input
+	for _, in := range inputs {
+		if _, ok := answers[in.Name]; !ok {
+			out = append(out, in)
+		}
+	}
+	return out
 }
 
 // lockDependencies resolves the dependency DAG against the OCI registry and

@@ -410,10 +410,15 @@ behaves as follows (no operator action needed in most cases):
 - **New input with default**: silently adopted. Logged.
 - **New required input without default**: prompted in interactive
   mode; in non-interactive mode, setup fails fast naming each
-  missing input. Re-run setup interactively to answer them.
+  missing input. Answer them with `--input <name>=<value>`, or re-run
+  setup interactively.
 - **Removed input**: silently dropped from the new `inputs.yaml`.
-- **Type-changed input**: setup errors. Re-run setup interactively
-  to re-answer.
+- **Type-changed input**: prompted again in interactive mode; in
+  non-interactive mode, setup fails naming each one. Answer them with
+  `--input <name>=<value>`, or re-run setup interactively.
+
+A setup that fails on any of these leaves the work-dir as it was: the
+pulled package replaces `package/` only once its inputs are answered.
 
 For components, similar rules: if your prior selection matched the
 old package's `default` preset exactly, the upgrade adopts the new
@@ -580,8 +585,8 @@ automatically.
 ### `the new package adds N required input(s) that the prior install did not answer`
 
 A non-interactive `installer setup --pull <new-ref>` ran against a
-package version that adds new required inputs. Re-run setup
-interactively to answer them.
+package version that adds new required inputs. Pass `--input
+<name>=<value>` for each, or re-run setup interactively to answer them.
 
 ### `change_set_id value does not match Unit ChangeSetID`
 

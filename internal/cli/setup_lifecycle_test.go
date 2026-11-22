@@ -144,6 +144,8 @@ func TestLifecycleSetupErrors(t *testing.T) {
 `, 1)
 	})
 	tr.fail("setup", "--pull", required, "--work-dir", work, "--non-interactive")
+	// The failed upgrade left the work-dir's package as it was.
+	tr.tree("package after the failed upgrade", filepath.Join(work, "package"), "bases/", "components/")
 
 	tr.section("upgrade changes an input's type")
 	retyped := e.copyExample("hello-app", "PKG_RETYPED")
@@ -159,6 +161,75 @@ func TestLifecycleSetupErrors(t *testing.T) {
 	tr.fail("setup", "--pull", retyped, "--work-dir", work, "--non-interactive")
 
 	tr.check("setup-errors")
+}
+
+// An upgrade's new inputs can be answered with --input, and the upgrade is
+// diffed against the package the prior install was made from.
+func TestLifecycleUpgradeAnswers(t *testing.T) {
+	e := newEnv(t)
+	work := e.dir("WORK")
+	mustRun(t, "setup", "--pull", e.helloV1(), "--work-dir", work, "--non-interactive", "--namespace", "demo")
+	tr := e.transcript()
+
+	tr.section("a new required input answered with --input")
+	required := e.copyExample("hello-app", "PKG_REQUIRED")
+	e.edit(filepath.Join(required, "installer.yaml"), func(s string) string {
+		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.2.0", 1)
+		return strings.Replace(s, "  components:\n", `  inputs:
+    - name: team
+      type: string
+      default: core
+    - name: owner
+      type: string
+      required: true
+      prompt: Who owns the app
+
+  components:
+`, 1)
+	})
+	tr.ok("setup", "--pull", required, "--work-dir", work, "--non-interactive", "--input", "owner=me")
+	tr.tree("record", filepath.Join(work, "out", "record"), "function-chain.yaml", "manifest-index.yaml", "source.yaml")
+
+	tr.section("an input whose type changed, answered with --input")
+	retyped := e.copyExample("hello-app", "PKG_RETYPED")
+	e.edit(filepath.Join(retyped, "installer.yaml"), func(s string) string {
+		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.3.0", 1)
+		return strings.Replace(s, "  components:\n", `  inputs:
+    - name: team
+      type: int
+      default: 1
+    - name: owner
+      type: string
+      required: true
+
+  components:
+`, 1)
+	})
+	tr.fail("setup", "--pull", retyped, "--work-dir", work, "--non-interactive")
+	tr.ok("setup", "--pull", retyped, "--work-dir", work, "--non-interactive", "--input", "team=7")
+	tr.tree("record", filepath.Join(work, "out", "record"), "function-chain.yaml", "manifest-index.yaml", "source.yaml")
+
+	// The prior install took the default preset, which selected nothing; the
+	// new version makes monitoring a default, which the upgrade adopts.
+	tr.section("a component newly flagged default")
+	defaults := e.copyExample("hello-app", "PKG_DEFAULTS")
+	e.edit(filepath.Join(defaults, "installer.yaml"), func(s string) string {
+		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.4.0", 1)
+		s = strings.Replace(s, "      path: components/monitoring\n", "      path: components/monitoring\n      default: true\n", 1)
+		return strings.Replace(s, "  components:\n", `  inputs:
+    - name: team
+      type: int
+      default: 1
+    - name: owner
+      type: string
+      required: true
+
+  components:
+`, 1)
+	})
+	tr.ok("setup", "--pull", defaults, "--work-dir", work, "--non-interactive")
+
+	tr.check("upgrade-answers")
 }
 
 // wizard writes the record without rendering when asked, and render renders it.

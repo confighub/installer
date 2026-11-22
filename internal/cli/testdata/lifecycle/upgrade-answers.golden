@@ -1,0 +1,99 @@
+===== a new required input answered with --input =====
+
+===== installer setup --pull $PKG_REQUIRED --work-dir $WORK --non-interactive --input owner=me =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree record =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: demo
+  values:
+    owner: me
+    team: core
+--- manifest-index.yaml (content not compared)
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+--- source.yaml (content not compared)
+
+===== an input whose type changed, answered with --input =====
+
+===== installer setup --pull $PKG_RETYPED --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+--- stderr
+Error: input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again
+--- error
+input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again
+
+===== installer setup --pull $PKG_RETYPED --work-dir $WORK --non-interactive --input team=7 =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree record =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.3.0
+  namespace: demo
+  values:
+    owner: me
+    team: 7
+--- manifest-index.yaml (content not compared)
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.3.0
+  base: default
+--- source.yaml (content not compared)
+
+===== a component newly flagged default =====
+
+===== installer setup --pull $PKG_DEFAULTS --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+Adopted new default-flagged component(s): monitoring
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded

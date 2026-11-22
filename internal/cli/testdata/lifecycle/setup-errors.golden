@@ -78,11 +78,72 @@ Loaded prior install state from local.
 --- stderr
 Error: the new package adds 1 required input(s) that the prior install did not answer:
   - owner (string): Who owns the app
-re-run interactively or run `installer wizard $WORK` to answer them, then re-run `installer upgrade`.
+pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to be asked.
 --- error
 the new package adds 1 required input(s) that the prior install did not answer:
   - owner (string): Who owns the app
-re-run interactively or run `installer wizard $WORK` to answer them, then re-run `installer upgrade`.
+pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to be asked.
+
+===== tree package after the failed upgrade =====
+--- bases/default/deployment.yaml (content not compared)
+--- bases/default/kustomization.yaml (content not compared)
+--- bases/default/namespace.yaml (content not compared)
+--- bases/default/service.yaml (content not compared)
+--- components/ingress-tls/kustomization.yaml (content not compared)
+--- components/ingress/ingress.yaml (content not compared)
+--- components/ingress/kustomization.yaml (content not compared)
+--- components/monitoring/kustomization.yaml (content not compared)
+--- components/monitoring/servicemonitor.yaml (content not compared)
+--- installer.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Package
+metadata:
+  name: hello-app
+installerMetadata:
+  version: 0.1.0
+spec:
+  bases:
+    - name: default
+      path: bases/default
+      default: true
+      description: A minimal app — Namespace, Deployment, Service.
+
+  inputs:
+    - name: team
+      type: string
+      default: core
+      description: Team that owns the app.
+
+  components:
+    - name: monitoring
+      path: components/monitoring
+      description: Adds a ServiceMonitor for Prometheus scraping.
+      externalRequires:
+        - kind: CRD
+          name: servicemonitors.monitoring.coreos.com
+          suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+    - name: ingress
+      path: components/ingress
+      description: Adds an Ingress so the app is reachable from outside the cluster.
+    - name: ingress-tls
+      path: components/ingress-tls
+      description: Annotates the Ingress to request a cert from cert-manager.
+      requires: [ingress]
+      externalRequires:
+        - kind: WebhookCertProvider
+          name: cert-manager
+          issuerKind: ClusterIssuer
+
+  transformers:
+    # Rename the Namespace resource and set metadata.namespace on every
+    # namespace-scoped resource. The namespace comes from the wizard's
+    # --namespace flag.
+    - toolchain: Kubernetes/YAML
+      whereResource: ""
+      description: Set the namespace on every namespaced resource.
+      invocations:
+        - name: set-namespace
+          args: ["{{ .Namespace }}"]
 
 ===== upgrade changes an input's type =====
 
@@ -90,6 +151,6 @@ re-run interactively or run `installer wizard $WORK` to answer them, then re-run
 --- stdout
 Loaded prior install state from local.
 --- stderr
-Error: input "team": strconv.Atoi: parsing "core": invalid syntax
+Error: input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again
 --- error
-input "team": strconv.Atoi: parsing "core": invalid syntax
+input type(s) changed across upgrade for: team — pass --input <name>=<value> for each, or run `installer setup --work-dir $WORK` on a terminal to answer them again
