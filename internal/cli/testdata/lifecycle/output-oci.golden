@@ -1,0 +1,84 @@
+===== installer setup --pull $PKG_V1 --work-dir $WORK --non-interactive --namespace demo --output-oci $WORK/rendered.oci =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $WORK/out/manifests
+Wrote rendered OCI $WORK/rendered.oci:latest
+  manifest:  sha256:d25ae9c8d746ba35f32c2067de17729f3ac0882b9f4ede3ceab85ad118bda38a
+  objects:   sha256:e27d594fd835c361c33902475fd9dec4e4150f06c0779b3742b97733d9a1e261 (3 manifest files)
+  pull-back: verified
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== installer setup --pull oci://$REGISTRY/pkgs/hello-app:0.1.0 --work-dir $FROMREG --non-interactive --namespace demo --output-oci oci://$REGISTRY/rendered/hello-app:demo =====
+--- stdout
+Wizard wrote $FROMREG/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $FROMREG/out/manifests
+Wrote rendered OCI oci://$REGISTRY/rendered/hello-app:demo
+  manifest:  $RENDERED_MANIFEST_DIGEST
+  objects:   sha256:e27d594fd835c361c33902475fd9dec4e4150f06c0779b3742b97733d9a1e261 (3 manifest files)
+  pull-back: verified
+Next: installer upload --work-dir $FROMREG
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree record =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: core
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: oci://$REGISTRY/pkgs/hello-app:0.1.0@sha256:9dca1167cb1a5486e36cae310780b804f74e4be91f63870fb96ecb93b5621583
+  digest: sha256:9dca1167cb1a5486e36cae310780b804f74e4be91f63870fb96ecb93b5621583

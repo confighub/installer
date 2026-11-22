@@ -1,0 +1,859 @@
+===== installer setup --pull $PKG_V1 --work-dir $WORK --non-interactive --namespace demo --select monitoring --input team=platform =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after first install =====
+--- out/.gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- out/compose/installer-transformer.sh
+#!/bin/sh
+exec "$EXE" transformer
+--- out/compose/kustomization.yaml
+# Reproduce this render with:
+#   kustomize build --enable-exec --enable-alpha-plugins .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - ../../package/bases/default
+components:
+    - ../../package/components/monitoring
+transformers:
+    - transformers.yaml
+--- out/compose/transformers.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ConfigHubTransformers
+metadata:
+    name: hello-app-transformers
+    annotations:
+        config.kubernetes.io/function: |
+            exec:
+              path: ./installer-transformer.sh
+spec:
+    namespace: demo
+    groups:
+        - toolchain: Kubernetes/YAML
+          invocations:
+            - name: set-namespace
+              args:
+                - demo
+          description: Set the namespace on every namespaced resource.
+--- out/manifests/deployment-demo-hello-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app
+    spec:
+      containers:
+        - image: nginxdemos/hello:plain-text
+          name: app
+          ports:
+            - containerPort: 80
+              name: http
+--- out/manifests/namespace-demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+--- out/manifests/service-demo-hello-app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app: hello-app
+--- out/manifests/servicemonitor-demo-hello-app.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  endpoints:
+    - interval: 30s
+      port: http
+  selector:
+    matchLabels:
+      app: hello-app
+--- out/record/function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: hello-app-function-chain
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - demo
+      description: Set the namespace on every namespaced resource.
+--- out/record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: platform
+--- out/record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+    - filename: servicemonitor-demo-hello-app.yaml
+      slug: servicemonitor-demo-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: demo
+--- out/record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+  components:
+    - monitoring
+--- out/record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V1
+--- package/bases/default/deployment.yaml (content not compared)
+--- package/bases/default/kustomization.yaml (content not compared)
+--- package/bases/default/namespace.yaml (content not compared)
+--- package/bases/default/service.yaml (content not compared)
+--- package/components/ingress-tls/kustomization.yaml (content not compared)
+--- package/components/ingress/ingress.yaml (content not compared)
+--- package/components/ingress/kustomization.yaml (content not compared)
+--- package/components/monitoring/kustomization.yaml (content not compared)
+--- package/components/monitoring/servicemonitor.yaml (content not compared)
+--- package/installer.yaml (content not compared)
+
+===== ConfigHub requests =====
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app'
+
+===== installer setup --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after re-render =====
+--- .gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- compose/installer-transformer.sh
+#!/bin/sh
+exec "$EXE" transformer
+--- compose/kustomization.yaml
+# Reproduce this render with:
+#   kustomize build --enable-exec --enable-alpha-plugins .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - ../../package/bases/default
+components:
+    - ../../package/components/monitoring
+transformers:
+    - transformers.yaml
+--- compose/transformers.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ConfigHubTransformers
+metadata:
+    name: hello-app-transformers
+    annotations:
+        config.kubernetes.io/function: |
+            exec:
+              path: ./installer-transformer.sh
+spec:
+    namespace: demo
+    groups:
+        - toolchain: Kubernetes/YAML
+          invocations:
+            - name: set-namespace
+              args:
+                - demo
+          description: Set the namespace on every namespaced resource.
+--- manifests/deployment-demo-hello-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app
+    spec:
+      containers:
+        - image: nginxdemos/hello:plain-text
+          name: app
+          ports:
+            - containerPort: 80
+              name: http
+--- manifests/namespace-demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+--- manifests/service-demo-hello-app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app: hello-app
+--- manifests/servicemonitor-demo-hello-app.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  endpoints:
+    - interval: 30s
+      port: http
+  selector:
+    matchLabels:
+      app: hello-app
+--- record/function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: hello-app-function-chain
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - demo
+      description: Set the namespace on every namespaced resource.
+--- record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: platform
+--- record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+    - filename: servicemonitor-demo-hello-app.yaml
+      slug: servicemonitor-demo-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: demo
+--- record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+  components:
+    - monitoring
+--- record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V1
+
+===== ConfigHub requests =====
+
+===== installer setup --pull $PKG_V2 --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+Adopted new default for input "log_level": info
+Dropped removed input "team" (was: platform)
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after upgrade =====
+--- function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: hello-app-function-chain
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - demo
+      description: Set the namespace on every namespaced resource.
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: demo
+  values:
+    log_level: info
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+    - filename: servicemonitor-demo-hello-app.yaml
+      slug: servicemonitor-demo-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+  components:
+    - monitoring
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V2
+
+===== installer setup --work-dir $WORK --non-interactive --set-image nginxdemos/hello=nginxdemos/hello:v2 =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after --set-image =====
+--- .gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- compose/installer-transformer.sh (content not compared)
+--- compose/kustomization.yaml (content not compared)
+--- compose/transformers.yaml (content not compared)
+--- manifests/deployment-demo-hello-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app
+    spec:
+      containers:
+        - image: nginxdemos/hello:v2
+          name: app
+          ports:
+            - containerPort: 80
+              name: http
+--- manifests/namespace-demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+--- manifests/service-demo-hello-app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app: hello-app
+--- manifests/servicemonitor-demo-hello-app.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  endpoints:
+    - interval: 30s
+      port: http
+  selector:
+    matchLabels:
+      app: hello-app
+--- record/function-chain.yaml (content not compared)
+--- record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: demo
+  values:
+    log_level: info
+  imageOverrides:
+    nginxdemos/hello: nginxdemos/hello:v2
+--- record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+    - filename: servicemonitor-demo-hello-app.yaml
+      slug: servicemonitor-demo-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: demo
+--- record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+  components:
+    - monitoring
+--- record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V2
+
+===== installer setup --work-dir $WORK --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree override carried forward =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: demo
+  values:
+    log_level: info
+  imageOverrides:
+    nginxdemos/hello: nginxdemos/hello:v2
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+    - filename: servicemonitor-demo-hello-app.yaml
+      slug: servicemonitor-demo-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+  components:
+    - monitoring
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V2
+
+===== installer setup --work-dir $WORK --non-interactive --namespace other --components all --input log_level=debug =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [ingress ingress-tls monitoring]
+Namespace: other
+Rendered 5 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after overrides =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: other
+  values:
+    log_level: debug
+  imageOverrides:
+    nginxdemos/hello: nginxdemos/hello:v2
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  files:
+    - filename: deployment-other-hello-app.yaml
+      slug: deployment-other-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: other
+    - filename: ingress-other-hello-app.yaml
+      slug: ingress-other-hello-app
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: hello-app
+      namespace: other
+    - filename: namespace-other.yaml
+      slug: namespace-other
+      apiVersion: v1
+      kind: Namespace
+      name: other
+    - filename: service-other-hello-app.yaml
+      slug: service-other-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: other
+    - filename: servicemonitor-other-hello-app.yaml
+      slug: servicemonitor-other-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: other
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+  components:
+    - ingress
+    - ingress-tls
+    - monitoring
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V2
+
+===== installer setup --work-dir $WORK --reuse =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [ingress ingress-tls monitoring]
+Namespace: other
+Rendered 5 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after --reuse =====
+--- function-chain.yaml (content not compared)
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  namespace: other
+  values:
+    log_level: debug
+  imageOverrides:
+    nginxdemos/hello: nginxdemos/hello:v2
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  files:
+    - filename: deployment-other-hello-app.yaml
+      slug: deployment-other-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: other
+    - filename: ingress-other-hello-app.yaml
+      slug: ingress-other-hello-app
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: hello-app
+      namespace: other
+    - filename: namespace-other.yaml
+      slug: namespace-other
+      apiVersion: v1
+      kind: Namespace
+      name: other
+    - filename: service-other-hello-app.yaml
+      slug: service-other-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: other
+    - filename: servicemonitor-other-hello-app.yaml
+      slug: servicemonitor-other-hello-app
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      name: hello-app
+      namespace: other
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.2.0
+  base: default
+  components:
+    - ingress
+    - ingress-tls
+    - monitoring
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V2

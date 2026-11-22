@@ -1,0 +1,209 @@
+===== installer wizard $PKG_V1 --work-dir $WORK --non-interactive --namespace demo --render=false =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Next: installer render --work-dir $WORK
+
+===== tree after wizard =====
+--- out/record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: core
+--- out/record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+--- out/record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V1
+--- package/bases/default/deployment.yaml (content not compared)
+--- package/bases/default/kustomization.yaml (content not compared)
+--- package/bases/default/namespace.yaml (content not compared)
+--- package/bases/default/service.yaml (content not compared)
+--- package/components/ingress-tls/kustomization.yaml (content not compared)
+--- package/components/ingress/ingress.yaml (content not compared)
+--- package/components/ingress/kustomization.yaml (content not compared)
+--- package/components/monitoring/kustomization.yaml (content not compared)
+--- package/components/monitoring/servicemonitor.yaml (content not compared)
+--- package/installer.yaml (content not compared)
+
+===== installer render --work-dir $WORK =====
+--- stdout
+Rendered 3 manifest(s) to $WORK/out/manifests
+Spec docs in $WORK/out/record
+Next: installer upload --work-dir $WORK --space <slug>
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree after render =====
+--- .gitignore
+# Rendered secrets must never be committed.
+secrets/
+--- compose/installer-transformer.sh
+#!/bin/sh
+exec "$EXE" transformer
+--- compose/kustomization.yaml
+# Reproduce this render with:
+#   kustomize build --enable-exec --enable-alpha-plugins .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - ../../package/bases/default
+transformers:
+    - transformers.yaml
+--- compose/transformers.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ConfigHubTransformers
+metadata:
+    name: hello-app-transformers
+    annotations:
+        config.kubernetes.io/function: |
+            exec:
+              path: ./installer-transformer.sh
+spec:
+    namespace: demo
+    groups:
+        - toolchain: Kubernetes/YAML
+          invocations:
+            - name: set-namespace
+              args:
+                - demo
+          description: Set the namespace on every namespaced resource.
+--- manifests/deployment-demo-hello-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app
+    spec:
+      containers:
+        - image: nginxdemos/hello:plain-text
+          name: app
+          ports:
+            - containerPort: 80
+              name: http
+--- manifests/namespace-demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+--- manifests/service-demo-hello-app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-app
+  name: hello-app
+  namespace: demo
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app: hello-app
+--- record/function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: hello-app-function-chain
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - demo
+      description: Set the namespace on every namespaced resource.
+--- record/inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    team: core
+--- record/manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+--- record/selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+--- record/source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG_V1
+
+===== render without a record =====
+
+===== installer render --work-dir $NORECORD =====
+--- stdout
+--- stderr
+Error: read $NORECORD/out/record/selection.yaml: open $NORECORD/out/record/selection.yaml: no such file or directory
+--- error
+read $NORECORD/out/record/selection.yaml: open $NORECORD/out/record/selection.yaml: no such file or directory

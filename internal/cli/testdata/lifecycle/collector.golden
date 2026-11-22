@@ -1,0 +1,101 @@
+===== installer setup --pull $PKG --work-dir $WORK --non-interactive --namespace demo --select ingress --input greeting=hi =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Collector produced 4 fact(s) in $WORK/out/record/facts.yaml
+Base: default; components: [ingress]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+Next: installer upload --work-dir $WORK
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== tree record =====
+--- facts.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Facts
+metadata:
+  name: hello-app-facts
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  values:
+    base: default
+    greeting: hi
+    namespace: demo
+    selected: ingress
+--- function-chain.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: FunctionChain
+metadata:
+  name: hello-app-function-chain
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  groups:
+    - toolchain: Kubernetes/YAML
+      invocations:
+        - name: set-namespace
+          args:
+            - demo
+      description: Set the namespace on every namespaced resource.
+--- inputs.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Inputs
+metadata:
+  name: hello-app-inputs
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  namespace: demo
+  values:
+    greeting: hi
+--- manifest-index.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: ManifestIndex
+metadata:
+  name: hello-app-manifest-index
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  files:
+    - filename: deployment-demo-hello-app.yaml
+      slug: deployment-demo-hello-app
+      apiVersion: apps/v1
+      kind: Deployment
+      name: hello-app
+      namespace: demo
+    - filename: ingress-demo-hello-app.yaml
+      slug: ingress-demo-hello-app
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: hello-app
+      namespace: demo
+    - filename: namespace-demo.yaml
+      slug: namespace-demo
+      apiVersion: v1
+      kind: Namespace
+      name: demo
+    - filename: service-demo-hello-app.yaml
+      slug: service-demo-hello-app
+      apiVersion: v1
+      kind: Service
+      name: hello-app
+      namespace: demo
+--- selection.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Selection
+metadata:
+  name: hello-app-selection
+spec:
+  package: hello-app
+  packageVersion: 0.1.0
+  base: default
+  components:
+    - ingress
+--- source.yaml
+apiVersion: installer.confighub.com/v1alpha1
+kind: Source
+metadata:
+  name: hello-app-source
+spec:
+  ref: $PKG
