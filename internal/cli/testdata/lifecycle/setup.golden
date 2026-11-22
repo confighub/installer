@@ -478,6 +478,7 @@ Namespace: demo
 Rendered 4 manifest(s) to $WORK/out/manifests
 Next: installer upload --work-dir $WORK
 --- stderr
+INFO invoke set-yq: succeeded
 INFO invoke set-namespace: succeeded
 
 ===== tree after --set-image =====
@@ -620,6 +621,7 @@ Namespace: demo
 Rendered 4 manifest(s) to $WORK/out/manifests
 Next: installer upload --work-dir $WORK
 --- stderr
+INFO invoke set-yq: succeeded
 INFO invoke set-namespace: succeeded
 
 ===== tree override carried forward =====
@@ -697,6 +699,7 @@ Namespace: other
 Rendered 5 manifest(s) to $WORK/out/manifests
 Next: installer upload --work-dir $WORK
 --- stderr
+INFO invoke set-yq: succeeded
 INFO invoke set-namespace: succeeded
 
 ===== tree after overrides =====
@@ -782,6 +785,7 @@ Namespace: other
 Rendered 5 manifest(s) to $WORK/out/manifests
 Next: installer upload --work-dir $WORK
 --- stderr
+INFO invoke set-yq: succeeded
 INFO invoke set-namespace: succeeded
 
 ===== tree after --reuse =====

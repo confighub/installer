@@ -4,6 +4,7 @@
 package render
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func TestApplyImageOverridesNoOpWhenEmpty(t *testing.T) {
 	}
 	sel := &api.Selection{Spec: api.SelectionSpec{Base: "default"}}
 	for _, overrides := range []map[string]string{nil, {}} {
-		images, err := applyImageOverrides(loaded, sel, overrides)
+		images, err := applyImageOverrides(context.Background(), loaded, sel, overrides)
 		if err != nil || images != nil {
 			t.Fatalf("no overrides should be a no-op, got %v, %v", images, err)
 		}

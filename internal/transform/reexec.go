@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
@@ -14,6 +15,13 @@ import (
 // to execute, asking the program it re-executes to run the transform step
 // instead of whatever it normally does.
 const EnvRunTransformer = "INSTALLER_RUN_TRANSFORMER"
+
+// EnvTransformerLog names a file the transform step appends its log to, its
+// error included, instead of writing them to stderr. Render passes it through
+// kustomize, which hands an exec function the stderr of the process running
+// kustomize: a program rendering in its own process has the log written where
+// it says. A standalone kustomize build in out/compose/ doesn't set it.
+const EnvTransformerLog = "INSTALLER_TRANSFORMER_LOG"
 
 // Requested reports whether this process was started to run the transform
 // step.
@@ -25,7 +33,23 @@ func Requested() bool {
 // result on stdout, and an error on stderr with exit status 1. It does not
 // return.
 func Main() {
-	os.Exit(main(os.Stdin, os.Stdout, os.Stderr))
+	stderr := os.Stderr
+	if path := os.Getenv(EnvTransformerLog); path != "" {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "installer transformer: open %s: %v\n", EnvTransformerLog, err)
+			os.Exit(1)
+		}
+		// The functions log through slog's default logger, which writes
+		// through the log package's.
+		log.SetOutput(f)
+		stderr = f
+	}
+	code := main(os.Stdin, os.Stdout, stderr)
+	if stderr != os.Stderr {
+		stderr.Close()
+	}
+	os.Exit(code)
 }
 
 func main(stdin io.Reader, stdout, stderr io.Writer) int {

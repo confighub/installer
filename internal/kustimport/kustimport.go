@@ -9,6 +9,7 @@ package kustimport
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -136,7 +137,7 @@ func Import(source, scope, dest string) (*Result, error) {
 		}
 		res.Images = seedImages(want)
 	}
-	if err := kustomize.WriteImages(kustPath, res.Images); err != nil {
+	if err := kustomize.WriteImages(context.Background(), kustPath, res.Images); err != nil {
 		return nil, err
 	}
 

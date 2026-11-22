@@ -6,11 +6,14 @@ package render
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/confighub/installer/internal/kustomize"
 	ipkg "github.com/confighub/installer/internal/pkg"
+	"github.com/confighub/installer/internal/transform"
 	"github.com/confighub/installer/pkg/api"
 )
 
@@ -29,6 +32,10 @@ type Options struct {
 	// the program has to answer by running the transform step (see
 	// transform.Requested).
 	TransformerCommand []string
+	// Log receives the transform step's log: a line for each function it
+	// runs. Nil discards it. When the step fails, its log is in the error
+	// instead.
+	Log io.Writer
 }
 
 // Result is what Render produces.
@@ -77,7 +84,7 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 	//    would: to the images: block of the composed kustomization, which
 	//    reaches the containers of the base and of every component, and to
 	//    the entries the base and components declare for them.
-	images, err := applyImageOverrides(opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides)
+	images, err := applyImageOverrides(ctx, opts.Loaded, opts.Selection, opts.Inputs.Spec.ImageOverrides)
 	if err != nil {
 		return nil, err
 	}
@@ -112,9 +119,9 @@ func Render(ctx context.Context, opts Options, outDir string) (*Result, error) {
 		return nil, err
 	}
 
-	rendered, err := kustomize.BuildYAML(composeDir)
+	rendered, err := buildCompose(composeDir, opts.Log)
 	if err != nil {
-		return nil, fmt.Errorf("kustomize build %s: %w", composeDir, err)
+		return nil, err
 	}
 
 	// 3. Run validators in-process against kustomize's output. Each
@@ -257,4 +264,39 @@ func writeManifestIndex(path string, pkg *api.Package, files []File) error {
 		})
 	}
 	return writeYAML(path, idx)
+}
+
+// buildCompose runs kustomize on composeDir. The transform step it runs logs
+// to a file rather than to the stderr kustomize gives it, which is this
+// process's: the log is copied to log, or into the error when the build fails.
+func buildCompose(composeDir string, log io.Writer) ([]byte, error) {
+	f, err := os.CreateTemp("", "installer-transformer-*.log")
+	if err != nil {
+		return nil, err
+	}
+	path := f.Name()
+	f.Close()
+	defer os.Remove(path)
+	// kustomize splits the variables it passes on "=".
+	if strings.Contains(path, "=") {
+		return nil, fmt.Errorf("the transform step's log file %s has an = in its path; set TMPDIR to a directory without one", path)
+	}
+
+	rendered, buildErr := kustomize.BuildYAML(composeDir, transform.EnvTransformerLog+"="+path)
+	stepLog, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if buildErr != nil {
+		if trimmed := strings.TrimSpace(string(stepLog)); trimmed != "" {
+			return nil, fmt.Errorf("kustomize build %s: %w\n%s", composeDir, buildErr, trimmed)
+		}
+		return nil, fmt.Errorf("kustomize build %s: %w", composeDir, buildErr)
+	}
+	if log != nil {
+		if _, err := log.Write(stepLog); err != nil {
+			return nil, err
+		}
+	}
+	return rendered, nil
 }

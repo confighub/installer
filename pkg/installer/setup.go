@@ -149,6 +149,7 @@ type RenderedOCI struct {
 // locks the dependencies, renders, and publishes the rendered OCI artifact.
 // It is `installer setup`, or `installer wizard` without Render.
 func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
+	ctx = i.withFunctionLog(ctx)
 	if opts.Preset != "" && len(opts.Select) > 0 {
 		return nil, ErrPresetAndSelect
 	}
@@ -567,6 +568,7 @@ func (i *Installer) recordedSourceRef(ctx context.Context, space string) (string
 // Render renders the work-dir's package from the selection, inputs and facts
 // in out/record, and its locked dependencies, as `installer render` does.
 func (i *Installer) Render(ctx context.Context, workDir string) (*RenderResult, error) {
+	ctx = i.withFunctionLog(ctx)
 	if err := i.checkTransformer(); err != nil {
 		return nil, err
 	}
@@ -631,6 +633,7 @@ func (i *Installer) render(ctx context.Context, workDir string, loaded *ipkg.Loa
 		Inputs:             inputs,
 		Facts:              facts,
 		TransformerCommand: i.opts.TransformerCommand,
+		Log:                i.err,
 	}, outDir)
 	if err != nil {
 		return nil, err
@@ -658,6 +661,7 @@ func (i *Installer) render(ctx context.Context, workDir string, loaded *ipkg.Loa
 		WorkDir:            workDir,
 		Registry:           i.registry,
 		TransformerCommand: i.opts.TransformerCommand,
+		Log:                i.err,
 	})
 	if err != nil {
 		return nil, err

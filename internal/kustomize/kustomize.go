@@ -28,8 +28,9 @@ import (
 
 // Build builds the kustomization in dir as
 // `kustomize build --enable-exec --enable-alpha-plugins dir` does, so the
-// synthesized out/compose/ tree still reproduces with the binary.
-func Build(dir string) (resmap.ResMap, error) {
+// synthesized out/compose/ tree still reproduces with the binary. env, of the
+// form NAME=VALUE, is added to the environment of the exec functions it runs.
+func Build(dir string, env ...string) (resmap.ResMap, error) {
 	opts := krusty.MakeDefaultOptions()
 	// The CLI's --reorder defaults to legacy; the library's to none.
 	opts.Reorder = krusty.ReorderOptionLegacy
@@ -37,13 +38,14 @@ func Build(dir string) (resmap.ResMap, error) {
 	opts.PluginConfig.FnpLoadingOptions = types.FnPluginLoadingOptions{
 		EnableExec:  true,
 		NetworkName: "bridge",
+		Env:         env,
 	}
 	return krusty.MakeKustomizer(opts).Run(filesys.MakeFsOnDisk(), dir)
 }
 
 // BuildYAML is Build, returning the multi-document YAML the CLI prints.
-func BuildYAML(dir string) ([]byte, error) {
-	m, err := Build(dir)
+func BuildYAML(dir string, env ...string) ([]byte, error) {
+	m, err := Build(dir, env...)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ const preserve = "*"
 // for a name in args replaces the existing one, and the block is sorted by
 // name. Unlike the CLI, the rest of the file, comments included, is left as
 // it was.
-func SetImages(path string, args []string) error {
+func SetImages(ctx context.Context, path string, args []string) error {
 	byName := map[string]types.Image{}
 	for _, arg := range args {
 		img, err := parseImageArg(arg)
@@ -110,7 +112,7 @@ func SetImages(path string, args []string) error {
 		images = append(images, img)
 	}
 	sort.Slice(images, func(i, j int) bool { return images[i].Name < images[j].Name })
-	return WriteImages(path, images)
+	return WriteImages(ctx, path, images)
 }
 
 func parseImageArg(arg string) (types.Image, error) {
@@ -193,13 +195,13 @@ func AddResource(path, resource string) error {
 	if slices.Contains(k.Resources, resource) {
 		return nil
 	}
-	return setYQ(path, data, ".resources = (.resources // []) + [$params.resource]", "resource="+resource)
+	return setYQ(context.Background(), path, data, ".resources = (.resources // []) + [$params.resource]", "resource="+resource)
 }
 
 // WriteImages replaces the images: block of the kustomization file at path
 // with the set-yq function, which leaves the rest of the file, comments
 // included, as it was. No images leaves the file unchanged.
-func WriteImages(path string, images []types.Image) error {
+func WriteImages(ctx context.Context, path string, images []types.Image) error {
 	if len(images) == 0 {
 		return nil
 	}
@@ -211,19 +213,19 @@ func WriteImages(path string, images []types.Image) error {
 	if err != nil {
 		return err
 	}
-	return setYQ(path, data, ".images = "+string(list))
+	return setYQ(ctx, path, data, ".images = "+string(list))
 }
 
 // setYQ writes data, the contents of the file at path, back to it after
 // running the set-yq function with args. A kustomization has no
 // metadata.name, which Kubernetes/YAML functions require, so it is edited
 // as AppConfig/YAML.
-func setYQ(path string, data []byte, args ...string) error {
+func setYQ(ctx context.Context, path string, data []byte, args ...string) error {
 	chain := &api.FunctionChain{Spec: api.FunctionChainSpec{Groups: []api.FunctionGroup{{
 		Toolchain:   "AppConfig/YAML",
 		Invocations: []api.FunctionInvocation{{Name: "set-yq", Args: args}},
 	}}}}
-	out, err := chainexec.RunChain(context.Background(), chain, data)
+	out, err := chainexec.RunChain(ctx, chain, data)
 	if err != nil {
 		return fmt.Errorf("edit %s: %w", path, err)
 	}

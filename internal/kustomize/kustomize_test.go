@@ -4,6 +4,7 @@
 package kustomize
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,7 +69,7 @@ images:
   newTag: v1
   digest: sha256:old
 `)
-	if err := SetImages(path, []string{
+	if err := SetImages(context.Background(), path, []string{
 		"app=*:v2", // keeps newName, sets the tag, drops the digest
 		"new=mirror.example.com/new@sha256:abc",
 	}); err != nil {
@@ -98,7 +99,7 @@ images:
 
 func TestSetImagesPreserveWithoutExistingEntry(t *testing.T) {
 	path := writeKustomization(t, "images: []\n")
-	if err := SetImages(path, []string{"app=*:v2"}); err != nil {
+	if err := SetImages(context.Background(), path, []string{"app=*:v2"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := readImages(t, path); len(got) != 1 || got[0] != (types.Image{Name: "app", NewTag: "v2"}) {
@@ -108,7 +109,7 @@ func TestSetImagesPreserveWithoutExistingEntry(t *testing.T) {
 
 func TestSetImagesRejectsBareName(t *testing.T) {
 	path := writeKustomization(t, "images: []\n")
-	if err := SetImages(path, []string{"app"}); err == nil {
+	if err := SetImages(context.Background(), path, []string{"app"}); err == nil {
 		t.Fatal("want an error for an image with no new name, tag or digest")
 	}
 }

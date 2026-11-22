@@ -145,7 +145,13 @@ re-executes the program that rendered, the installer or a program embedding
 it, with `INSTALLER_RUN_TRANSFORMER=1`, which asks it for the transform
 step: the same step `installer transformer` runs. A program embedding the
 installer answers it by calling `installer.RunTransformerIfRequested()` at
-the start of `main` (see [library.md](./library.md)). Same render
+the start of `main` (see [library.md](./library.md)). During a render the
+transform step writes its log, a line per function it runs and its error
+if it fails, to the file `INSTALLER_TRANSFORMER_LOG` names, which the
+render passes it through kustomize; the render then writes the log to its
+error output, or puts it in the error when the step fails. kustomize
+would otherwise hand the step the stderr of the process rendering, which
+a program embedding the installer doesn't let it write to. Same render
 is reproducible with a `kustomize` binary by anyone with
 `installer-transformer.sh` on PATH (or present alongside the
 kustomization in `out/compose/`), byte-for-byte unless that kustomize
