@@ -1,7 +1,9 @@
 # Embedding the installer as a Go library — Design and plan
 
 Status: phases 1–3 are done and released in v0.4.0, with the CI job of
-phase 4. Whether cub embeds the installer is undecided (see phase 4).
+phase 4. Sending the logs of the functions a render runs to `ErrOut`
+came after v0.4.0. Whether cub embeds the installer is undecided (see
+phase 4).
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -162,8 +164,9 @@ type Options struct {
 	ConfigHub *cubapi.Client
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
-	// ErrOut receives warnings, unless Warn is set, and the stderr of the
-	// package's collector and of cosign; nil discards them.
+	// ErrOut receives warnings, unless Warn is set, the stderr of the
+	// package's collector and of cosign, and a line for each function a
+	// render runs; nil discards them.
 	ErrOut io.Writer
 	// Warn receives each warning, such as an installer record that can't be
 	// read, after which setup starts fresh; nil prints "warning: <err>" to
@@ -336,6 +339,16 @@ otherwise it returns at once. This is the re-exec pattern Docker uses in
 can fail with an error naming the missing call instead of a kustomize exec
 failure. `TransformerCommand` overrides the wrapper's command for a host
 that would rather dispatch a hidden subcommand, and for tests.
+
+Everything a render logs goes to `ErrOut`, not to the host's stderr or
+its `slog` default logger. kustomize gives an exec function the stderr of
+the process running kustomize, which is the host's, so render passes the
+step `INSTALLER_TRANSFORMER_LOG`, naming a file the step writes its log
+and any error to. Render copies the file to `ErrOut`, or into the error
+when the step fails. The functions the installer runs in the host's
+process, the validators and its kustomization edits, log through a
+logger that writes to `ErrOut`, which it puts in their context with the
+SDK's `handler.WithLogger` (SDK v0.11.13).
 
 `out/compose/` still reproduces with `kustomize build --enable-exec
 --enable-alpha-plugins`, using whichever binary rendered it. The
