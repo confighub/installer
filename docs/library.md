@@ -529,7 +529,11 @@ unchanged.
 ### Phase 4 — Release and cub adoption
 
 - Move cub's kustomize pin to v5.7.1, as above.
-- Add the CI job that builds and tests against the SDK's main branch.
+- Add the CI job that builds and tests against the SDK's main branch
+  (done: `sdk-main` in `.github/workflows/test.yml`, on every pull
+  request and daily). The SDK's `main` moves at SDK releases, so the
+  job finds a break at the SDK release, before cub requires it, rather
+  than at the SDK change.
 - Release the installer with phases 1–3.
 - In cub: require that release, call `RunTransformerIfRequested` at the
   start of `main`, and replace the two plugin runs in `cub cluster up

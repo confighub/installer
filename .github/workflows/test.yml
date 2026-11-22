@@ -1,0 +1,100 @@
+name: test
+
+# Vets and tests every pull request and push to main.
+#
+# `test` installs kustomize and cosign, so the tests that need them
+# (out/compose/ built by the kustomize binary, signing and verifying with the
+# cosign binary against a registry container) run rather than skip.
+#
+# `sdk-main` builds and tests against the SDK's main branch instead of the
+# release go.mod requires. cub builds with the installer and a newer SDK, so
+# this says early when an SDK change breaks the installer. It isn't meant to
+# block merging; it also runs daily, since the SDK changes on its own.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily, 13:00 UTC
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # kustomize matches the sigs.k8s.io/kustomize/api version in go.mod.
+  KUSTOMIZE_VERSION: v5.7.1
+  KUSTOMIZE_SHA256: ea375e7372f9aa029129d4b2d16c66b7750b7f1213c4f66f910d981c895818d8
+  COSIGN_VERSION: v3.0.6
+  COSIGN_SHA256: c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kustomize and cosign
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cd "$RUNNER_TEMP"
+
+          tarball="kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLo "$tarball" "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/${tarball}"
+          echo "${KUSTOMIZE_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" -C "$bin" kustomize
+
+          curl -fsSLo "$bin/cosign" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_SHA256}  $bin/cosign" | sha256sum -c -
+          chmod +x "$bin/cosign"
+
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Check the tools the tests look for
+        run: |
+          kustomize version
+          cosign version
+          docker info --format '{{.ServerVersion}}'
+
+      - run: go vet ./...
+      - run: go test ./...
+
+  sdk-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Require the SDK's main branch
+        run: |
+          set -euo pipefail
+          # The SDK modules move in lockstep, so all of them move together.
+          mods="$(grep -oE 'github\.com/confighub/sdk/[A-Za-z0-9_./-]+' go.mod | sort -u)"
+          go get $(printf '%s@main\n' $mods)
+          go mod tidy
+          {
+            echo '### SDK modules under test'
+            echo '```'
+            go list -m $mods
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - run: go vet ./...
+      - run: go test ./...
