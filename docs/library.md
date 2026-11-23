@@ -1,6 +1,9 @@
 # Embedding the installer as a Go library — Design and plan
 
-Status: phases 1–3 implemented; phase 4 proposed.
+Status: phases 1–3 are done and released in v0.4.0, with the CI job of
+phase 4. Sending the logs of the functions a render runs to `ErrOut`
+came after v0.4.0. Whether cub embeds the installer is undecided (see
+phase 4).
 
 The installer runs as a binary, standalone (`installer ...`) or as a cub
 plugin (`cub installer ...`). This doc proposes a public Go package that
@@ -161,8 +164,9 @@ type Options struct {
 	ConfigHub *cubapi.Client
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
-	// ErrOut receives warnings, unless Warn is set, and the stderr of the
-	// package's collector and of cosign; nil discards them.
+	// ErrOut receives warnings, unless Warn is set, the stderr of the
+	// package's collector and of cosign, and a line for each function a
+	// render runs; nil discards them.
 	ErrOut io.Writer
 	// Warn receives each warning, such as an installer record that can't be
 	// read, after which setup starts fresh; nil prints "warning: <err>" to
@@ -336,6 +340,16 @@ can fail with an error naming the missing call instead of a kustomize exec
 failure. `TransformerCommand` overrides the wrapper's command for a host
 that would rather dispatch a hidden subcommand, and for tests.
 
+Everything a render logs goes to `ErrOut`, not to the host's stderr or
+its `slog` default logger. kustomize gives an exec function the stderr of
+the process running kustomize, which is the host's, so render passes the
+step `INSTALLER_TRANSFORMER_LOG`, naming a file the step writes its log
+and any error to. Render copies the file to `ErrOut`, or into the error
+when the step fails. The functions the installer runs in the host's
+process, the validators and its kustomization edits, log through a
+logger that writes to `ErrOut`, which it puts in their context with the
+SDK's `handler.WithLogger` (SDK v0.11.13).
+
 `out/compose/` still reproduces with `kustomize build --enable-exec
 --enable-alpha-plugins`, using whichever binary rendered it. The
 `installer transformer` subcommand stays for people wiring the
@@ -369,12 +383,33 @@ For cub specifically:
   `kyaml` v0.18.1) to v5.7.1 before cub links the installer. When either
   moves later, the other has to follow.
 - **cub builds against the SDK at its own revision, not a release.** The
-  installer requires released SDK modules (`sdk/core` and
-  `sdk/function-impl`), and in cub's build those are replaced by the
-  revision cub builds with. An SDK change that breaks the installer's
-  build then breaks cub's until an installer release adapts to it. To find
-  out before cub does, the installer's CI also builds and tests against
-  the SDK's main branch, in a job that doesn't block merging. The
+  installer requires released SDK modules (`sdk/core`,
+  `sdk/function-impl` and the `configkit` modules they need). cub is
+  built in the same tree as the SDK, and its `go.mod` replaces every SDK
+  module with that module's directory in the tree. A `replace` that names
+  no version applies to every version of the module, so the installer's
+  SDK code is compiled from cub's tree, never downloaded: an SDK change
+  that breaks the installer's build breaks cub's build in the same
+  change, until an installer release adapts to it. That covers only the
+  modules cub replaces. If the installer starts using an SDK module cub
+  doesn't, cub's build takes that one from its release until a `replace`
+  is added.
+- **cub's SDK requirements become release versions.** Go still requires
+  each SDK requirement in cub's `go.mod` to be at least the version the
+  installer requires, and `go mod tidy` raises it, so cub's SDK
+  requirements read as that release (v0.11.4 for installer v0.4.0) rather
+  than the `v0.0.0` placeholders the other SDK modules use. Only the
+  number changes; the `replace` decides the code. When the SDK is
+  released, its `go.mod` files are rewritten to require every SDK module
+  at the new release, whatever version they named, not just the
+  placeholders; otherwise the published cub would require the older
+  release the installer names, and build against it.
+- **The installer's own build uses SDK releases.** Its CI also builds and
+  tests against the SDK's main branch, in a job that doesn't block
+  merging. That branch moves when the SDK is released, so the job finds
+  a break when the release that causes it comes out, before cub requires
+  it. To try the installer against an unreleased SDK, build it locally
+  with a `go.work` or a `replace` naming a checkout of the SDK. The
   installer uses a small part of the SDK (`cubapi`, `goclient-new`,
   `plugin`, and the function executor), which keeps such breaks rare.
 - **The module graph has a cycle**, `sdk/cmd/cub` → `installer` →
@@ -528,19 +563,29 @@ unchanged.
 
 ### Phase 4 — Release and cub adoption
 
-- Move cub's kustomize pin to v5.7.1, as above.
+- Move cub's kustomize pin to v5.7.1, as above (done).
 - Add the CI job that builds and tests against the SDK's main branch
   (done: `sdk-main` in `.github/workflows/test.yml`, on every pull
-  request and daily). The SDK's `main` moves at SDK releases, so the
-  job finds a break at the SDK release, before cub requires it, rather
-  than at the SDK change.
-- Release the installer with phases 1–3.
+  request and daily).
+- Release the installer with phases 1–3 (done: v0.4.0).
 - In cub: require that release, call `RunTransformerIfRequested` at the
   start of `main`, and replace the two plugin runs in `cub cluster up
-  --k8sbot-installer` with `Setup` and `PlanUpload`/`Upload`, using cub's
-  client and printing through cub's output. `--k8sbot-installer` then no
-  longer needs the plugin installed. `cub installer` keeps running the
-  plugin.
+  --k8sbot-installer` with `Setup` and `PrepareUpload`/`Upload`, using
+  cub's client and printing through cub's output. `--k8sbot-installer`
+  then no longer needs the plugin installed. `cub installer` keeps
+  running the plugin.
+
+  This is drafted, not merged; whether cub should embed the installer is
+  undecided. The draft installs k8sbot's Argo CD and Flux bases, and
+  re-enters an existing base from its installer record, as the plugin
+  did. What it costs and changes:
+  - cub's binary grows by about 14 MB (12%).
+  - The SDK release has to rewrite every SDK requirement, as above.
+  - The package is read anonymously, as cub already reads its newest
+    release, rather than with the Docker credential store the plugin
+    used, so an expired registry login can't refuse it.
+  - The upload prints its report but not the installer CLI's revert
+    hint; cub's cluster commands undo their own changes on failure.
 
 ## Open questions
 
