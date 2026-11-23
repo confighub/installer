@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,5 +312,91 @@ func TestIgnoresEnvironmentAndHome(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "cosign.log")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Setup ran the cosign the environment names: %v", err)
+	}
+}
+
+// processOutput runs fn and returns what reached the process's stderr: through
+// slog's default logger, which writes through the log package's, or from a
+// child process kustomize runs, which inherits os.Stderr.
+func processOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = w
+	piped := make(chan []byte)
+	go func() {
+		b, _ := io.ReadAll(r)
+		piped <- b
+	}()
+	fn()
+	os.Stderr = stderr
+	w.Close()
+	return logged.String() + string(<-piped)
+}
+
+// The functions a render runs, in this process and in the transform step's,
+// log to ErrOut, and nothing reaches the process's stderr.
+func TestFunctionLogGoesToErrOut(t *testing.T) {
+	var errOut bytes.Buffer
+	inst, err := installer.New(installer.Options{ErrOut: &errOut})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaked := processOutput(t, func() {
+		_, err = inst.Setup(context.Background(), installer.SetupOptions{
+			WorkDir: t.TempDir(), Pull: example(t, "hello-app"), Namespace: "demo", Render: true,
+			// Overriding an image edits the kustomization with set-yq, in
+			// this process.
+			SetImage: map[string]string{"nginxdemos/hello": "nginxdemos/hello:0.4"},
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaked != "" {
+		t.Errorf("wrote to the process's stderr:\n%s", leaked)
+	}
+	for _, want := range []string{"INFO invoke set-yq: succeeded", "INFO invoke set-namespace: succeeded"} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("ErrOut has no %q:\n%s", want, errOut.String())
+		}
+	}
+}
+
+// A transform step that fails says why in the error, not on the process's
+// stderr.
+func TestFailedTransformStepIsInTheError(t *testing.T) {
+	pkg := filepath.Join(t.TempDir(), "pkg")
+	if err := os.CopyFS(pkg, os.DirFS(example(t, "hello-app"))); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(pkg, "installer.yaml")
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte(strings.Replace(string(data), "- name: set-namespace", "- name: no-such-function", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inst, err := installer.New(installer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaked := processOutput(t, func() {
+		_, err = inst.Setup(context.Background(), installer.SetupOptions{
+			WorkDir: t.TempDir(), Pull: pkg, Namespace: "demo", Render: true,
+		})
+	})
+	if err == nil || !strings.Contains(err.Error(), `"no-such-function"`) {
+		t.Errorf("Setup error = %v, want one naming the function", err)
+	}
+	if leaked != "" {
+		t.Errorf("wrote to the process's stderr:\n%s", leaked)
 	}
 }

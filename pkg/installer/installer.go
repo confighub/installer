@@ -45,7 +45,9 @@ type Options struct {
 	// Out receives progress lines; nil discards them.
 	Out io.Writer
 	// ErrOut receives warnings, unless Warn is set, the stderr of the
-	// package's collector, and render's notices; nil discards them.
+	// package's collector, render's notices, and a line for each function a
+	// render runs; nil discards them. Nothing is written to the process's
+	// stderr.
 	ErrOut io.Writer
 	// Warn receives each warning: a problem that doesn't stop the operation,
 	// such as an installer record that can't be read, after which setup starts

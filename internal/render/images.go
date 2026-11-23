@@ -4,6 +4,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -43,7 +44,7 @@ import (
 // (ValidateImageOverrides).
 //
 // No-op when overrides is empty.
-func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[string]string) ([]types.Image, error) {
+func applyImageOverrides(ctx context.Context, loaded *ipkg.Loaded, sel *api.Selection, overrides map[string]string) ([]types.Image, error) {
 	if len(overrides) == 0 {
 		return nil, nil
 	}
@@ -75,7 +76,7 @@ func applyImageOverrides(loaded *ipkg.Loaded, sel *api.Selection, overrides map[
 		if len(args) == 0 {
 			continue
 		}
-		if err := kustomize.SetImages(path, args); err != nil {
+		if err := kustomize.SetImages(ctx, path, args); err != nil {
 			return nil, fmt.Errorf("--set-image in %s: %w", filepath.Dir(path), err)
 		}
 	}

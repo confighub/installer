@@ -6,6 +6,7 @@ package render
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -59,6 +60,8 @@ type DepsOptions struct {
 
 	// TransformerCommand is propagated to each per-dep Render call.
 	TransformerCommand []string
+	// Log is propagated to each per-dep Render call.
+	Log io.Writer
 }
 
 // DepResult records the outcome of one dependency render.
@@ -122,6 +125,7 @@ func RenderDependencies(ctx context.Context, opts DepsOptions) ([]DepResult, err
 			Selection:          sel,
 			Inputs:             inputs,
 			TransformerCommand: opts.TransformerCommand,
+			Log:                opts.Log,
 		}, depOut)
 		if err != nil {
 			return nil, fmt.Errorf("render dep %s: %w", d.Name, err)
