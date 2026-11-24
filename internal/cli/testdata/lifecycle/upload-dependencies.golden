@@ -714,14 +714,179 @@ Error: upload example-stack: HTTP 400 for req : upload refused
 --- error
 upload example-stack: HTTP 400 for req : upload refused
 
-===== refusals =====
+===== --space names the parent's Space =====
 
-===== installer plan --work-dir $WORK --space one =====
+===== installer plan --work-dir $WORK --space stack --space-pattern {{.PackageName}}-{{.Variant}} =====
 --- stdout
---- stderr
-Error: --space cannot be used when the package declares dependencies; use --space-pattern
---- error
---space cannot be used when the package declares dependencies; use --space-pattern
+Space example-base-base (Unchanged)
+  Unchanged 3 Unit(s)
+Space stack (Create)
+  Create    installer
+  Create    deployment-e2e-ns-example-stack
+  Create    namespace-e2e-ns
+
+Images in stack (post-render):
+      Deployment/example-stack [app] nginxdemos/hello:plain-text
+
+Plan: 3 to create, 0 to update, 0 to empty, 0 to revive, 0 to adopt.
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'example-base-base'
+GET /component ? include=Permissions,AllowedChangeWorkflowIDs & where=Slug = 'example-base'
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'stack'
+POST /upload ? dry_run=true & include=Mutations
+  {
+    "ChangeDescription": "installer upload of example-base@0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "Components": [
+      {
+        "Name": "example-base",
+        "Namespace": "e2e-ns",
+        "SourceName": "example-base",
+        "Space": "example-base-base",
+        "SpaceLabels": {
+          "Component": "example-base",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:961bdfc32888cd85",
+        "Path": "manifests/configmap-e2e-ns-example-base-defaults.yaml"
+      },
+      {
+        "Content": "sha256:7aaffb3acf30f449",
+        "Path": "manifests/namespace-e2e-ns.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "example-base@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: example-base
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: Shared Namespace + ConfigMap for downstream packages.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            whereResource: ConfigHub.ResourceType = 'v1/Namespace'
+            invocations:
+              - name: set-name
+                args:
+                  - '{{ .Namespace }}'
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+    selection:
+      base: default
+    inputs:
+      namespace: e2e-ns
+      values: {}
+POST /upload ? dry_run=true & include=Mutations
+  {
+    "ChangeDescription": "installer upload of example-stack@0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "Components": [
+      {
+        "DependsOn": [
+          "example-base"
+        ],
+        "Name": "example-stack",
+        "Namespace": "e2e-ns",
+        "SourceName": "example-stack",
+        "Space": "stack",
+        "SpaceLabels": {
+          "Component": "example-stack",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:caeb8b88d1374d16",
+        "Path": "manifests/deployment-e2e-ns-example-stack.yaml"
+      },
+      {
+        "Content": "sha256:7aaffb3acf30f449",
+        "Path": "manifests/namespace-e2e-ns.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "example-stack@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: example-stack
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: An app Deployment that depends on example-base.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+        dependencies:
+          - name: base
+            package: oci://$REGISTRY/installer-e2e/example-base
+            version: ^0.1.0
+    source:
+      ref: $STACK
+    selection:
+      base: default
+    inputs:
+      namespace: e2e-ns
+      values: {}
+    lock:
+      package:
+        name: example-stack
+        version: 0.1.0
+      resolved:
+        - name: base
+          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
+          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          version: 0.1.0
+          requestedBy:
+            - root
+
+===== refusals =====
 
 ===== installer plan --work-dir $WORK =====
 --- stdout

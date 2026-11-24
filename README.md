@@ -80,8 +80,10 @@ Working:
   non-interactive. Prior-state re-entry from the work-dir's `out/record/`,
   or, for a fresh clone, from the `installer` record Unit an earlier
   upload left in ConfigHub.
-  `installer install <package>` is setup followed by upload, in one
-  command, with setup's and upload's flags; installing again upgrades.
+  `installer install <package> --space <slug>` is setup followed by
+  upload, in one command, with setup's and upload's flags. The Space is
+  required: its installer record is re-entered, and the package uploads to
+  it, so installing again upgrades.
   `setup --output-oci` can also write the rendered non-secret objects
   to a local OCI image layout or push them to a registry without a
   ConfigHub account.

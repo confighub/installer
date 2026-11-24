@@ -77,8 +77,11 @@ func RenderSpaceSlug(pattern string, vars Vars) (string, error) {
 // parent's already-loaded Package and Lock, plus the workDir, pattern, and
 // variant the pattern is rendered with.
 type DiscoverInput struct {
-	WorkDir       string
-	SpacePattern  string
+	WorkDir      string
+	SpacePattern string
+	// ParentSpace, when set, is the parent's Space slug, instead of the one
+	// SpacePattern renders. Dependencies' Spaces still come from SpacePattern.
+	ParentSpace   string
 	Variant       string
 	ParentPackage *api.Package
 	Lock          *api.Lock // nil when the parent declares no Dependencies
@@ -102,13 +105,17 @@ func Discover(in DiscoverInput) ([]Package, error) {
 
 	out := []Package{}
 
-	parentSlug, err := RenderSpaceSlug(pattern, Vars{
-		PackageName:    in.ParentPackage.Metadata.Name,
-		PackageVersion: in.ParentPackage.InstallerMetadata.Version,
-		Variant:        in.Variant,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parent space slug: %w", err)
+	parentSlug := in.ParentSpace
+	if parentSlug == "" {
+		var err error
+		parentSlug, err = RenderSpaceSlug(pattern, Vars{
+			PackageName:    in.ParentPackage.Metadata.Name,
+			PackageVersion: in.ParentPackage.InstallerMetadata.Version,
+			Variant:        in.Variant,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("parent space slug: %w", err)
+		}
 	}
 	out = append(out, Package{
 		Name:         in.ParentPackage.Metadata.Name,

@@ -130,7 +130,7 @@ such as the manager tools built on the SDK's `managerkit`.
    stamped into pushed and rendered OCI artifacts.
 
 9. **Errors name CLI flags**, such as "pass --pull <ref> to fetch one",
-   "--space cannot be used when the package declares dependencies", and
+   "pass --space to choose one", and
    "--variant must not be empty". A host has different flags, or none.
 
 Already fine: nothing outside `cmd/` exits the process or panics;
@@ -288,13 +288,16 @@ type UploadResult struct {
 func (r *UploadResult) Failed() bool
 func (r *UploadResult) Changed() bool
 
-// Install is Setup with rendering, then PrepareUpload and Upload into
-// opts.Upload's Spaces, having verified the ConfigHub session before pulling.
-// With ConfirmEmpty set, it previews the upload and asks before emptying
-// Units. It does not release.
+// Install is Setup with rendering, then PrepareUpload and Upload, having
+// verified the ConfigHub session before pulling. opts.Space is required: the
+// installer record there is re-entered and the package uploads to it, so an
+// install never re-enters one Space and uploads to another. With
+// ConfirmEmpty set, it previews the upload and asks before emptying Units.
+// It does not release.
 func (i *Installer) Install(ctx context.Context, opts InstallOptions) (*InstallResult, error)
 
 type InstallOptions struct {
+	Space        string        // replaces Setup.Space and Upload.Space
 	Setup        SetupOptions
 	Upload       UploadOptions // its WorkDir is Setup's
 	ConfirmEmpty func(units []string) error
@@ -327,7 +330,7 @@ error (`ErrNoPackage`, `ErrRecordedSourcePull`, `ErrNoInstallerRecord`,
 `ErrNoRecordedSource`, `ErrSeveralPackages`, `ErrSeveralInstalls`,
 `ErrPresetAndSelect`, `ErrNoPriorInstall`, `ErrNamespaceRequired`,
 `ErrInputTypesChanged`, `ErrNewRequiredInputs`, `ErrNoLock`,
-`ErrStaleLock`, `ErrSpaceWithDependencies`) wrapped with the details, and
+`ErrStaleLock`, `ErrSpaceRequired`) wrapped with the details, and
 states the condition in terms of the options. The CLI matches it with
 `errors.Is` and adds the flag or command to use. Flag syntax (`--input
 k=v`, `--space-label k=v`, reserved label keys) is the CLI's to check

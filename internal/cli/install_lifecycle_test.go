@@ -12,7 +12,8 @@ import (
 
 // install takes a package to its Space in one command, installs again without
 // writing, upgrades from the installer record in a new work-dir, asks before
-// emptying a Unit, and checks the session before pulling anything.
+// emptying a Unit, needs --space, and checks the session before pulling
+// anything.
 func TestLifecycleInstall(t *testing.T) {
 	e := newEnv(t)
 	v1 := e.helloV1()
@@ -42,6 +43,9 @@ func TestLifecycleInstall(t *testing.T) {
 	tr.ok("install", v2, "--work-dir", upgrade, "--space", "hello", "--non-interactive", "--components", "minimal", "--yes")
 	tr.requests()
 	tr.hubState("hello")
+
+	tr.section("an install names its Space")
+	tr.fail("install", v1, "--work-dir", e.dir("NOSPACE"), "--non-interactive", "--namespace", "demo")
 
 	tr.section("ConfigHub refuses the session")
 	hub.RefuseAuth(true)
