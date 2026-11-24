@@ -65,8 +65,8 @@ storing rendered configuration somewhere other than git, and so on.
 
 Working:
 
-- **Package authoring + distribution.** `installer package` (deterministic
-  bundle), `push` / `pull` / `inspect` / `list` / `tag` /
+- **Package authoring + distribution.** `installer build` (deterministic
+  bundle; `package` is its deprecated former name), `push` / `pull` / `inspect` / `list` / `tag` /
   `login` / `logout` (OCI artifacts), `sign` / `verify` (cosign keyed +
   keyless) with a `~/.config/installer/policy.yaml` trust policy that
   gates `pull` and `deps update`.
@@ -80,6 +80,8 @@ Working:
   non-interactive. Prior-state re-entry from the work-dir's `out/record/`,
   or, for a fresh clone, from the `installer` record Unit an earlier
   upload left in ConfigHub.
+  `installer install <package>` is setup followed by upload, in one
+  command, with setup's and upload's flags; installing again upgrades.
   `setup --output-oci` can also write the rendered non-secret objects
   to a local OCI image layout or push them to a registry without a
   ConfigHub account.
@@ -144,6 +146,14 @@ bin/installer upload --space my-greeter
 bin/installer setup --pull ./examples/hello-app \
   --set-image nginxdemos/hello=nginxdemos/hello:plain-text-v2
 bin/installer upload --space my-greeter
+```
+
+Steps 2 and 3 are also one command, `installer install`, which takes setup's
+flags and upload's:
+
+```bash
+bin/installer install ./examples/hello-app --space my-greeter \
+  --non-interactive --select monitoring --namespace demo
 ```
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -270,7 +280,7 @@ installed, the same commands work via `cub installer ...`.
 ├── internal/
 │   ├── cli/                    # cobra subcommands
 │   ├── pkg/                    # package load + OCI pull (oras-go)
-│   ├── bundle/                 # deterministic tarball for `installer package`
+│   ├── bundle/                 # deterministic tarball for `installer build`
 │   ├── selection/              # required-deps closure + conflict detection
 │   ├── wizard/                 # interactive + non-interactive answer collection,
 │   │                           # prior-state load, schema diff for upgrades

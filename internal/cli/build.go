@@ -13,12 +13,12 @@ import (
 	ipkg "github.com/confighub/installer/internal/pkg"
 )
 
-func newPackageCmd() *cobra.Command {
+func newBuildCmd() *cobra.Command {
 	var outFile string
 	cmd := &cobra.Command{
-		Use:   "package <dir>",
+		Use:   "build <dir>",
 		Short: "Bundle a package source tree into a deterministic .tgz",
-		Long: `Package bundles a package source tree (the directory containing installer.yaml,
+		Long: `Build bundles a package source tree (the directory containing installer.yaml,
 bases/, components/, validation/, and an optional collector) into a
 byte-deterministic .tgz suitable for installer push.
 
@@ -68,5 +68,14 @@ See docs/package-management-plan.md (Phase 1).`,
 		},
 	}
 	cmd.Flags().StringVarP(&outFile, "out", "o", "", "output .tgz path (default: <name>-<version>.tgz in cwd)")
+	return cmd
+}
+
+// newPackageCmd is build's former name, kept for a release so scripts that
+// run it keep working.
+func newPackageCmd() *cobra.Command {
+	cmd := newBuildCmd()
+	cmd.Use = "package <dir>"
+	cmd.Deprecated = "use build"
 	return cmd
 }

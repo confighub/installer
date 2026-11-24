@@ -1008,11 +1008,11 @@ once, up front.
 
 ## Publishing
 
-The publish flow is `installer package` → `installer push`:
+The publish flow is `installer build` → `installer push`:
 
 ```bash
 # Build a deterministic .tgz of the source tree.
-installer package ./my-package -o my-package-0.1.0.tgz
+installer build ./my-package -o my-package-0.1.0.tgz
 # Output names the digest:
 #   sha256:bc4e...
 
@@ -1024,7 +1024,7 @@ installer inspect oci://ghcr.io/myorg/my-package:0.1.0
 installer list oci://ghcr.io/myorg/my-package
 ```
 
-`installer package` is byte-deterministic: sorted entries, zeroed
+`installer build` is byte-deterministic: sorted entries, zeroed
 mtimes / uids / gids, canonicalized modes, gzip without filename or
 mtime metadata. The same source tree on two machines produces an
 identical tarball.
@@ -1288,7 +1288,7 @@ case.)
 ### Cut a release
 
 1. Bump `installerMetadata.version` per SemVer.
-2. `installer package ./my-package -o my-package-X.Y.Z.tgz` — record
+2. `installer build ./my-package -o my-package-X.Y.Z.tgz` — record
    the printed sha256.
 3. `installer push my-package-X.Y.Z.tgz oci://.../my-package:X.Y.Z`.
 4. `installer sign oci://.../my-package:X.Y.Z --yes` (keyless) or

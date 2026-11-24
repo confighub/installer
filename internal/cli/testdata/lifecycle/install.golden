@@ -1,0 +1,978 @@
+===== a fresh install =====
+
+===== installer install $PKG_V1 --work-dir $WORK --space hello --non-interactive --namespace demo --select monitoring --input team=platform =====
+--- stdout
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+== hello-app@0.1.0 → Space hello ==
+Space hello (Create)
+  Create    installer
+  Create    deployment-demo-hello-app
+  Create    namespace-demo
+  Create    service-demo-hello-app
+  Create    servicemonitor-demo-hello-app
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:upload-hello --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 5 created, 0 updated, 0 emptied, 0 revived, 0 adopted.
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+POST /upload ? dry_run=true
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        team: platform
+POST /upload
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        team: platform
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include_hidden=* & where=SpaceID = '00000000-0000-0000-0000-000000000001' AND Labels.UploadSource = 'hello-app' AND Annotations.UploadResource = 'AppConfig/YAML/installer'
+PATCH /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000004
+  body: {"HiddenReason":"InstallerRecord"}
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=ChangeSetID = '00000000-0000-0000-0000-000000000003'
+
+===== ConfigHub state =====
+Components: hello-app
+Space hello
+  labels: {Component=hello-app, Namespace=demo, Variant=base}
+  Unit installer labels={UploadSource=hello-app} annotations={UploadResource=AppConfig/YAML/installer} hidden=InstallerRecord
+  Unit deployment-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/deployment-demo-hello-app.yaml}
+  Unit namespace-demo labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/namespace-demo.yaml}
+  Unit service-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/service-demo-hello-app.yaml}
+  Unit servicemonitor-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/servicemonitor-demo-hello-app.yaml}
+
+===== installing again writes nothing =====
+
+===== installer install $PKG_V1 --work-dir $WORK --space hello --non-interactive =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $WORK/out/manifests
+== hello-app@0.1.0 → Space hello ==
+Space hello (Unchanged)
+  Unchanged 5 Unit(s)
+
+No changes.
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /me
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+POST /upload ? dry_run=true
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        team: platform
+POST /upload
+  {
+    "ChangeDescription": "installer upload of hello-app@0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.1.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.1.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: team
+            type: string
+            default: core
+            description: Team that owns the app.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V1
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        team: platform
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include_hidden=* & where=SpaceID = '00000000-0000-0000-0000-000000000001' AND Labels.UploadSource = 'hello-app' AND Annotations.UploadResource = 'AppConfig/YAML/installer'
+
+===== an upgrade in a new work-dir re-enters the install from its installer record =====
+
+===== installer install $PKG_V2 --work-dir $UPGRADE --space hello --non-interactive =====
+--- stdout
+Loaded prior install state from confighub.
+Adopted new default for input "log_level": info
+Dropped removed input "team" (was: platform)
+Wizard wrote $UPGRADE/out/record/selection.yaml and inputs.yaml
+Base: default; components: [monitoring]
+Namespace: demo
+Rendered 4 manifest(s) to $UPGRADE/out/manifests
+== hello-app@0.2.0 → Space hello ==
+Space hello (Update)
+  Update    installer
+  Unchanged 4 Unit(s)
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:upload-hello --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 0 created, 1 updated, 0 emptied, 0 revived, 0 adopted.
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include=SpaceID & include_hidden=InstallerRecord & where=Annotations.UploadResource = 'AppConfig/YAML/installer' AND Labels.UploadSource = 'hello-app' AND SpaceID = '00000000-0000-0000-0000-000000000001'
+GET /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-000000000004/data
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+POST /upload ? dry_run=true
+  {
+    "ChangeDescription": "installer upload of hello-app@0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.2.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.2.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: log_level
+            type: string
+            default: info
+            description: Log verbosity.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V2
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        log_level: info
+POST /upload
+  {
+    "ChangeDescription": "installer upload of hello-app@0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:3c6052544ef3b670",
+        "Path": "manifests/servicemonitor-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.2.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.2.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: log_level
+            type: string
+            default: info
+            description: Log verbosity.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V2
+    selection:
+      base: default
+      components:
+        - monitoring
+    inputs:
+      namespace: demo
+      values:
+        log_level: info
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include_hidden=* & where=SpaceID = '00000000-0000-0000-0000-000000000001' AND Labels.UploadSource = 'hello-app' AND Annotations.UploadResource = 'AppConfig/YAML/installer'
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=ChangeSetID = '00000000-0000-0000-0000-000000000009'
+
+===== ConfigHub state =====
+Components: hello-app
+Space hello
+  labels: {Component=hello-app, Namespace=demo, Variant=base}
+  Unit installer labels={UploadSource=hello-app} annotations={UploadResource=AppConfig/YAML/installer} hidden=InstallerRecord
+  Unit deployment-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/deployment-demo-hello-app.yaml}
+  Unit namespace-demo labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/namespace-demo.yaml}
+  Unit service-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/service-demo-hello-app.yaml}
+  Unit servicemonitor-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/servicemonitor-demo-hello-app.yaml}
+
+===== dropping a component asks before emptying its Unit =====
+
+===== installer install $PKG_V2 --work-dir $UPGRADE --space hello --non-interactive --components minimal =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $UPGRADE/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $UPGRADE/out/manifests
+This upload empties 1 Unit(s) whose resources are no longer rendered:
+  - hello/servicemonitor-demo-hello-app
+Their resources are withdrawn from the cluster by the next Release. Nothing is deleted.
+--- stderr
+INFO invoke set-namespace: succeeded
+Error: refusing to empty 1 Unit(s) without a terminal to confirm on; pass --yes
+--- error
+refusing to empty 1 Unit(s) without a terminal to confirm on; pass --yes
+
+===== ConfigHub requests =====
+GET /me
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+POST /upload ? dry_run=true
+  {
+    "ChangeDescription": "installer upload of hello-app@0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "DryRun": true,
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.2.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.2.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: log_level
+            type: string
+            default: info
+            description: Log verbosity.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V2
+    selection:
+      base: default
+    inputs:
+      namespace: demo
+      values:
+        log_level: info
+
+===== installer install $PKG_V2 --work-dir $UPGRADE --space hello --non-interactive --components minimal --yes =====
+--- stdout
+Loaded prior install state from local.
+Wizard wrote $UPGRADE/out/record/selection.yaml and inputs.yaml
+Base: default; components: []
+Namespace: demo
+Rendered 3 manifest(s) to $UPGRADE/out/manifests
+== hello-app@0.2.0 → Space hello ==
+Space hello (Update)
+  Update    installer
+  Empty     servicemonitor-demo-hello-app
+  Unchanged 3 Unit(s)
+
+Revert this upload of hello with:
+  cub unit update --patch --space hello --restore Before:ChangeSet:upload-hello --where "Labels.UploadSource = 'hello-app'" --include-hidden=InstallerRecord
+
+Applied: 0 created, 1 updated, 1 emptied, 0 revived, 0 adopted.
+--- stderr
+INFO invoke set-namespace: succeeded
+
+===== ConfigHub requests =====
+GET /me
+GET /me
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+POST /upload
+  {
+    "ChangeDescription": "installer upload of hello-app@0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "Components": [
+      {
+        "Name": "hello-app",
+        "Namespace": "demo",
+        "SourceName": "hello-app",
+        "Space": "hello",
+        "SpaceLabels": {
+          "Component": "hello-app",
+          "Variant": "base"
+        }
+      }
+    ],
+    "Files": [
+      {
+        "Content": "sha256:0273cdf3342790e0",
+        "Path": "manifests/deployment-demo-hello-app.yaml"
+      },
+      {
+        "Content": "sha256:2bc57b77bfefcea4",
+        "Path": "manifests/namespace-demo.yaml"
+      },
+      {
+        "Content": "sha256:a06d27b8e5ee41bc",
+        "Path": "manifests/service-demo-hello-app.yaml"
+      },
+      {
+        "Content": "(below)",
+        "Path": "installer-record.yaml"
+      }
+    ],
+    "Source": {
+      "Client": "installer",
+      "ClientVersion": "dev",
+      "Ref": "hello-app@0.2.0"
+    }
+  }
+  installer-record.yaml:
+    configHub:
+      configSchema: InstallerRecord
+      configName: installer
+    package:
+      name: hello-app
+      installerMetadata:
+        version: 0.2.0
+      spec:
+        bases:
+          - name: default
+            path: bases/default
+            default: true
+            description: A minimal app — Namespace, Deployment, Service.
+        components:
+          - name: monitoring
+            path: components/monitoring
+            description: Adds a ServiceMonitor for Prometheus scraping.
+            externalRequires:
+              - kind: CRD
+                name: servicemonitors.monitoring.coreos.com
+                suggestedSource: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+          - name: ingress
+            path: components/ingress
+            description: Adds an Ingress so the app is reachable from outside the cluster.
+          - name: ingress-tls
+            path: components/ingress-tls
+            description: Annotates the Ingress to request a cert from cert-manager.
+            requires:
+              - ingress
+            externalRequires:
+              - kind: WebhookCertProvider
+                name: cert-manager
+                issuerKind: ClusterIssuer
+        inputs:
+          - name: log_level
+            type: string
+            default: info
+            description: Log verbosity.
+        transformers:
+          - toolchain: Kubernetes/YAML
+            invocations:
+              - name: set-namespace
+                args:
+                  - '{{ .Namespace }}'
+            description: Set the namespace on every namespaced resource.
+    source:
+      ref: $PKG_V2
+    selection:
+      base: default
+    inputs:
+      namespace: demo
+      values:
+        log_level: info
+GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
+GET /unit ? include_hidden=* & where=SpaceID = '00000000-0000-0000-0000-000000000001' AND Labels.UploadSource = 'hello-app' AND Annotations.UploadResource = 'AppConfig/YAML/installer'
+GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=ChangeSetID = '00000000-0000-0000-0000-000000000010'
+
+===== ConfigHub state =====
+Components: hello-app
+Space hello
+  labels: {Component=hello-app, Namespace=demo, Variant=base}
+  Unit installer labels={UploadSource=hello-app} annotations={UploadResource=AppConfig/YAML/installer} hidden=InstallerRecord
+  Unit deployment-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/deployment-demo-hello-app.yaml}
+  Unit namespace-demo labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/namespace-demo.yaml}
+  Unit service-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/service-demo-hello-app.yaml}
+  Unit servicemonitor-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/servicemonitor-demo-hello-app.yaml} (empty)
+
+===== ConfigHub refuses the session =====
+
+===== installer install $PKG_V1 --work-dir $REFUSED --space hello --non-interactive --namespace demo =====
+--- stdout
+--- stderr
+Error: not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+--- error
+not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: not authenticated to ConfigHub ($HUB): authentication problem. Try logging in (again).
+Detailed message: token expired. 
+
+===== ConfigHub requests =====
+GET /me

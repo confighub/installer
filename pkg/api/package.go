@@ -125,7 +125,7 @@ type PackageSpec struct {
 	Replaces []ReplaceRef `yaml:"replaces,omitempty" json:"replaces,omitempty"`
 
 	// BundleExamples controls whether the examples/ subtree is included by
-	// `installer package`. Default behavior (when nil) is true — examples
+	// `installer build`. Default behavior (when nil) is true — examples
 	// are bundled. Set to false to exclude them from published artifacts.
 	BundleExamples *bool `yaml:"bundleExamples,omitempty" json:"bundleExamples,omitempty"`
 }

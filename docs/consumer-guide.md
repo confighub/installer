@@ -24,6 +24,11 @@ installer is anchored to lives in [principles.md](./principles.md).
                                                          Kubernetes
 ```
 
+`installer install <package>` runs setup with `--pull <package>` and then
+upload, in one command. It takes the flags of both, checks the ConfigHub
+session before pulling, and leaves the work-dir as setup and upload would.
+Running it again with a newer package upgrades the install.
+
 Day-2 commands operate on the same work-dir:
 
 - `installer setup` — re-runs wizard + render against the existing
