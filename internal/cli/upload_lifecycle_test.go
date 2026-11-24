@@ -209,8 +209,13 @@ func TestLifecycleUploadDependencies(t *testing.T) {
 	hub.RefuseUploads(nil)
 	hub.ClearRequests()
 
+	// --space names the parent's Space; the dependency's is still the
+	// pattern's.
+	tr.section("--space names the parent's Space")
+	tr.ok("plan", "--work-dir", work, "--space", "stack", "--space-pattern", "{{.PackageName}}-{{.Variant}}")
+	tr.requests()
+
 	tr.section("refusals")
-	tr.fail("plan", "--work-dir", work, "--space", "one")
 	if err := os.Remove(filepath.Join(work, "out", "record", "lock.yaml")); err != nil {
 		t.Fatal(err)
 	}

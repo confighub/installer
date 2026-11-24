@@ -23,8 +23,8 @@ import (
 type UploadOptions struct {
 	// WorkDir is the rendered work-dir; "" is the current directory.
 	WorkDir string
-	// Space is the Space of a package with no dependencies. It overrides
-	// SpacePattern.
+	// Space is the parent package's Space. It overrides SpacePattern for the
+	// parent; a dependency's Space is still SpacePattern's.
 	Space string
 	// SpacePattern is a Go template for each package's Space slug, over
 	// .PackageName, .PackageVersion and .Variant. "" is {{.PackageName}}.
@@ -136,16 +136,10 @@ func (i *Installer) PrepareUpload(ctx context.Context, opts UploadOptions) (*Upl
 	if err != nil {
 		return nil, err
 	}
-	pattern := opts.SpacePattern
-	if opts.Space != "" {
-		if len(loaded.Package.Spec.Dependencies) > 0 {
-			return nil, ErrSpaceWithDependencies
-		}
-		pattern = opts.Space
-	}
 	packages, err := upload.Discover(upload.DiscoverInput{
 		WorkDir:       absWork,
-		SpacePattern:  pattern,
+		SpacePattern:  opts.SpacePattern,
+		ParentSpace:   opts.Space,
 		Variant:       variant,
 		ParentPackage: loaded.Package,
 		Lock:          lock,

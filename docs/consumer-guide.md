@@ -24,10 +24,13 @@ installer is anchored to lives in [principles.md](./principles.md).
                                                          Kubernetes
 ```
 
-`installer install <package>` runs setup with `--pull <package>` and then
-upload, in one command. It takes the flags of both, checks the ConfigHub
-session before pulling, and leaves the work-dir as setup and upload would.
-Running it again with a newer package upgrades the install.
+`installer install <package> --space <slug>` runs setup with `--pull
+<package>` and then upload, in one command. It takes the flags of both,
+checks the ConfigHub session before pulling, and leaves the work-dir as
+setup and upload would. `--space` is required: the installer record in
+that Space is re-entered, and the package uploads to it, so running
+install again with a newer package upgrades the install. A package's
+dependencies upload into the Spaces `--space-pattern` names.
 
 Day-2 commands operate on the same work-dir:
 
@@ -529,7 +532,9 @@ installer upload --space-pattern '{{.PackageName}}-prod'
 ```
 
 Plan and upload send one request per package, each dependency before the
-parent, with the same `--space-pattern` each time. Each dependency's Space
+parent, with the same `--space-pattern` each time. `--space` names the
+parent's Space instead of the pattern; the dependencies' Spaces are still
+the pattern's. Each dependency's Space
 is labeled with its own package name as `Component`, and the parent's Space
 records those Components, by ComponentID, in its `DependsOn` annotation.
 ConfigHub requires them to exist by then, which is why the dependencies go

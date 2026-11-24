@@ -21,14 +21,13 @@ func TestInstall(t *testing.T) {
 	f := newFixture(t)
 	work := t.TempDir()
 	opts := installer.InstallOptions{
+		Space: "hello",
 		Setup: installer.SetupOptions{
 			WorkDir:   work,
 			Pull:      example(t, "hello-app"),
-			Space:     "hello",
 			Namespace: "demo",
 			Select:    []string{"monitoring"},
 		},
-		Upload: installer.UploadOptions{Space: "hello"},
 	}
 
 	res, err := f.inst.Install(ctx, opts)
@@ -85,6 +84,7 @@ func TestInstallNeedsConfigHub(t *testing.T) {
 	}
 	work := t.TempDir()
 	res, err := inst.Install(context.Background(), installer.InstallOptions{
+		Space: "hello",
 		Setup: installer.SetupOptions{WorkDir: work, Pull: example(t, "hello-app"), Namespace: "demo"},
 	})
 	if !errors.Is(err, installer.ErrNoConfigHub) {
@@ -95,5 +95,22 @@ func TestInstallNeedsConfigHub(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(work, "package")); !os.IsNotExist(err) {
 		t.Errorf("Install pulled without ConfigHub: %v", err)
+	}
+}
+
+// Install needs the Space to install into, even where Setup or Upload names
+// one, so it never re-enters one Space and uploads to another.
+func TestInstallNeedsSpace(t *testing.T) {
+	f := newFixture(t)
+	work := t.TempDir()
+	res, err := f.inst.Install(context.Background(), installer.InstallOptions{
+		Setup:  installer.SetupOptions{WorkDir: work, Pull: example(t, "hello-app"), Namespace: "demo", Space: "hello"},
+		Upload: installer.UploadOptions{Space: "hello"},
+	})
+	if !errors.Is(err, installer.ErrSpaceRequired) {
+		t.Fatalf("Install = %v, want ErrSpaceRequired", err)
+	}
+	if res.Setup != nil || len(f.hub.Requests()) != 0 {
+		t.Errorf("Install went ahead without a Space: setup %+v, %d requests", res.Setup, len(f.hub.Requests()))
 	}
 }

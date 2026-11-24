@@ -44,7 +44,7 @@ type uploadFlags struct {
 
 func (f *uploadFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.workDir, "work-dir", ".", "working directory")
-	cmd.Flags().StringVar(&f.space, "space", "", "Space slug for a package with no dependencies; overrides --space-pattern")
+	cmd.Flags().StringVar(&f.space, "space", "", "Space slug for the parent package, overriding --space-pattern for it; each dependency's Space is still --space-pattern's")
 	cmd.Flags().StringVar(&f.spacePattern, "space-pattern", "{{.PackageName}}", "Go template for each package's Space slug (vars: .PackageName, .PackageVersion, .Variant)")
 	cmd.Flags().StringVar(&f.target, "target", "", "release Target for each package's Space, which a Release of the Space publishes its Units for: <space>/<target>, a UUID, or a slug in the package's Space. Without it, a Space keeps the release Target it has.")
 	cmd.Flags().StringVar(&f.changeSet, "changeset", "", "existing open ChangeSet every package's writes join: <space>/<changeset>, a UUID, or a slug in the parent's Space (default: one new ChangeSet per Space)")
@@ -137,8 +137,6 @@ func prepareUpload(ctx context.Context, inst *cliInstaller, f uploadFlags) (*ins
 // there is one.
 func uploadError(err error, workDir string) error {
 	switch {
-	case errors.Is(err, installer.ErrSpaceWithDependencies):
-		return fmt.Errorf("--space cannot be used when the package declares dependencies; use --space-pattern")
 	case errors.Is(err, installer.ErrNoLock):
 		return fmt.Errorf("%v; run `%s deps update --work-dir %s` and `%s render --work-dir %s` first",
 			err, InvocationName(), absPath(workDir), InvocationName(), absPath(workDir))

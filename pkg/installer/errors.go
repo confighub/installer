@@ -66,9 +66,12 @@ var (
 	// ErrNotAuthenticated: ConfigHub refused Options.ConfigHub's credentials.
 	ErrNotAuthenticated = errors.New("not authenticated to ConfigHub")
 
-	// ErrSpaceWithDependencies: UploadOptions.Space is set for a package that
-	// declares dependencies, which each need a Space of their own;
-	// UploadOptions.SpacePattern names them.
+	// ErrSpaceRequired: InstallOptions.Space is empty.
+	ErrSpaceRequired = errors.New("an install needs the Space to install into")
+
+	// Deprecated: nothing returns ErrSpaceWithDependencies. UploadOptions.Space
+	// now names the parent package's Space, and SpacePattern its
+	// dependencies'.
 	ErrSpaceWithDependencies = errors.New("a single Space cannot hold a package with dependencies")
 )
 

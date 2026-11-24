@@ -31,9 +31,9 @@ Installing again upgrades: a work-dir with an earlier install, or a Space
 whose installer record holds one, is re-entered as setup re-enters it, so
 answers still apply carry forward, and only what changed is written.
 
---space is the Space to install into: the Space whose installer record is
-re-entered, and the Space a package with no dependencies uploads into. A
-package with dependencies uploads into Spaces named by --space-pattern.
+--space, which is required, is the Space to install into: the installer
+record there is re-entered, and the package uploads to it. Its
+dependencies, if it has any, upload into the Spaces --space-pattern names.
 
 The upload asks before emptying Units whose resources are no longer
 rendered, as upload does, unless --yes is given. Rendered Secrets stay in
@@ -44,7 +44,6 @@ rendered, as upload does, unless --yes is given. Rendered Secrets stay in
 			flags.noteChanged(cmd)
 			answers.pullRef = args[0]
 			answers.workDir = flags.workDir
-			answers.recoverSpace = flags.space
 			answers.runRender = true
 			setup, err := answers.setupOptions()
 			if err != nil {
@@ -54,7 +53,7 @@ rendered, as upload does, unless --yes is given. Rendered Secrets stay in
 			if err != nil {
 				return err
 			}
-			opts := installer.InstallOptions{Setup: setup, Upload: uploadOpts}
+			opts := installer.InstallOptions{Space: flags.space, Setup: setup, Upload: uploadOpts}
 			if !yes {
 				opts.ConfirmEmpty = confirmEmpties
 			}
@@ -72,7 +71,8 @@ rendered, as upload does, unless --yes is given. Rendered Secrets stay in
 	}
 	registerAnswerFlags(cmd, &answers)
 	flags.register(cmd)
-	cmd.Flags().Lookup("space").Usage = "Space to install into: the Space whose installer record is re-entered, and the one a package with no dependencies uploads into; overrides --space-pattern"
+	cmd.Flags().Lookup("space").Usage = "Space to install into (required): its installer record is re-entered, and the package uploads to it; dependencies upload into --space-pattern's Spaces"
+	_ = cmd.MarkFlagRequired("space")
 	cmd.Flags().BoolVar(&yes, "yes", false, "empty Units whose resources left the render without asking")
 	return cmd
 }

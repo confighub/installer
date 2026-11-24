@@ -7,6 +7,12 @@ import "context"
 
 // InstallOptions say what to install and where it goes.
 type InstallOptions struct {
+	// Space is the Space to install the package into, which is required:
+	// the installer record there is re-entered, and the package uploads to
+	// it. A dependency uploads to the Space Upload.SpacePattern names. It
+	// replaces Setup.Space and Upload.Space, so an install never re-enters
+	// one Space and uploads to another.
+	Space string
 	// Setup says what to install and how to answer the package's wizard.
 	// Install always renders: Render is taken to be true.
 	Setup SetupOptions
@@ -36,10 +42,14 @@ type InstallResult struct {
 // Targets.
 func (i *Installer) Install(ctx context.Context, opts InstallOptions) (*InstallResult, error) {
 	res := &InstallResult{}
+	if opts.Space == "" {
+		return res, ErrSpaceRequired
+	}
 	if _, err := i.writeClient(ctx); err != nil {
 		return res, err
 	}
 	setup := opts.Setup
+	setup.Space = opts.Space
 	setup.Render = true
 	var err error
 	if res.Setup, err = i.Setup(ctx, setup); err != nil {
@@ -47,6 +57,7 @@ func (i *Installer) Install(ctx context.Context, opts InstallOptions) (*InstallR
 	}
 
 	upload := opts.Upload
+	upload.Space = opts.Space
 	upload.WorkDir = res.Setup.WorkDir
 	plan, err := i.PrepareUpload(ctx, upload)
 	if err != nil {

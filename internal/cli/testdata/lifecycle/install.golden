@@ -963,6 +963,15 @@ Space hello
   Unit service-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/service-demo-hello-app.yaml}
   Unit servicemonitor-demo-hello-app labels={UploadSource=hello-app} annotations={UploadResource=file/manifests/servicemonitor-demo-hello-app.yaml} (empty)
 
+===== an install names its Space =====
+
+===== installer install $PKG_V1 --work-dir $NOSPACE --non-interactive --namespace demo =====
+--- stdout
+--- stderr
+Error: required flag(s) "space" not set
+--- error
+required flag(s) "space" not set
+
 ===== ConfigHub refuses the session =====
 
 ===== installer install $PKG_V1 --work-dir $REFUSED --space hello --non-interactive --namespace demo =====
