@@ -46,29 +46,10 @@ type flowOptions struct {
 // turns the flags into installer.SetupOptions, runs Setup, and prints what to
 // run next.
 func runFlow(ctx context.Context, opts flowOptions) error {
-	if opts.preset != "" && len(opts.selectFlags) > 0 {
-		return fmt.Errorf("--components and --select are mutually exclusive")
-	}
-	inputs, err := wizard.ParseInputFlags(opts.inputFlags)
+	setup, err := opts.setupOptions()
 	if err != nil {
 		return err
 	}
-	images, err := wizard.ParseSetImageFlags(opts.setImage)
-	if err != nil {
-		return err
-	}
-	if opts.workDir == "" {
-		opts.workDir = "."
-	}
-	absWork, err := filepath.Abs(opts.workDir)
-	if err != nil {
-		return err
-	}
-	var terminal *installer.Terminal
-	if !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd())) {
-		terminal = &installer.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-	}
-
 	// The signing policy is read only when something may be pulled from a
 	// registry: the package, the one an installer record names, or render's
 	// dependencies.
@@ -76,7 +57,43 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	if err != nil {
 		return err
 	}
-	_, err = inst.Setup(ctx, installer.SetupOptions{
+	if _, err = inst.Setup(ctx, setup); err != nil {
+		return setupError(inst.explain(err), setup.WorkDir)
+	}
+	if !opts.runRender {
+		fmt.Printf("Next: %s render --work-dir %s\n", InvocationName(), setup.WorkDir)
+		return nil
+	}
+	fmt.Printf("Next: %s upload --work-dir %s\n", InvocationName(), setup.WorkDir)
+	return nil
+}
+
+// setupOptions validates the flags and turns them into installer.SetupOptions,
+// with an absolute work-dir.
+func (opts flowOptions) setupOptions() (installer.SetupOptions, error) {
+	if opts.preset != "" && len(opts.selectFlags) > 0 {
+		return installer.SetupOptions{}, fmt.Errorf("--components and --select are mutually exclusive")
+	}
+	inputs, err := wizard.ParseInputFlags(opts.inputFlags)
+	if err != nil {
+		return installer.SetupOptions{}, err
+	}
+	images, err := wizard.ParseSetImageFlags(opts.setImage)
+	if err != nil {
+		return installer.SetupOptions{}, err
+	}
+	if opts.workDir == "" {
+		opts.workDir = "."
+	}
+	absWork, err := filepath.Abs(opts.workDir)
+	if err != nil {
+		return installer.SetupOptions{}, err
+	}
+	var terminal *installer.Terminal
+	if !opts.nonInteractive && term.IsTerminal(int(os.Stdin.Fd())) {
+		terminal = &installer.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	}
+	return installer.SetupOptions{
 		WorkDir:   absWork,
 		Pull:      opts.pullRef,
 		Space:     opts.recoverSpace,
@@ -90,16 +107,20 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 		Terminal:  terminal,
 		Render:    opts.runRender,
 		OutputOCI: opts.outputOCI,
-	})
-	if err != nil {
-		return setupError(inst.explain(err), absWork)
-	}
-	if !opts.runRender {
-		fmt.Printf("Next: %s render --work-dir %s\n", InvocationName(), absWork)
-		return nil
-	}
-	fmt.Printf("Next: %s upload --work-dir %s\n", InvocationName(), absWork)
-	return nil
+	}, nil
+}
+
+// registerAnswerFlags registers the flags that answer the package's wizard,
+// which setup and install share.
+func registerAnswerFlags(cmd *cobra.Command, opts *flowOptions) {
+	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
+	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
+	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")
+	cmd.Flags().StringArrayVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
+	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
+	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
+	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
+	cmd.Flags().StringArrayVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable), set before render as `kustomize edit set image` would, for every container of the chosen base and selected components; name is the image without its tag or digest, which a container runs or an images: block declares")
 }
 
 // setupError adds the flag that remedies a Setup failure, when there is one.
@@ -212,14 +233,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
 	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
 	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization); a Space that does not exist yet, or holds no installer record, is a fresh install there. Without --pull, a work-dir with no package pulls the one the Space's installer record says the install came from")
-	cmd.Flags().StringVar(&opts.baseName, "base", "", "base name (default: package's default base)")
-	cmd.Flags().StringVar(&opts.namespace, "namespace", "", "Kubernetes namespace for the install (exposed to chain templates as {{ .Namespace }}). Required for fresh install in non-interactive mode.")
-	cmd.Flags().StringSliceVar(&opts.selectFlags, "select", nil, "component to select (repeatable; required-deps closed automatically). Mutually exclusive with --components.")
-	cmd.Flags().StringArrayVar(&opts.inputFlags, "input", nil, "input value as key=value (repeatable)")
-	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "do not prompt; require --input/--select for everything")
-	cmd.Flags().BoolVar(&opts.reuse, "reuse", false, "skip prompts and re-use the prior install's selection + inputs (requires prior state)")
-	cmd.Flags().StringVar(&opts.preset, "components", "", "component preset: minimal | default | all | selected. Mutually exclusive with --select.")
-	cmd.Flags().StringArrayVar(&opts.setImage, "set-image", nil, "image override as name=ref (repeatable), set before render as `kustomize edit set image` would, for every container of the chosen base and selected components; name is the image without its tag or digest, which a container runs or an images: block declares")
+	registerAnswerFlags(cmd, &opts)
 	cmd.Flags().StringVar(&opts.outputOCI, "output-oci", "", "write rendered manifests to a local OCI layout path or push them to oci://host/repo:tag")
 	return cmd
 }

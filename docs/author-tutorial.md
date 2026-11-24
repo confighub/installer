@@ -458,7 +458,7 @@ ask one or two questions and ship.
 Build a deterministic tarball:
 
 ```bash
-installer package ./. -o statusboard-0.1.0.tgz
+installer build ./. -o statusboard-0.1.0.tgz
 # Wrote statusboard-0.1.0.tgz (sha256:bc4e...)
 ```
 

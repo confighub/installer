@@ -17,7 +17,7 @@ touching `root.go` each time.
 
 No tests yet. Acceptance: `installer --help` lists every command in the spec.
 
-## Phase 1 — Deterministic bundler + `installer package`
+## Phase 1 — Deterministic bundler + `installer build`
 
 Goal: a `.tgz` of the source tree that is byte-identical across machines.
 
@@ -28,9 +28,9 @@ Goal: a `.tgz` of the source tree that is byte-identical across machines.
   - Include: `installer.yaml` + every directory referenced by `bases[].path`, `components[].path`, `validation.*`, `collector.command` (if relative), plus an opt-in `examples/` (gated by a `package.bundleExamples` field in `installer.yaml`, default true).
 - New: `internal/bundle/bundle_test.go` — two `Bundle` invocations of the same source tree produce equal digests; rename of a single file changes the digest; `.env.secret` triggers a refusal.
 - Modify: `internal/cli/package.go` — `-o`, default output filename `<metadata.name>-<installerMetadata.version>.tgz` in cwd; print the digest on success.
-- Decision deferred: reachability-scan vs ignore-list. v1 ships ignore-list; reachability becomes a `installer package --strict` follow-up.
+- Decision deferred: reachability-scan vs ignore-list. v1 ships ignore-list; reachability becomes a `installer build --strict` follow-up.
 
-Acceptance: `installer package examples/hello-app` produces a tarball whose `sha256` is reproducible across machines.
+Acceptance: `installer build examples/hello-app` produces a tarball whose `sha256` is reproducible across machines.
 
 ## Phase 2 — OCI publish (`push`, `inspect`, `list`, `tag`, hardened `pull`)
 
@@ -52,7 +52,7 @@ Goal: round-trip native artifacts; existing Helm-OCI pull keeps working.
   - `internal/pkg/oci_test.go` against a `zot` or `registry:2` container started by the test (skip if Docker unavailable).
   - `internal/pkg/pull_test.go` regression: pulling an existing Helm-OCI chart still works.
 
-Acceptance: `installer package` → `installer push` → `installer pull` on a fresh machine yields a byte-identical source tree.
+Acceptance: `installer build` → `installer push` → `installer pull` on a fresh machine yields a byte-identical source tree.
 
 ## Phase 3 — Schema additions (parse-only)
 
@@ -141,7 +141,7 @@ Acceptance: signed artifact verifies; tampered artifact fails verification with 
 ## Phase 8 — Hardening and docs
 
 - Add a multi-package fixture under `examples/` (a small "stack" that depends on a shared base package), used by the e2e script.
-- New: `test/e2e/package-and-deps.sh` (or whatever the existing convention is) — `package` → push to a local `zot` started by the test → `deps update` → `render` → `upload` against a mocked ConfigHub or a real local one.
+- New: `test/e2e/package-and-deps.sh` (or whatever the existing convention is) — `build` → push to a local `zot` started by the test → `deps update` → `render` → `upload` against a mocked ConfigHub or a real local one.
 - Update README Roadmap: drop the "Bundling" item; link the design doc; mention the multi-package example.
 
 ## Cross-cutting concerns (apply across phases)

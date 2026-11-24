@@ -8,7 +8,7 @@ none of which are implemented yet beyond `pull`.
 ## Goals
 
 - Distribute installer packages as immutable OCI artifacts that round-trip
-  through `package` → `push` → `pull` → `wizard` → `render` without ever
+  through `build` → `push` → `pull` → `wizard` → `render` without ever
   re-rendering at distribution time.
 - Let one package declare hard dependencies on other installer packages, with
   SemVer constraints, conflicts, and provides — resolved into a lock that
@@ -111,7 +111,7 @@ Without this, signing and digest-pinning give weak guarantees.
 ## CLI surface
 
 ```
-installer package <dir> [-o file.tgz]
+installer build   <dir> [-o file.tgz]
 installer push    <pkg.tgz|dir> oci://registry/repo:tag
 installer pull    <ref>                                # exists; harden + add --digest
 installer inspect <ref>                                # reads config blob only
@@ -298,13 +298,13 @@ precondition; preflight verifies leftovers.
 
 ## Bundling rules
 
-`installer package` MUST refuse to bundle:
+`installer build` MUST refuse to bundle:
 
 - `*.env.secret` files anywhere in the tree (collector output; never published).
 - Anything under `out/` (rendered artifacts; not source).
 - Anything matched by `.installerignore` (optional, mirrors `.helmignore`).
 
-`installer package` MUST include:
+`installer build` MUST include:
 
 - `installer.yaml`, all referenced `bases/` and `components/` trees,
   `validation/`, the `collector` executable if declared, and any files
@@ -355,7 +355,7 @@ digest.
 
 ## Implementation order (suggested)
 
-1. Deterministic bundler + `installer package` (no network).
+1. Deterministic bundler + `installer build` (no network).
 2. `installer push` / `inspect` / `list` / `tag` against an OCI registry,
    reusing oras-go.
 3. `installer.yaml` schema additions (`dependencies`, `conflicts`,

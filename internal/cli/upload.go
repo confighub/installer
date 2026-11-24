@@ -212,31 +212,37 @@ When the upload would empty any Unit it lists them and asks first, unless
 			}
 
 			result, err := inst.Upload(ctx, plan)
-			// What landed before a refused upload can be reverted too.
-			if result != nil {
-				for _, pkg := range result.Packages {
-					printRevert(pkg)
-				}
-			}
-			if err != nil {
-				return err
-			}
-			fmt.Printf("\n%s\n", upload.Summarize(result.Results()).Applied())
-
-			// Record the parent's install in ~/.confighub/installer/state.yaml
-			// for the packages `installer new` locates later. Best-effort.
-			if err := recordUploadInUserState(ctx, result); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not record install in user state: %v\n", err)
-			}
-			if result.Failed() {
-				return fmt.Errorf("some writes failed; the rest landed, and uploading again retries the failures")
-			}
-			return nil
+			return reportUpload(ctx, result, err, "uploading")
 		},
 	}
 	flags.register(cmd)
 	cmd.Flags().BoolVar(&yes, "yes", false, "empty Units whose resources left the render without asking")
 	return cmd
+}
+
+// reportUpload prints what an upload did and how to revert it, and records
+// the install for `installer new`. again names what retries failed writes.
+func reportUpload(ctx context.Context, result *installer.UploadResult, err error, again string) error {
+	// What landed before a refused upload can be reverted too.
+	if result != nil {
+		for _, pkg := range result.Packages {
+			printRevert(pkg)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n", upload.Summarize(result.Results()).Applied())
+
+	// Record the parent's install in ~/.confighub/installer/state.yaml for the
+	// packages `installer new` locates later. Best-effort.
+	if err := recordUploadInUserState(ctx, result); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not record install in user state: %v\n", err)
+	}
+	if result.Failed() {
+		return fmt.Errorf("some writes failed; the rest landed, and %s again retries the failures", again)
+	}
+	return nil
 }
 
 // printRevert prints how to revert what an upload wrote to each Space it

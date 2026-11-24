@@ -61,7 +61,7 @@ such as the manager tools built on the SDK's `managerkit`.
 - **An in-memory work-dir.** The work-dir layout (`package/`, `out/`,
   `out/record/`, `out/compose/`) is the installer's state and stays on
   disk. A host uses a temporary directory, as `cub cluster up` does now.
-- **Authoring and publishing.** `init`, `new`, `edit`, `vet`, `package`,
+- **Authoring and publishing.** `init`, `new`, `edit`, `vet`, `build`,
   `push`, `tag`, `sign` and `verify` stay CLI-only for now. They can be
   added to the package when a host needs them.
 - **API stability beyond the module's.** The module is v0. Changes to the
@@ -287,7 +287,28 @@ type UploadResult struct {
 
 func (r *UploadResult) Failed() bool
 func (r *UploadResult) Changed() bool
+
+// Install is Setup with rendering, then PrepareUpload and Upload into
+// opts.Upload's Spaces, having verified the ConfigHub session before pulling.
+// With ConfirmEmpty set, it previews the upload and asks before emptying
+// Units. It does not release.
+func (i *Installer) Install(ctx context.Context, opts InstallOptions) (*InstallResult, error)
+
+type InstallOptions struct {
+	Setup        SetupOptions
+	Upload       UploadOptions // its WorkDir is Setup's
+	ConfirmEmpty func(units []string) error
+}
+
+type InstallResult struct {
+	Setup  *SetupResult
+	Upload *UploadResult
+}
 ```
+
+`installer install` and a host's install command, such as `cub package
+install`, both call `Install`, so the two take a package to ConfigHub the
+same way.
 
 Preparing and previewing are separate because the CLI uses them
 differently: `installer upload --yes` sends no dry runs, `installer upload`
