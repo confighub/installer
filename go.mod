@@ -5,9 +5,9 @@ go 1.26.0
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/confighub/sdk/configkit/envkit v0.11.13
-	github.com/confighub/sdk/core v0.11.13
-	github.com/confighub/sdk/function-impl v0.11.13
+	github.com/confighub/sdk/configkit/envkit v0.11.15
+	github.com/confighub/sdk/core v0.11.15
+	github.com/confighub/sdk/function-impl v0.11.15
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/uuid v1.6.0
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00
@@ -38,14 +38,14 @@ require (
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
-	github.com/confighub/sdk/configkit/appyamlkit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/inikit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/jsonkit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/k8skit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/propkit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/textkit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/tomlkit v0.11.13 // indirect
-	github.com/confighub/sdk/configkit/yqkit v0.11.13 // indirect
+	github.com/confighub/sdk/configkit/appyamlkit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/inikit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/jsonkit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/k8skit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/propkit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/textkit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/tomlkit v0.11.15 // indirect
+	github.com/confighub/sdk/configkit/yqkit v0.11.15 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
