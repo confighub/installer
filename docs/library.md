@@ -603,7 +603,12 @@ unchanged.
   undecided. The draft installs k8sbot's Argo CD and Flux bases, and
   re-enters an existing base from its installer record, as the plugin
   did. What it costs and changes:
-  - cub's binary grows by about 14 MB (12%).
+  - cub's released binary grows by about 3 MB (105 to 108 MB). It is
+    built with cgo off. With cgo on, as a local build on macOS is, it grows
+    by 13 MB unless built with the kustomize tag
+    `kustomize_disable_go_plugin_support`, which drops kustomize's import of
+    Go's `plugin` package; the installer loads no Go plugins. cub's and the
+    installer's builds use the tag.
   - The SDK release has to rewrite every SDK requirement, as above.
   - The package is read anonymously, as cub already reads its newest
     release, rather than with the Docker credential store the plugin
