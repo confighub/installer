@@ -1,16 +1,17 @@
 // Copyright (C) ConfigHub, Inc.
 // SPDX-License-Identifier: MIT
 
-package cli
+package installer_test
 
 import (
 	"bytes"
 	"testing"
 
-	"github.com/confighub/installer/internal/upload"
+	"github.com/confighub/installer/pkg/api"
+	"github.com/confighub/installer/pkg/installer"
 )
 
-const showTestRecord = `configHub:
+const writeTestRecord = `configHub:
   configSchema: InstallerRecord
   configName: installer
 package:
@@ -96,7 +97,7 @@ lock:
     requestedBy: [root]
 `
 
-const showTestWant = `Package:             k8sbot
+const writeTestWant = `Package:             k8sbot
 Version:             0.2.9
 Space:               nonprod-k8sbot
 Source:              oci://ghcr.io/confighub/packages/k8sbot:0.2.9
@@ -143,16 +144,16 @@ Validators:
   vet-schemas, vet-pod-security-standard restricted
 `
 
-func TestPrintRecord(t *testing.T) {
-	rec, err := upload.UnmarshalRecord([]byte(showTestRecord))
+func TestWriteRecord(t *testing.T) {
+	rec, err := api.ParseRecord([]byte(writeTestRecord))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := printRecord(&out, "nonprod-k8sbot", rec); err != nil {
+	if err := installer.WriteRecord(&out, &installer.InstalledRecord{Space: "nonprod-k8sbot", Record: rec}); err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != showTestWant {
-		t.Errorf("printRecord:\n%s\nwant:\n%s", out.String(), showTestWant)
+	if out.String() != writeTestWant {
+		t.Errorf("WriteRecord:\n%s\nwant:\n%s", out.String(), writeTestWant)
 	}
 }

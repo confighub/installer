@@ -45,7 +45,7 @@ func (i *Installer) Install(ctx context.Context, opts InstallOptions) (*InstallR
 	if opts.Space == "" {
 		return res, ErrSpaceRequired
 	}
-	if _, err := i.writeClient(ctx); err != nil {
+	if _, err := i.verifiedClient(ctx); err != nil {
 		return res, err
 	}
 	setup := opts.Setup

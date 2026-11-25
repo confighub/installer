@@ -148,7 +148,7 @@ func (i *Installer) PrepareUpload(ctx context.Context, opts UploadOptions) (*Upl
 		return nil, err
 	}
 
-	client, err := i.writeClient(ctx)
+	client, err := i.verifiedClient(ctx)
 	if err != nil {
 		return nil, err
 	}

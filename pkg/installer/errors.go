@@ -23,16 +23,19 @@ var (
 	// came from could not be pulled. SetupOptions.Pull pulls it from elsewhere.
 	ErrRecordedSourcePull = errors.New("pull the package the installer record names")
 	// ErrNoInstallerRecord: SetupOptions.Space names a Space with no installer
-	// record and SetupOptions.Pull is empty, so there is no package to install.
+	// record and SetupOptions.Pull is empty, so there is no package to install;
+	// or FindRecord found no record of the install it was asked for.
 	ErrNoInstallerRecord = errors.New("no installer record")
 	// ErrNoRecordedSource: the installer record in SetupOptions.Space doesn't
 	// say where its package came from; SetupOptions.Pull has to.
 	ErrNoRecordedSource = errors.New("the installer record names no source")
 	// ErrSeveralPackages: the Space holds the installer records of more than
-	// one package; SetupOptions.Pull says which.
+	// one package; SetupOptions.Pull, or FindRecord's package name, says
+	// which.
 	ErrSeveralPackages = hubclient.ErrSeveralPackages
 	// ErrSeveralInstalls: the package is installed in more than one Space;
-	// SetupOptions.Space says which to re-enter.
+	// SetupOptions.Space says which to re-enter, and FindRecord's Space which
+	// to read.
 	ErrSeveralInstalls = hubclient.ErrSeveralInstalls
 
 	// ErrPresetAndSelect: SetupOptions.Preset and SetupOptions.Select are both set.

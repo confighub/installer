@@ -18,46 +18,15 @@ const (
 	// RecordFileName is the path the record document is uploaded under.
 	RecordFileName = "installer-record.yaml"
 	// RecordConfigName is the record's configHub.configName, and so the slug
-	// of the Unit it becomes. A Space holds one per package.
-	RecordConfigName = "installer"
+	// of the Unit it becomes.
+	RecordConfigName = api.RecordConfigName
 	// RecordSchema is the record's configHub.configSchema.
-	RecordSchema = "InstallerRecord"
+	RecordSchema = api.RecordSchema
 	// RecordHiddenReason is the HiddenReason the record's Unit is given, so
 	// that, like a dot file, it stays out of lists and bulk operations unless
 	// they ask for it with include_hidden.
 	RecordHiddenReason = "InstallerRecord"
 )
-
-// Record is the installer's record of one package's render, uploaded as a
-// single AppConfig/YAML document: the package definition, where it was pulled
-// from, the user's selection and inputs, the collected facts, and, for the
-// parent, the lock. It is enough to re-enter the install without the work-dir
-// it was rendered in, so the work-dir needn't be kept anywhere else. It uses the
-// AppConfig/YAML schema's reserved configHub paths rather than KRM apiVersion,
-// kind, and metadata, so it is application configuration no Kubernetes function
-// or Trigger touches, and the wizard reads it back to re-enter a prior install.
-type Record struct {
-	ConfigHub RecordMeta         `yaml:"configHub"`
-	Package   RecordPackage      `yaml:"package"`
-	Source    *api.SourceSpec    `yaml:"source,omitempty"`
-	Selection *api.SelectionSpec `yaml:"selection,omitempty"`
-	Inputs    *api.InputsSpec    `yaml:"inputs,omitempty"`
-	Facts     *api.FactsSpec     `yaml:"facts,omitempty"`
-	Lock      *api.LockSpec      `yaml:"lock,omitempty"`
-}
-
-// RecordMeta is the AppConfig/YAML schema's reserved configHub block.
-type RecordMeta struct {
-	ConfigSchema string `yaml:"configSchema"`
-	ConfigName   string `yaml:"configName"`
-}
-
-// RecordPackage is installer.yaml without its apiVersion, kind, and metadata.
-type RecordPackage struct {
-	Name              string                `yaml:"name"`
-	InstallerMetadata api.InstallerMetadata `yaml:"installerMetadata,omitempty"`
-	Spec              api.PackageSpec       `yaml:"spec"`
-}
 
 // specsNamingThePackage are the record sections whose specs repeat the package
 // name and version, which the record's package section already says once.
@@ -75,9 +44,9 @@ func BuildRecord(pkg Package) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s installer.yaml: %w", pkg.Name, err)
 	}
-	rec := Record{
-		ConfigHub: RecordMeta{ConfigSchema: RecordSchema, ConfigName: RecordConfigName},
-		Package:   RecordPackage{Name: p.Metadata.Name, InstallerMetadata: p.InstallerMetadata, Spec: p.Spec},
+	rec := api.Record{
+		ConfigHub: api.RecordMeta{ConfigSchema: RecordSchema, ConfigName: RecordConfigName},
+		Package:   api.RecordPackage{Name: p.Metadata.Name, InstallerMetadata: p.InstallerMetadata, Spec: p.Spec},
 	}
 
 	if data, err := readRequired(pkg.RecordDir, "selection.yaml"); err != nil {
@@ -126,7 +95,7 @@ func BuildRecord(pkg Package) ([]byte, error) {
 
 // marshalRecord renders the record, dropping the package name and version each
 // spec repeats.
-func marshalRecord(rec Record) ([]byte, error) {
+func marshalRecord(rec api.Record) ([]byte, error) {
 	var root yaml.Node
 	if err := root.Encode(rec); err != nil {
 		return nil, err
@@ -159,23 +128,10 @@ type PriorDocuments struct {
 	Lock      *api.Lock
 }
 
-// UnmarshalRecord reads a record document as it is stored, with the package
-// name and version said once, in its package section.
-func UnmarshalRecord(data []byte) (*Record, error) {
-	var rec Record
-	if err := yaml.Unmarshal(data, &rec); err != nil {
-		return nil, fmt.Errorf("parse installer record: %w", err)
-	}
-	if rec.ConfigHub.ConfigSchema != RecordSchema {
-		return nil, fmt.Errorf("installer record has configHub.configSchema %q, want %q", rec.ConfigHub.ConfigSchema, RecordSchema)
-	}
-	return &rec, nil
-}
-
 // ParseRecord reads a record document back into the installer's document
 // types, restoring the package name and version the record says once.
 func ParseRecord(data []byte) (*PriorDocuments, error) {
-	rec, err := UnmarshalRecord(data)
+	rec, err := api.ParseRecord(data)
 	if err != nil {
 		return nil, err
 	}

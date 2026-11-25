@@ -80,6 +80,49 @@ func FindInstallerRecord(ctx context.Context, c *cubapi.Client, space, packageNa
 	if packageName == "" && space == "" {
 		return nil, fmt.Errorf("a Space or a package name is needed to find an installer record")
 	}
+	units, err := recordUnits(ctx, c, space, packageName)
+	if err != nil {
+		return nil, err
+	}
+	switch len(units) {
+	case 0:
+		return nil, nil
+	case 1:
+	default:
+		if space != "" {
+			return nil, &SeveralPackagesError{Space: space, Count: len(units)}
+		}
+		var spaces []string
+		for _, u := range units {
+			spaces = append(spaces, unitSpaceSlug(u, ""))
+		}
+		return nil, &SeveralInstallsError{Package: packageName, Count: len(units), Spaces: spaces}
+	}
+	return readRecord(ctx, c, units[0], space)
+}
+
+// ListInstallerRecords reads the installer records in space, or across the
+// organization when space is empty, of packageName or, when it is empty, of
+// every package. A Space that does not exist has none.
+func ListInstallerRecords(ctx context.Context, c *cubapi.Client, space, packageName string) ([]*FoundRecord, error) {
+	units, err := recordUnits(ctx, c, space, packageName)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*FoundRecord, 0, len(units))
+	for _, u := range units {
+		found, err := readRecord(ctx, c, u, space)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, found)
+	}
+	return out, nil
+}
+
+// recordUnits lists the installer record Units in space, or across the
+// organization, of packageName, or of every package.
+func recordUnits(ctx context.Context, c *cubapi.Client, space, packageName string) ([]*goclientnew.ExtendedUnit, error) {
 	where := cubapi.Where{}.
 		Eq("Annotations.UploadResource", "AppConfig/YAML/"+upload.RecordConfigName)
 	if packageName != "" {
@@ -96,34 +139,23 @@ func FindInstallerRecord(ctx context.Context, c *cubapi.Client, space, packageNa
 		}
 		where = where.Eq("SpaceID", found.SpaceID.String())
 	}
-	units, err := cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID", IncludeHidden: upload.RecordHiddenReason})
+	return cubapi.ListUnits(ctx, c, where, cubapi.ListOpts{Include: "SpaceID", IncludeHidden: upload.RecordHiddenReason})
+}
+
+// readRecord reads the data of a record Unit recordUnits listed.
+func readRecord(ctx context.Context, c *cubapi.Client, u *goclientnew.ExtendedUnit, space string) (*FoundRecord, error) {
+	data, err := cubapi.UnitData(ctx, c, u.Unit.SpaceID, u.Unit.UnitID)
 	if err != nil {
 		return nil, err
 	}
-	switch len(units) {
-	case 0:
-		return nil, nil
-	case 1:
-	default:
-		if space != "" {
-			return nil, &SeveralPackagesError{Space: space, Count: len(units)}
-		}
-		var spaces []string
-		for _, u := range units {
-			if u.Space != nil {
-				spaces = append(spaces, u.Space.Slug)
-			}
-		}
-		return nil, &SeveralInstallsError{Package: packageName, Count: len(units), Spaces: spaces}
+	return &FoundRecord{Data: []byte(data), SpaceSlug: unitSpaceSlug(u, space)}, nil
+}
+
+// unitSpaceSlug is the slug of the Space a listed Unit is in, or fallback when
+// the list didn't include it.
+func unitSpaceSlug(u *goclientnew.ExtendedUnit, fallback string) string {
+	if u.Space != nil {
+		return u.Space.Slug
 	}
-	unit := units[0].Unit
-	data, err := cubapi.UnitData(ctx, c, unit.SpaceID, unit.UnitID)
-	if err != nil {
-		return nil, err
-	}
-	found := &FoundRecord{Data: []byte(data), SpaceSlug: space}
-	if units[0].Space != nil {
-		found.SpaceSlug = units[0].Space.Slug
-	}
-	return found, nil
+	return fallback
 }

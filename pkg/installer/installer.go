@@ -164,10 +164,10 @@ func (i *Installer) client() (*cubapi.Client, error) {
 	return i.opts.ConfigHub, nil
 }
 
-// writeClient returns the ConfigHub client for an upload, having verified the
-// session against the server, so an expired token is reported before
-// anything else is done.
-func (i *Installer) writeClient(ctx context.Context) (*cubapi.Client, error) {
+// verifiedClient returns the ConfigHub client for an operation that needs
+// ConfigHub, having verified the session against the server, so an expired
+// token is reported as ErrNotAuthenticated before anything else is done.
+func (i *Installer) verifiedClient(ctx context.Context) (*cubapi.Client, error) {
 	c, err := i.client()
 	if err != nil {
 		return nil, err
