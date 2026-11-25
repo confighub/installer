@@ -307,11 +307,37 @@ type InstallResult struct {
 	Setup  *SetupResult
 	Upload *UploadResult
 }
+
+// FindRecord reads the installer record of one install: the one in space, of
+// packageName when the Space holds several packages' records, or the only
+// install of packageName in the organization when space is "".
+func (i *Installer) FindRecord(ctx context.Context, space, packageName string) (*InstalledRecord, error)
+
+// ListRecords reads the installer records in space, or in every Space when
+// space is "", of packageName or of every package, ordered by Space and
+// package.
+func (i *Installer) ListRecords(ctx context.Context, space, packageName string) ([]*InstalledRecord, error)
+
+type InstalledRecord struct {
+	Space  string
+	Data   []byte      // as stored
+	Record *api.Record // parsed
+}
+
+func (r *InstalledRecord) Package() string
+func (r *InstalledRecord) Version() string
+
+// WriteRecord writes a record for a person to read, as `installer show`
+// prints it.
+func WriteRecord(w io.Writer, r *InstalledRecord) error
 ```
 
 `installer install` and a host's install command, such as `cub package
 install`, both call `Install`, so the two take a package to ConfigHub the
-same way.
+same way. `installer show` calls `FindRecord` and `WriteRecord`, and a
+host's commands that show and list installs call them and `ListRecords`,
+with their own flags and output formats. The record's types, and
+`api.ParseRecord`, are in `pkg/api`.
 
 Preparing and previewing are separate because the CLI uses them
 differently: `installer upload --yes` sends no dry runs, `installer upload`
@@ -453,7 +479,7 @@ Done as described below, with these differences:
   cub environment's client, as the CLI did. Phase 3 removes the fallback.
 - `Options.Warn` lets the CLI add flags to warnings.
 - The shared ConfigHub lookups (finding a Space, finding an installer
-  record) are in `internal/hubclient`, which `show` and `new` use too.
+  record) are in `internal/hubclient`, which `new` uses too.
 - Three upload errors name the option instead of the flag (`Target "x"
   names a Target in Space ...`, `resolve Target x: ...`, and the same for
   ChangeSet), and a multi-package upload prints every Space's revert hint

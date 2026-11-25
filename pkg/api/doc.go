@@ -10,8 +10,8 @@
 //
 // Each schema is shaped as a Kubernetes-style document with apiVersion, kind,
 // metadata, spec, as it is written to a work-dir. In ConfigHub a package's
-// documents travel together as one AppConfig/YAML record document instead (see
-// internal/upload).
+// documents travel together as one AppConfig/YAML document instead, the
+// installer record (Record).
 package api
 
 const APIVersion = "installer.confighub.com/v1alpha1"
