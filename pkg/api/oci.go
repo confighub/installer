@@ -37,6 +37,8 @@ const (
 	AnnotationVersion          = "installer.confighub.com/version"
 	AnnotationKubeVersion      = "installer.confighub.com/kube-version"
 	AnnotationInstallerVersion = "installer.confighub.com/installer-version"
+	AnnotationGitPath          = "installer.confighub.com/git-path"
+	AnnotationGitDirty         = "installer.confighub.com/git-dirty"
 )
 
 // LayerTitle is the file/directory name set on the layer descriptor's

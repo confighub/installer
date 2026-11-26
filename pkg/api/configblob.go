@@ -35,4 +35,7 @@ type BundleInfo struct {
 	// Files is the list of paths in the .tgz, in tar order (sorted). Useful
 	// for `installer inspect` and for resolver sanity checks.
 	Files []string `json:"files"`
+
+	// Git is the source the package was built from, if known.
+	Git *GitSource `json:"git,omitempty"`
 }

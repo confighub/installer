@@ -211,3 +211,27 @@ func TestSummary(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// The git source a pull recorded is carried into the installer record.
+func TestBuildRecordKeepsGitSource(t *testing.T) {
+	pkg := renderedPackage(t, "web", true)
+	git := api.GitSource{Repository: "https://github.com/o/r", Revision: "abc", Path: "pkgs/web"}
+	data, err := api.MarshalYAML(api.Source{APIVersion: api.APIVersion, Kind: api.KindSource,
+		Spec: api.SourceSpec{Ref: "oci://reg/web:1.2.3", Git: &git}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(pkg.RecordDir, "source.yaml"), string(data))
+
+	data, err = BuildRecord(pkg)
+	if err != nil {
+		t.Fatalf("BuildRecord: %v", err)
+	}
+	prior, err := ParseRecord(data)
+	if err != nil {
+		t.Fatalf("ParseRecord: %v", err)
+	}
+	if prior.Source == nil || prior.Source.Git == nil || *prior.Source.Git != git {
+		t.Errorf("git source not kept:\n%s", data)
+	}
+}

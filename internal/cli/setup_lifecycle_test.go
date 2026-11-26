@@ -319,7 +319,9 @@ func TestLifecycleDependencies(t *testing.T) {
 // that depends on it there.
 func (e *env) exampleStack(reg *testregistry.Registry) string {
 	e.t.Helper()
-	mustRun(e.t, "push", filepath.Join(e.repo, "examples", "example-base"),
+	// A copy outside the repository records no git source, so the digest in
+	// the golden file doesn't change with each commit.
+	mustRun(e.t, "push", e.copyExample("example-base", "BASE"),
 		"oci://"+reg.Host+"/installer-e2e/example-base:0.1.0")
 	stack := e.copyExample("example-stack", "STACK")
 	e.edit(filepath.Join(stack, "installer.yaml"), func(s string) string {

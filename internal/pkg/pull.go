@@ -38,25 +38,25 @@ import (
 // atomic-rename pattern so a failed fetch never leaves the prior
 // <workDir>/package/ in an indeterminate state.
 func (reg Registry) Pull(ctx context.Context, ref, dest string) (string, error) {
-	_, dir, err := reg.pull(ctx, ref, dest)
+	_, dir, _, err := reg.pull(ctx, ref, dest)
 	return dir, err
 }
 
-// pull is Pull, also returning the reference ref resolved to.
-func (reg Registry) pull(ctx context.Context, ref, dest string) (resolved, dir string, err error) {
+// pull is Pull, also returning the reference ref resolved to and the git
+// source of the package, if known.
+func (reg Registry) pull(ctx context.Context, ref, dest string) (resolved, dir string, git *api.GitSource, err error) {
 	resolved, err = reg.ResolveRef(ctx, ref)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	switch {
-	case strings.HasPrefix(resolved, "oci://"):
-		dir, err = reg.pullOCI(ctx, strings.TrimPrefix(resolved, "oci://"), dest)
-	case strings.HasPrefix(resolved, "file://"):
-		dir, err = pullLocal(strings.TrimPrefix(resolved, "file://"), dest)
-	default:
-		dir, err = pullLocal(resolved, dest)
+	if strings.HasPrefix(resolved, "oci://") {
+		dir, git, err = reg.pullOCI(ctx, strings.TrimPrefix(resolved, "oci://"), dest)
+	} else {
+		local := strings.TrimPrefix(resolved, "file://")
+		dir, err = pullLocal(local, dest)
+		git = detectGitSource(ctx, local)
 	}
-	return resolved, dir, err
+	return resolved, dir, git, err
 }
 
 // PullToWorkDir fetches ref into <workDir>/package/ atomically.
@@ -87,6 +87,7 @@ type StagedPull struct {
 
 	reg     Registry
 	ref     string
+	git     *api.GitSource
 	workDir string
 	stage   string
 }
@@ -105,7 +106,7 @@ func (reg Registry) StagePull(ctx context.Context, ref, workDir string) (*Staged
 	if err != nil {
 		return nil, err
 	}
-	ref, loaded, err := reg.pull(ctx, ref, stage)
+	ref, loaded, git, err := reg.pull(ctx, ref, stage)
 	if err != nil {
 		_ = os.RemoveAll(stage)
 		return nil, err
@@ -114,7 +115,7 @@ func (reg Registry) StagePull(ctx context.Context, ref, workDir string) (*Staged
 		_ = os.RemoveAll(stage)
 		return nil, fmt.Errorf("pulled artifact missing %s: %w", ManifestFile, err)
 	}
-	return &StagedPull{Root: loaded, reg: reg, ref: ref, workDir: absWork, stage: stage}, nil
+	return &StagedPull{Root: loaded, reg: reg, ref: ref, git: git, workDir: absWork, stage: stage}, nil
 }
 
 // Discard removes the staged package, if Promote hasn't put it in place.
@@ -163,7 +164,7 @@ func (s *StagedPull) Promote(ctx context.Context) (string, error) {
 	s.Root = finalDest
 	s.Discard()
 
-	if err := s.reg.writeSource(ctx, s.ref, s.workDir); err != nil {
+	if err := s.reg.writeSource(ctx, s.ref, s.git, s.workDir); err != nil {
 		return "", err
 	}
 	return finalDest, nil
@@ -177,8 +178,8 @@ const SourceFile = "source.yaml"
 // <workDir>/out/record/source.yaml, which upload carries in the installer
 // record. A local path is made absolute, and an oci:// reference is pinned to
 // the digest it resolved to.
-func (reg Registry) writeSource(ctx context.Context, ref, workDir string) error {
-	spec := api.SourceSpec{Ref: ref}
+func (reg Registry) writeSource(ctx context.Context, ref string, git *api.GitSource, workDir string) error {
+	spec := api.SourceSpec{Ref: ref, Git: git}
 	switch {
 	case strings.HasPrefix(ref, "oci://"):
 		digest, err := reg.ResolveManifestDigest(ctx, ref)
@@ -256,14 +257,14 @@ func pullLocal(src, dest string) (string, error) {
 	return resolveSingleSubdir(dest), nil
 }
 
-func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, error) {
+func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, *api.GitSource, error) {
 	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	repo, err := reg.readRepo(repoRef)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	resolveRef := tag
@@ -272,10 +273,10 @@ func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, erro
 	}
 	desc, err := repo.Resolve(ctx, resolveRef)
 	if err != nil {
-		return "", fmt.Errorf("resolve %s: %w", ref, err)
+		return "", nil, fmt.Errorf("resolve %s: %w", ref, err)
 	}
 	if want != "" && desc.Digest != want {
-		return "", fmt.Errorf("digest mismatch on %s: pinned %s but registry returned %s", ref, want, desc.Digest)
+		return "", nil, fmt.Errorf("digest mismatch on %s: pinned %s but registry returned %s", ref, want, desc.Digest)
 	}
 
 	// Policy gate: if the Registry's signing policy enforces verification,
@@ -284,7 +285,7 @@ func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, erro
 	// after our resolve can't slip past.
 	pinnedRef := joinRefForVerify(repoRef, desc.Digest.String())
 	if err := reg.Verifier.Enforce(ctx, pinnedRef); err != nil {
-		return "", fmt.Errorf("verify %s: %w", ref, err)
+		return "", nil, fmt.Errorf("verify %s: %w", ref, err)
 	}
 
 	// Peek at the manifest to choose the extraction path. Native installer
@@ -292,22 +293,26 @@ func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, erro
 	// (notably Helm-OCI charts) takes the file-store fallback.
 	manifest, err := fetchManifest(ctx, repo, desc)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	if dest == "" {
 		dest, err = os.MkdirTemp("", "installer-oci-*")
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 	} else if err := os.MkdirAll(dest, 0o755); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
+	git := gitSourceFromAnnotations(manifest.Annotations)
+	var dir string
 	if manifest.ArtifactType == api.ArtifactType {
-		return pullNative(ctx, repo, manifest, dest)
+		dir, err = pullNative(ctx, repo, manifest, dest)
+	} else {
+		dir, err = pullHelmShaped(ctx, repo, desc.Digest.String(), dest)
 	}
-	return pullHelmShaped(ctx, repo, desc.Digest.String(), dest)
+	return dir, git, err
 }
 
 // pullNative extracts the single tar.gz layer of a native installer artifact

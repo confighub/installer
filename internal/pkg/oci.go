@@ -44,12 +44,20 @@ type PushResult struct {
 	Files []string
 }
 
+// PushOptions controls the git source recorded in the artifact.
+type PushOptions struct {
+	// Git overrides what is detected from the source directory.
+	Git *api.GitSource
+	// NoGit records no git source.
+	NoGit bool
+}
+
 // Push publishes a package to an OCI registry as a native installer artifact.
 //
 // src may be either a .tgz file produced by internal/bundle or a source
 // directory; directories are bundled to a temp file first. ref must be of the
 // form oci://host/repo:tag — pushing to a digest is not supported.
-func (reg Registry) Push(ctx context.Context, src, ref string) (*PushResult, error) {
+func (reg Registry) Push(ctx context.Context, src, ref string, opts ...PushOptions) (*PushResult, error) {
 	repoRef, tag, _, err := parseRef(ref, true /*requireTag*/)
 	if err != nil {
 		return nil, err
@@ -58,7 +66,7 @@ func (reg Registry) Push(ctx context.Context, src, ref string) (*PushResult, err
 	if err != nil {
 		return nil, err
 	}
-	res, err := stageAndCopy(ctx, src, tag, repo)
+	res, err := stageAndCopy(ctx, src, tag, repo, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +78,23 @@ func (reg Registry) Push(ctx context.Context, src, ref string) (*PushResult, err
 // in an in-memory store, tags it as tag, and copies it to dst. dst may be a
 // *remote.Repository or any oras.Target (memory store in tests). Returns a
 // PushResult with Ref left blank for the caller to fill.
-func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target) (*PushResult, error) {
+func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target, opts ...PushOptions) (*PushResult, error) {
 	tgz, loaded, cleanup, err := materializeForPush(src)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
+
+	var o PushOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	git := o.Git
+	if o.NoGit {
+		git = nil
+	} else if git == nil {
+		git = detectGitSource(ctx, src) // nil for a .tgz
+	}
 
 	layerData, err := os.ReadFile(tgz)
 	if err != nil {
@@ -101,7 +120,7 @@ func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target) (*PushR
 		return nil, err
 	}
 
-	cbBytes, err := buildConfigBlob(loaded.Package, layerDigest.String(), int64(len(layerData)), files)
+	cbBytes, err := buildConfigBlob(loaded.Package, layerDigest.String(), int64(len(layerData)), files, git)
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +138,31 @@ func stageAndCopy(ctx context.Context, src, tag string, dst oras.Target) (*PushR
 		return nil, fmt.Errorf("stage config: %w", err)
 	}
 
+	annotations := map[string]string{
+		// Fixed value → deterministic manifest digest.
+		ocispec.AnnotationCreated:      "1970-01-01T00:00:00Z",
+		ocispec.AnnotationTitle:        loaded.Package.Metadata.Name,
+		api.AnnotationName:             loaded.Package.Metadata.Name,
+		api.AnnotationVersion:          loaded.Package.InstallerMetadata.Version,
+		api.AnnotationInstallerVersion: version.Version,
+	}
+	if git != nil {
+		annotations[ocispec.AnnotationSource] = git.Repository
+		if git.Revision != "" {
+			annotations[ocispec.AnnotationRevision] = git.Revision
+		}
+		if git.Path != "" {
+			annotations[api.AnnotationGitPath] = git.Path
+		}
+		if git.Dirty {
+			annotations[api.AnnotationGitDirty] = "true"
+		}
+	}
+
 	manifestDesc, err := oras.PackManifest(ctx, staging, oras.PackManifestVersion1_1, api.ArtifactType, oras.PackManifestOptions{
-		Layers:           []ocispec.Descriptor{layerDesc},
-		ConfigDescriptor: &configDesc,
-		ManifestAnnotations: map[string]string{
-			// Fixed value → deterministic manifest digest.
-			ocispec.AnnotationCreated:      "1970-01-01T00:00:00Z",
-			ocispec.AnnotationTitle:        loaded.Package.Metadata.Name,
-			api.AnnotationName:             loaded.Package.Metadata.Name,
-			api.AnnotationVersion:          loaded.Package.InstallerMetadata.Version,
-			api.AnnotationInstallerVersion: version.Version,
-		},
+		Layers:              []ocispec.Descriptor{layerDesc},
+		ConfigDescriptor:    &configDesc,
+		ManifestAnnotations: annotations,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pack manifest: %w", err)
@@ -411,13 +444,14 @@ func materializeForPush(src string) (tgz string, loaded *Loaded, cleanup func(),
 	return src, loaded, cleanup, nil
 }
 
-func buildConfigBlob(pkg *api.Package, layerDigest string, layerSize int64, files []string) ([]byte, error) {
+func buildConfigBlob(pkg *api.Package, layerDigest string, layerSize int64, files []string, git *api.GitSource) ([]byte, error) {
 	cb := api.ConfigBlob{
 		Bundle: api.BundleInfo{
 			InstallerVersion: version.Version,
 			LayerDigest:      layerDigest,
 			LayerSize:        layerSize,
 			Files:            files,
+			Git:              git,
 		},
 		Manifest: pkg,
 	}
@@ -450,4 +484,3 @@ func listTarFiles(data []byte) ([]string, error) {
 	sort.Strings(out)
 	return out, nil
 }
-

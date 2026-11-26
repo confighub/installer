@@ -29,6 +29,19 @@ type SourceSpec struct {
 	// pulled, so that pulling again gets the same package even if its tag
 	// has since moved.
 	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
+	// Git is where the package's source is kept, if known.
+	Git *GitSource `yaml:"git,omitempty" json:"git,omitempty"`
+}
+
+// GitSource says which git source a package was built from.
+type GitSource struct {
+	Repository string `yaml:"repository" json:"repository"`
+	Revision   string `yaml:"revision,omitempty" json:"revision,omitempty"`
+	// Path is the package directory within the repository; empty means the
+	// root.
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+	// Dirty means the package directory had uncommitted changes.
+	Dirty bool `yaml:"dirty,omitempty" json:"dirty,omitempty"`
 }
 
 // PinnedRef is the reference that pulls the same package again: Ref with

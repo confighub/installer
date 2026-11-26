@@ -43,6 +43,15 @@ func WriteRecord(w io.Writer, r *InstalledRecord) error {
 	if rec.Source != nil {
 		pw.field("Source", rec.Source.Ref)
 		pw.field("Digest", rec.Source.Digest)
+		if g := rec.Source.Git; g != nil {
+			pw.field("Git repository", g.Repository)
+			revision := g.Revision
+			if g.Dirty {
+				revision += " (uncommitted changes)"
+			}
+			pw.field("Git revision", revision)
+			pw.field("Git path", g.Path)
+		}
 	}
 	if rec.Inputs != nil {
 		pw.field("Namespace", rec.Inputs.Namespace)
