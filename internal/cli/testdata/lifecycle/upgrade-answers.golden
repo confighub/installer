@@ -20,7 +20,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: demo
   values:
     owner: me
@@ -33,7 +33,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
 --- source.yaml (content not compared)
 
@@ -67,7 +67,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.3.0
+  packageVersion: v0.3.0
   namespace: demo
   values:
     owner: me
@@ -80,7 +80,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.3.0
+  packageVersion: v0.3.0
   base: default
 --- source.yaml (content not compared)
 

@@ -3,7 +3,7 @@ kind: Package
 metadata:
   name: argocd
 installerMetadata:
-  version: 3.4.2
+  version: v3.4.2
   kubeVersion: ">= 1.28"
 spec:
   bases:

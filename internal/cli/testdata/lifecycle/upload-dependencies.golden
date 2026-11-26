@@ -24,8 +24,8 @@ GET /component ? include=Permissions,AllowedChangeWorkflowIDs & where=Slug = 'ex
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'example-stack-base'
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-base@0.1.0",
-    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "ChangeDescription": "installer upload of example-base@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@v0.1.0",
     "Components": [
       {
         "Name": "example-base",
@@ -56,7 +56,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-base@0.1.0"
+      "Ref": "example-base@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -66,7 +66,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-base
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -92,8 +92,8 @@ POST /upload ? dry_run=true & include=Mutations
       values: {}
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-stack@0.1.0",
-    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "ChangeDescription": "installer upload of example-stack@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@v0.1.0",
     "Components": [
       {
         "Name": "example-stack",
@@ -124,7 +124,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-stack@0.1.0"
+      "Ref": "example-stack@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -134,7 +134,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-stack
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -161,23 +161,23 @@ POST /upload ? dry_run=true & include=Mutations
     lock:
       package:
         name: example-stack
-        version: 0.1.0
+        version: v0.1.0
       resolved:
         - name: base
-          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
           version: 0.1.0
           requestedBy:
             - root
 
 ===== installer upload --work-dir $WORK --space-pattern {{.PackageName}}-{{.Variant}} =====
 --- stdout
-== example-base@0.1.0 → Space example-base-base ==
+== example-base@v0.1.0 → Space example-base-base ==
 Space example-base-base (Create)
   Create    installer
   Create    configmap-e2e-ns-example-base-defaults
   Create    namespace-e2e-ns
-== example-stack@0.1.0 → Space example-stack-base ==
+== example-stack@v0.1.0 → Space example-stack-base ==
 Space example-stack-base (Create)
   Create    installer
   Create    deployment-e2e-ns-example-stack
@@ -198,8 +198,8 @@ GET /component ? include=Permissions,AllowedChangeWorkflowIDs & where=Slug = 'ex
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'example-stack-base'
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of example-base@0.1.0",
-    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "ChangeDescription": "installer upload of example-base@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@v0.1.0",
     "Components": [
       {
         "Name": "example-base",
@@ -230,7 +230,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-base@0.1.0"
+      "Ref": "example-base@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -240,7 +240,7 @@ POST /upload ? dry_run=true
     package:
       name: example-base
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -266,8 +266,8 @@ POST /upload ? dry_run=true
       values: {}
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of example-stack@0.1.0",
-    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "ChangeDescription": "installer upload of example-stack@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@v0.1.0",
     "Components": [
       {
         "Name": "example-stack",
@@ -298,7 +298,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-stack@0.1.0"
+      "Ref": "example-stack@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -308,7 +308,7 @@ POST /upload ? dry_run=true
     package:
       name: example-stack
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -335,18 +335,18 @@ POST /upload ? dry_run=true
     lock:
       package:
         name: example-stack
-        version: 0.1.0
+        version: v0.1.0
       resolved:
         - name: base
-          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
           version: 0.1.0
           requestedBy:
             - root
 POST /upload
   {
-    "ChangeDescription": "installer upload of example-base@0.1.0",
-    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "ChangeDescription": "installer upload of example-base@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@v0.1.0",
     "Components": [
       {
         "Name": "example-base",
@@ -376,7 +376,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-base@0.1.0"
+      "Ref": "example-base@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -386,7 +386,7 @@ POST /upload
     package:
       name: example-base
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -417,8 +417,8 @@ PATCH /space/00000000-0000-0000-0000-000000000001/unit/00000000-0000-0000-0000-0
 GET /change_set ? include=SpaceID,StartTagID,EndTagID & where=ChangeSetID = '00000000-0000-0000-0000-000000000003'
 POST /upload
   {
-    "ChangeDescription": "installer upload of example-stack@0.1.0",
-    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "ChangeDescription": "installer upload of example-stack@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@v0.1.0",
     "Components": [
       {
         "DependsOn": [
@@ -451,7 +451,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-stack@0.1.0"
+      "Ref": "example-stack@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -461,7 +461,7 @@ POST /upload
     package:
       name: example-stack
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -488,11 +488,11 @@ POST /upload
     lock:
       package:
         name: example-stack
-        version: 0.1.0
+        version: v0.1.0
       resolved:
         - name: base
-          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
           version: 0.1.0
           requestedBy:
             - root
@@ -536,8 +536,8 @@ GET /component ? include=Permissions,AllowedChangeWorkflowIDs & where=Slug = 'ex
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'example-stack-base'
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-base@0.1.0",
-    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "ChangeDescription": "installer upload of example-base@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@v0.1.0",
     "Components": [
       {
         "Name": "example-base",
@@ -568,7 +568,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-base@0.1.0"
+      "Ref": "example-base@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -578,7 +578,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-base
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -604,8 +604,8 @@ POST /upload ? dry_run=true & include=Mutations
       values: {}
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-stack@0.1.0",
-    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "ChangeDescription": "installer upload of example-stack@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@v0.1.0",
     "Components": [
       {
         "DependsOn": [
@@ -639,7 +639,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-stack@0.1.0"
+      "Ref": "example-stack@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -649,7 +649,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-stack
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -676,11 +676,11 @@ POST /upload ? dry_run=true & include=Mutations
     lock:
       package:
         name: example-stack
-        version: 0.1.0
+        version: v0.1.0
       resolved:
         - name: base
-          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
           version: 0.1.0
           requestedBy:
             - root
@@ -700,12 +700,12 @@ plan example-stack: HTTP 400 for req : upload refused
 
 ===== installer upload --work-dir $WORK --space-pattern {{.PackageName}}-refused --yes =====
 --- stdout
-== example-base@0.1.0 → Space example-base-refused ==
+== example-base@v0.1.0 → Space example-base-refused ==
 Space example-base-refused (Create)
   Create    installer
   Create    configmap-e2e-ns-example-base-defaults
   Create    namespace-e2e-ns
-== example-stack@0.1.0 → Space example-stack-refused ==
+== example-stack@v0.1.0 → Space example-stack-refused ==
 
 Revert this upload of example-base-refused with:
   cub unit update --patch --space example-base-refused --restore Before:ChangeSet:upload-example-base-refused --where "Labels.UploadSource = 'example-base'" --include-hidden=InstallerRecord
@@ -737,8 +737,8 @@ GET /component ? include=Permissions,AllowedChangeWorkflowIDs & where=Slug = 'ex
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'stack'
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-base@0.1.0",
-    "ChangeSetDescription": "installer upload of example-base@0.1.0",
+    "ChangeDescription": "installer upload of example-base@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-base@v0.1.0",
     "Components": [
       {
         "Name": "example-base",
@@ -769,7 +769,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-base@0.1.0"
+      "Ref": "example-base@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -779,7 +779,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-base
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -805,8 +805,8 @@ POST /upload ? dry_run=true & include=Mutations
       values: {}
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of example-stack@0.1.0",
-    "ChangeSetDescription": "installer upload of example-stack@0.1.0",
+    "ChangeDescription": "installer upload of example-stack@v0.1.0",
+    "ChangeSetDescription": "installer upload of example-stack@v0.1.0",
     "Components": [
       {
         "DependsOn": [
@@ -840,7 +840,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "example-stack@0.1.0"
+      "Ref": "example-stack@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -850,7 +850,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: example-stack
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -877,11 +877,11 @@ POST /upload ? dry_run=true & include=Mutations
     lock:
       package:
         name: example-stack
-        version: 0.1.0
+        version: v0.1.0
       resolved:
         - name: base
-          ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-          digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+          ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
           version: 0.1.0
           requestedBy:
             - root

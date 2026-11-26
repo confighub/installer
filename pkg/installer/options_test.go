@@ -43,7 +43,7 @@ func (staticStore) Delete(context.Context, string) error               { return 
 // pushHello pushes hello-app to reg and returns its reference.
 func pushHello(t *testing.T, reg *testregistry.Registry, creds staticStore) string {
 	t.Helper()
-	ref := "oci://" + reg.Host + "/pkgs/hello-app:0.1.0"
+	ref := "oci://" + reg.Host + "/pkgs/hello-app:v0.1.0"
 	if _, err := (ipkg.Registry{Credentials: creds}).Push(context.Background(), example(t, "hello-app"), ref); err != nil {
 		t.Fatalf("push: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestRegistryCredentials(t *testing.T) {
 func TestPackageRepository(t *testing.T) {
 	reg := testregistry.New()
 	defer reg.Close()
-	for _, tag := range []string{"0.1.0", "0.2.0"} {
+	for _, tag := range []string{"v0.1.0", "v0.2.0"} {
 		if _, err := (ipkg.Registry{}).Push(context.Background(), example(t, "hello-app"), "oci://"+reg.Host+"/packages/hello-app:"+tag); err != nil {
 			t.Fatalf("push: %v", err)
 		}
@@ -95,7 +95,7 @@ func TestPackageRepository(t *testing.T) {
 	if _, err := inst.Setup(context.Background(), installer.SetupOptions{WorkDir: workDir, Pull: "hello-app", Namespace: "demo"}); err != nil {
 		t.Fatalf("Setup of a bare name: %v", err)
 	}
-	want := "oci://" + reg.Host + "/packages/hello-app:0.2.0"
+	want := "oci://" + reg.Host + "/packages/hello-app:v0.2.0"
 	if !strings.Contains(out.String(), "Pulling "+want+" for package hello-app.") {
 		t.Errorf("output does not name the release pulled:\n%s", out.String())
 	}

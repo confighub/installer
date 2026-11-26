@@ -110,7 +110,7 @@ metadata:
   name: hello-app-function-chain
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   groups:
     - toolchain: Kubernetes/YAML
       invocations:
@@ -125,7 +125,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: platform
@@ -136,7 +136,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -168,7 +168,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
   components:
     - monitoring
@@ -306,7 +306,7 @@ metadata:
   name: hello-app-function-chain
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   groups:
     - toolchain: Kubernetes/YAML
       invocations:
@@ -321,7 +321,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: platform
@@ -332,7 +332,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -364,7 +364,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
   components:
     - monitoring
@@ -399,7 +399,7 @@ metadata:
   name: hello-app-function-chain
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   groups:
     - toolchain: Kubernetes/YAML
       invocations:
@@ -414,7 +414,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: demo
   values:
     log_level: info
@@ -425,7 +425,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -457,7 +457,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
   components:
     - monitoring
@@ -555,7 +555,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: demo
   values:
     log_level: info
@@ -568,7 +568,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -600,7 +600,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
   components:
     - monitoring
@@ -633,7 +633,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: demo
   values:
     log_level: info
@@ -646,7 +646,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -678,7 +678,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
   components:
     - monitoring
@@ -711,7 +711,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: other
   values:
     log_level: debug
@@ -724,7 +724,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   files:
     - filename: deployment-other-hello-app.yaml
       slug: deployment-other-hello-app
@@ -762,7 +762,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
   components:
     - ingress
@@ -797,7 +797,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   namespace: other
   values:
     log_level: debug
@@ -810,7 +810,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   files:
     - filename: deployment-other-hello-app.yaml
       slug: deployment-other-hello-app
@@ -848,7 +848,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.2.0
+  packageVersion: v0.2.0
   base: default
   components:
     - ingress

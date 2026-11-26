@@ -48,7 +48,7 @@ type LockedDependency struct {
 	Name string `yaml:"name" json:"name"`
 
 	// Ref is the full pinned OCI ref the resolver chose, including tag.
-	// Example: oci://ghcr.io/confighubai/gateway-api:1.4.2
+	// Example: oci://ghcr.io/confighubai/gateway-api:v1.4.2
 	Ref string `yaml:"ref" json:"ref"`
 
 	// Digest is the sha256:<hex> of the manifest at Ref. The renderer

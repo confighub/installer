@@ -75,7 +75,7 @@ cat installer.yaml
 # metadata:
 #   name: statusboard-pkg
 # installerMetadata:
-#   version: 0.1.0
+#   version: v0.1.0
 # spec:
 #   bases:
 #     - name: default
@@ -458,22 +458,22 @@ ask one or two questions and ship.
 Build a deterministic tarball:
 
 ```bash
-installer build ./. -o statusboard-0.1.0.tgz
-# Wrote statusboard-0.1.0.tgz (sha256:bc4e...)
+installer build ./. -o statusboard-v0.1.0.tgz
+# Wrote statusboard-v0.1.0.tgz (sha256:bc4e...)
 ```
 
 Two builds on two machines from the same source produce the same
 sha256. Publish to a registry:
 
 ```bash
-installer push statusboard-0.1.0.tgz oci://ghcr.io/myorg/statusboard:0.1.0
+installer push statusboard-v0.1.0.tgz oci://ghcr.io/myorg/statusboard:v0.1.0
 ```
 
 Operators can now:
 
 ```bash
-installer inspect oci://ghcr.io/myorg/statusboard:0.1.0
-installer pull oci://ghcr.io/myorg/statusboard:0.1.0 ./statusboard-pulled
+installer inspect oci://ghcr.io/myorg/statusboard:v0.1.0
+installer pull oci://ghcr.io/myorg/statusboard:v0.1.0 ./statusboard-pulled
 ```
 
 For production releases, sign with `installer sign` after push.
@@ -482,14 +482,14 @@ OIDC flow opens a browser; `--yes` skips cosign's TTY confirmation
 prompt for CI:
 
 ```bash
-installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --yes
+installer sign oci://ghcr.io/myorg/statusboard:v0.1.0 --yes
 ```
 
 Or keyed:
 
 ```bash
 cosign generate-key-pair
-installer sign oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.key
+installer sign oci://ghcr.io/myorg/statusboard:v0.1.0 --key cosign.key
 ```
 
 Requires the `cosign` binary on PATH (override via
@@ -499,12 +499,12 @@ pull.
 
 ## Step 9: release a 0.2.0
 
-When you change the package, bump `installerMetadata.version` to 0.2.0,
+When you change the package, bump `installerMetadata.version` to v0.2.0,
 re-package, re-push. Operators upgrade by re-running setup with
 `--pull` pointed at the new ref:
 
 ```bash
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.2.0 \
     --work-dir <work-dir>
 installer upload --work-dir <work-dir> --yes
 ```

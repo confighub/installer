@@ -16,7 +16,7 @@ import (
 )
 
 // packageNameRegexp is a bare package name, optionally with a version:
-// k8sbot, or k8sbot:0.2.12.
+// k8sbot, or k8sbot:v0.2.13.
 var packageNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*(:[A-Za-z0-9._-]+)?$`)
 
 // IsPath reports whether a package reference is written as a path on this
@@ -118,7 +118,7 @@ func compareVersions(a, b [3]int) int {
 
 // registryHint adds, to the error reading a local package that doesn't
 // exist, how to write it as an oci:// reference, when it reads as a registry
-// reference typed without one: ghcr.io/example/app:1.0.0, whose first
+// reference typed without one: ghcr.io/example/app:v1.0.0, whose first
 // element is a registry host.
 func registryHint(ref string, err error) error {
 	if !os.IsNotExist(err) || strings.HasPrefix(ref, ".") || filepath.IsAbs(ref) || strings.HasPrefix(ref, "file://") {

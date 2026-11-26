@@ -134,7 +134,7 @@ operators who want pinned installs.
 
 ## Versioning and channels
 
-- `installerMetadata.version` is required and parsed as SemVer 2.0. Tag-per-version
+- `installerMetadata.version` is required and parsed as SemVer 2.0, written with a leading `v`. Tag-per-version
   artifacts are immutable.
 - Channel tags (`stable`, `latest`, `0`, `0.3`) are allowed by convention only.
   No registry-side mechanism enforces them; they are mutable aliases that
@@ -239,20 +239,20 @@ metadata:
 spec:
   package:
     name: llm-stack
-    version: 0.3.0
+    version: v0.3.0
     digest: sha256:...
   resolved:
     - name: gateway-api
-      ref: oci://ghcr.io/confighubai/gateway-api:1.4.2
+      ref: oci://ghcr.io/confighubai/gateway-api:v1.4.2
       digest: sha256:bbbb...
       requestedBy: [root]
-      version: 1.4.2
+      version: v1.4.2
       selection: { base: default, components: [crds, kgateway] }
     - name: cert-manager
-      ref: oci://ghcr.io/confighubai/cert-manager:1.15.3
+      ref: oci://ghcr.io/confighubai/cert-manager:v1.15.3
       digest: sha256:cccc...
       requestedBy: [gateway-api]
-      version: 1.15.3
+      version: v1.15.3
 ```
 
 Workflow:
@@ -324,7 +324,7 @@ metadata:
     confighub.com/category: gateway
     confighub.com/maintainers: ...
 installerMetadata:
-  version: 0.3.0
+  version: v0.3.0
   kubeVersion: ">= 1.28" # SemVer range, checked at resolve time
   installerVersion: ">= 0.2.0" # range against the CLI invoking render
 ```

@@ -129,7 +129,7 @@ kind: Package
 metadata:
   name: my-package
 installerMetadata:
-  version: 0.1.0          # SemVer
+  version: v0.1.0         # SemVer, with a leading v
   kubeVersion: ">= 1.28"  # SemVer range; empty means unconstrained
   installerVersion: ">= 0.2.0"
 spec:
@@ -1012,15 +1012,15 @@ The publish flow is `installer build` → `installer push`:
 
 ```bash
 # Build a deterministic .tgz of the source tree.
-installer build ./my-package -o my-package-0.1.0.tgz
+installer build ./my-package -o my-package-v0.1.0.tgz
 # Output names the digest:
 #   sha256:bc4e...
 
 # Push to an OCI registry as an installer artifact.
-installer push my-package-0.1.0.tgz oci://ghcr.io/myorg/my-package:0.1.0
+installer push my-package-v0.1.0.tgz oci://ghcr.io/myorg/my-package:v0.1.0
 
 # Inspect what's in a registry without pulling the layer.
-installer inspect oci://ghcr.io/myorg/my-package:0.1.0
+installer inspect oci://ghcr.io/myorg/my-package:v0.1.0
 installer list oci://ghcr.io/myorg/my-package
 ```
 
@@ -1058,10 +1058,10 @@ fetch. Requires the `cosign` binary on PATH (override via
 ```bash
 # Keyless (Sigstore Fulcio + Rekor — interactive OIDC flow).
 # Add --yes to skip the cosign confirmation prompt in CI.
-installer sign oci://ghcr.io/myorg/my-package:0.1.0 --yes
+installer sign oci://ghcr.io/myorg/my-package:v0.1.0 --yes
 
 # Keyed.
-installer sign oci://ghcr.io/myorg/my-package:0.1.0 --key cosign.key
+installer sign oci://ghcr.io/myorg/my-package:v0.1.0 --key cosign.key
 ```
 
 If your package will be consumed by people you don't know, sign every
@@ -1127,7 +1127,9 @@ for them.
 
 ### Bumping `installerMetadata.version`
 
-Use SemVer. The version is what shows up in the `installer-upgrade-…`
+Use SemVer, written with a leading `v` (`v1.2.3`), and publish the package
+under that tag. The installer reads versions and tags with or without the
+`v`. The version is what shows up in the `installer-upgrade-…`
 ChangeSet name and in operator-facing diagnostics; honest
 versioning makes operator audit trails readable.
 

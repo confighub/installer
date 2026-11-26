@@ -50,7 +50,7 @@ configured separately).
 ## Find a package
 
 A package ConfigHub publishes is named by itself: `k8sbot`, or
-`k8sbot:0.2.12` for one release. A bare name is a repository under
+`k8sbot:v0.2.13` for one release. A bare name is a repository under
 `ghcr.io/confighub/packages/`, and without a version names the newest
 X.Y.Z release. Those packages are public, so the installer reads them
 without credentials, and an expired login to ghcr.io can't refuse them.
@@ -58,7 +58,7 @@ without credentials, and an expired login to ghcr.io can't refuse them.
 ```bash
 installer list k8sbot              # its releases
 installer doc k8sbot               # what the newest one offers
-installer setup --pull k8sbot:0.2.12 --namespace k8sbot
+installer setup --pull k8sbot:v0.2.13 --namespace k8sbot
 ```
 
 Any other package is named by its OCI ref (`oci://host/repo:tag`), or
@@ -79,7 +79,7 @@ you have a candidate ref:
 ```bash
 # What's in this artifact? Reads only the manifest + config blob,
 # does not pull the layer.
-installer inspect oci://ghcr.io/myorg/statusboard:0.1.0
+installer inspect oci://ghcr.io/myorg/statusboard:v0.1.0
 
 # What versions are available?
 installer list oci://ghcr.io/myorg/statusboard
@@ -101,7 +101,7 @@ is the only command that talks to ConfigHub.
 mkdir my-statusboard && cd my-statusboard
 
 # 1. Pull the package, answer the wizard, and render.
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --namespace statusboard
 
 # Interactive prompts (skip with --non-interactive + flags):
@@ -116,7 +116,7 @@ If you prefer to script the wizard:
 
 ```bash
 installer setup \
-    --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+    --pull oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --non-interactive \
     --namespace statusboard \
     --components default \
@@ -127,7 +127,7 @@ The working directory defaults to `.`. To work in an explicit dir
 instead, pass `--work-dir <dir>` (no `cd`-into-it needed):
 
 ```bash
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --work-dir /tmp/statusboard --namespace statusboard
 ```
 
@@ -145,7 +145,7 @@ ConfigHub account. A local path writes an OCI image layout:
 
 ```bash
 installer setup \
-    --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+    --pull oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --namespace statusboard \
     --output-oci ./statusboard-rendered.oci
 ```
@@ -154,9 +154,9 @@ An OCI reference pushes the rendered artifact to a registry:
 
 ```bash
 installer setup \
-    --pull oci://ghcr.io/myorg/statusboard:0.1.0 \
+    --pull oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --namespace statusboard \
-    --output-oci oci://ghcr.io/myorg/statusboard-rendered:0.1.0
+    --output-oci oci://ghcr.io/myorg/statusboard-rendered:v0.1.0
 ```
 
 The OCI layer contains the non-secret Kubernetes files and a root
@@ -386,7 +386,7 @@ default, etc.).
 ### Routine upgrade
 
 ```bash
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.2.0
 # Loaded prior install state from confighub.
 # Adopted new default for input "metrics_port": 9090
 # Adopted new default-flagged component(s): metrics-collector
@@ -406,7 +406,7 @@ intact. If you want a record of the prior package source, commit
 For a one-shot upgrade + execute, chain:
 
 ```bash
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0 && \
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.2.0 && \
     installer upload --yes
 ```
 
@@ -458,7 +458,7 @@ changed in a way the collector picks up (a credential was rotated,
 the cub server moved, etc.):
 
 ```bash
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.2.0
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.2.0
 # even if 0.2.0 is what you already have — re-runs the collector.
 ```
 
@@ -490,9 +490,9 @@ pull. Two ways:
 ### One-off verification
 
 ```bash
-installer verify oci://ghcr.io/myorg/statusboard:0.1.0 --key cosign.pub
+installer verify oci://ghcr.io/myorg/statusboard:v0.1.0 --key cosign.pub
 # or for keyless (Sigstore Fulcio + OIDC):
-installer verify oci://ghcr.io/myorg/statusboard:0.1.0 \
+installer verify oci://ghcr.io/myorg/statusboard:v0.1.0 \
     --identity author@myorg.com --issuer https://accounts.google.com
 ```
 
@@ -537,7 +537,7 @@ Space:
 ```bash
 WD=stack-install
 mkdir $WD && cd $WD
-installer setup --pull oci://ghcr.io/myorg/stack:1.0.0 --namespace stack
+installer setup --pull oci://ghcr.io/myorg/stack:v1.0.0 --namespace stack
 
 ls out/manifests/                # parent's manifests
 ls out/<dep-name>/manifests/     # each dep's manifests
@@ -571,7 +571,7 @@ the work-dir has no `out/record/` of its own:
 
 ```bash
 mkdir recovered && cd recovered
-installer setup --pull oci://ghcr.io/myorg/statusboard:0.1.0 --space statusboard-prod
+installer setup --pull oci://ghcr.io/myorg/statusboard:v0.1.0 --space statusboard-prod
 # Loaded prior install state from confighub.
 installer plan --space statusboard-prod     # No changes if nothing drifted
 ```

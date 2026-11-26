@@ -6,7 +6,7 @@ Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
 Base: default; components: [monitoring]
 Namespace: demo
 Rendered 4 manifest(s) to $WORK/out/manifests
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Create)
   Create    installer
   Create    deployment-demo-hello-app
@@ -28,8 +28,8 @@ GET /me
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -68,7 +68,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -78,7 +78,7 @@ POST /upload ? dry_run=true
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -129,8 +129,8 @@ POST /upload ? dry_run=true
         team: platform
 POST /upload
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -168,7 +168,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -178,7 +178,7 @@ POST /upload
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -252,7 +252,7 @@ Wizard wrote $WORK/out/record/selection.yaml and inputs.yaml
 Base: default; components: [monitoring]
 Namespace: demo
 Rendered 4 manifest(s) to $WORK/out/manifests
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Unchanged)
   Unchanged 5 Unit(s)
 
@@ -266,8 +266,8 @@ GET /me
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -306,7 +306,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -316,7 +316,7 @@ POST /upload ? dry_run=true
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -367,8 +367,8 @@ POST /upload ? dry_run=true
         team: platform
 POST /upload
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -406,7 +406,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -416,7 +416,7 @@ POST /upload
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -479,7 +479,7 @@ Wizard wrote $UPGRADE/out/record/selection.yaml and inputs.yaml
 Base: default; components: [monitoring]
 Namespace: demo
 Rendered 4 manifest(s) to $UPGRADE/out/manifests
-== hello-app@0.2.0 → Space hello ==
+== hello-app@v0.2.0 → Space hello ==
 Space hello (Update)
   Update    installer
   Unchanged 4 Unit(s)
@@ -500,8 +500,8 @@ GET /me
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of hello-app@0.2.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "ChangeDescription": "installer upload of hello-app@v0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.2.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -540,7 +540,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.2.0"
+      "Ref": "hello-app@v0.2.0"
     }
   }
   installer-record.yaml:
@@ -550,7 +550,7 @@ POST /upload ? dry_run=true
     package:
       name: hello-app
       installerMetadata:
-        version: 0.2.0
+        version: v0.2.0
       spec:
         bases:
           - name: default
@@ -601,8 +601,8 @@ POST /upload ? dry_run=true
         log_level: info
 POST /upload
   {
-    "ChangeDescription": "installer upload of hello-app@0.2.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "ChangeDescription": "installer upload of hello-app@v0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.2.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -640,7 +640,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.2.0"
+      "Ref": "hello-app@v0.2.0"
     }
   }
   installer-record.yaml:
@@ -650,7 +650,7 @@ POST /upload
     package:
       name: hello-app
       installerMetadata:
-        version: 0.2.0
+        version: v0.2.0
       spec:
         bases:
           - name: default
@@ -737,8 +737,8 @@ GET /me
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
 POST /upload ? dry_run=true
   {
-    "ChangeDescription": "installer upload of hello-app@0.2.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "ChangeDescription": "installer upload of hello-app@v0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.2.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -773,7 +773,7 @@ POST /upload ? dry_run=true
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.2.0"
+      "Ref": "hello-app@v0.2.0"
     }
   }
   installer-record.yaml:
@@ -783,7 +783,7 @@ POST /upload ? dry_run=true
     package:
       name: hello-app
       installerMetadata:
-        version: 0.2.0
+        version: v0.2.0
       spec:
         bases:
           - name: default
@@ -838,7 +838,7 @@ Wizard wrote $UPGRADE/out/record/selection.yaml and inputs.yaml
 Base: default; components: []
 Namespace: demo
 Rendered 3 manifest(s) to $UPGRADE/out/manifests
-== hello-app@0.2.0 → Space hello ==
+== hello-app@v0.2.0 → Space hello ==
 Space hello (Update)
   Update    installer
   Empty     servicemonitor-demo-hello-app
@@ -857,8 +857,8 @@ GET /me
 GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,ComponentID,UpstreamSpaceID & where=Slug = 'hello'
 POST /upload
   {
-    "ChangeDescription": "installer upload of hello-app@0.2.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.2.0",
+    "ChangeDescription": "installer upload of hello-app@v0.2.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.2.0",
     "Components": [
       {
         "Name": "hello-app",
@@ -892,7 +892,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.2.0"
+      "Ref": "hello-app@v0.2.0"
     }
   }
   installer-record.yaml:
@@ -902,7 +902,7 @@ POST /upload
     package:
       name: hello-app
       installerMetadata:
-        version: 0.2.0
+        version: v0.2.0
       spec:
         bases:
           - name: default
