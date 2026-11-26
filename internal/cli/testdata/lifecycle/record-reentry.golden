@@ -1,6 +1,6 @@
 ===== installer upload --work-dir $FIRST --space hello --yes =====
 --- stdout
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Create)
   Create    installer
   Create    deployment-demo-hello-app
@@ -44,7 +44,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: infra
@@ -55,7 +55,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -87,7 +87,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
   components:
     - ingress
@@ -101,7 +101,7 @@ spec:
 
 ===== installer upload --work-dir $SECOND --space hello --yes =====
 --- stdout
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Update)
   Update    installer
   Unchanged 4 Unit(s)
@@ -137,7 +137,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: infra
@@ -148,7 +148,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -180,7 +180,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
   components:
     - ingress
@@ -215,7 +215,7 @@ GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,Comp
 
 ===== installer upload --work-dir $FIRST --space hello-two --yes =====
 --- stdout
-== hello-app@0.1.0 → Space hello-two ==
+== hello-app@v0.1.0 → Space hello-two ==
 Space hello-two (Create)
   Create    installer
   Create    deployment-demo-hello-app

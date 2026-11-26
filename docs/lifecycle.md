@@ -308,7 +308,7 @@ configHub:
   configName: installer
 package:            # installer.yaml, without apiVersion, kind, and metadata
   name: hello-app
-  installerMetadata: {version: 0.1.0}
+  installerMetadata: {version: v0.1.0}
   spec: {...}
 selection: {base: default, components: [...]}
 inputs: {namespace: demo, values: {...}, imageOverrides: {...}}
@@ -435,7 +435,7 @@ declares, fails fast, listing the names that would work.
   ```
 - **Package version bump with new required input**:
   ```bash
-  installer setup --pull oci://reg/hello-app:0.2.0
+  installer setup --pull oci://reg/hello-app:v0.2.0
   ```
   In interactive mode, prompts for the new required input. In
   non-interactive mode, fails fast with a hint to re-run

@@ -160,7 +160,7 @@ bin/installer install ./examples/hello-app --space my-greeter \
 
 A package ConfigHub publishes is named by itself, its newest release
 unless a version is given: `installer install k8sbot --space k8sbot`, or
-`k8sbot:0.2.12`. A package on this machine is always written as a path, as
+`k8sbot:v0.2.13`. A package on this machine is always written as a path, as
 above.
 
 The wizard's `--select` is closed under each component's `requires:` list, so
@@ -224,7 +224,7 @@ kind: Package
 metadata:
   name: my-package
 installerMetadata:
-  version: 0.1.0
+  version: v0.1.0
 spec:
   bases: # alternative top-level kustomize trees
     - { name: default, path: bases/default, default: true }

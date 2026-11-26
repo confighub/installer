@@ -183,7 +183,7 @@ resources: []
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "package metadata.name (default: basename of <dir>)")
-	cmd.Flags().StringVar(&version, "version", "0.1.0", "package installerMetadata.version (SemVer)")
+	cmd.Flags().StringVar(&version, "version", "v0.1.0", "package installerMetadata.version (SemVer, with a leading v)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing installer.yaml")
 	cmd.Flags().StringVar(&source, "source", "", "existing kustomization directory to copy into bases/default/")
 	cmd.Flags().StringVar(&sourceScope, "source-scope", "", "directory containing every file --source references (default: the enclosing git repository, else --source)")

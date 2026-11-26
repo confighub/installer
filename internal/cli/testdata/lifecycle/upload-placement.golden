@@ -2,7 +2,7 @@
 
 ===== installer upload --work-dir $WORK --space hello --yes --target tgt --changeset cs --layer App --environment Prod --region r1 --owner Eng --space-label team=a --space-annotation note=x --unit-label l=1 --unit-annotation a=2 =====
 --- stdout
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Update)
   Create    installer
   Create    deployment-demo-hello-app
@@ -22,8 +22,8 @@ GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,Comp
 GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 'tgt' AND SpaceID = '00000000-0000-0000-0000-000000000001'
 POST /upload
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "ChangeSetID": "00000000-0000-0000-0000-000000000003",
     "Components": [
       {
@@ -73,7 +73,7 @@ POST /upload
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -83,7 +83,7 @@ POST /upload
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -166,8 +166,8 @@ GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,Comp
 GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 't2' AND SpaceID = '00000000-0000-0000-0000-000000000004'
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "Components": [
       {
         "Name": "renamed",
@@ -203,7 +203,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -213,7 +213,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default
@@ -285,8 +285,8 @@ GET /space ? include=TriggerFilterID,TriggerIDs,Permissions,ReleaseTargetID,Comp
 GET /target ? include=SpaceID,TriggerFilterID,TriggerIDs,Permissions & where=Slug = 't2' AND SpaceID = '00000000-0000-0000-0000-000000000004'
 POST /upload ? dry_run=true & include=Mutations
   {
-    "ChangeDescription": "installer upload of hello-app@0.1.0",
-    "ChangeSetDescription": "installer upload of hello-app@0.1.0",
+    "ChangeDescription": "installer upload of hello-app@v0.1.0",
+    "ChangeSetDescription": "installer upload of hello-app@v0.1.0",
     "ChangeSetID": "00000000-0000-0000-0000-000000000003",
     "Components": [
       {
@@ -323,7 +323,7 @@ POST /upload ? dry_run=true & include=Mutations
     "Source": {
       "Client": "installer",
       "ClientVersion": "dev",
-      "Ref": "hello-app@0.1.0"
+      "Ref": "hello-app@v0.1.0"
     }
   }
   installer-record.yaml:
@@ -333,7 +333,7 @@ POST /upload ? dry_run=true & include=Mutations
     package:
       name: hello-app
       installerMetadata:
-        version: 0.1.0
+        version: v0.1.0
       spec:
         bases:
           - name: default

@@ -380,7 +380,7 @@ func withInput(t *testing.T, version, input string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := strings.Replace(string(data), "  version: 0.1.0", "  version: "+version, 1)
+	s := strings.Replace(string(data), "  version: v0.1.0", "  version: "+version, 1)
 	s = strings.Replace(s, "  components:\n", "  inputs:\n"+input+"\n  components:\n", 1)
 	if err := os.WriteFile(manifest, []byte(s), 0o644); err != nil {
 		t.Fatal(err)
@@ -398,8 +398,8 @@ func TestFailedUpgradeKeepsPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	work := t.TempDir()
-	v1 := withInput(t, "0.1.0", "    - name: port\n      type: string\n      default: http\n")
-	v2 := withInput(t, "0.2.0", "    - name: port\n      type: int\n      default: 80\n")
+	v1 := withInput(t, "v0.1.0", "    - name: port\n      type: string\n      default: http\n")
+	v2 := withInput(t, "v0.2.0", "    - name: port\n      type: int\n      default: 80\n")
 	if _, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v1, Namespace: "demo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestFailedUpgradeKeepsPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(installed), "version: 0.1.0") {
+	if !strings.Contains(string(installed), "version: v0.1.0") {
 		t.Errorf("the failed upgrade replaced the installed package:\n%s", installed)
 	}
 	if _, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v2}); !errors.Is(err, installer.ErrInputTypesChanged) {
@@ -420,7 +420,7 @@ func TestFailedUpgradeKeepsPackage(t *testing.T) {
 	}
 	if res, err := inst.Setup(ctx, installer.SetupOptions{WorkDir: work, Pull: v2, Inputs: map[string]string{"port": "8080"}}); err != nil {
 		t.Errorf("upgrade answered with an int: %v", err)
-	} else if res.Package.InstallerMetadata.Version != "0.2.0" {
-		t.Errorf("installed version = %q, want 0.2.0", res.Package.InstallerMetadata.Version)
+	} else if res.Package.InstallerMetadata.Version != "v0.2.0" {
+		t.Errorf("installed version = %q, want v0.2.0", res.Package.InstallerMetadata.Version)
 	}
 }

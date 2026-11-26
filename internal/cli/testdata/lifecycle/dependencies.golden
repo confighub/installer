@@ -74,7 +74,7 @@ metadata:
   name: example-base-function-chain
 spec:
   package: example-base
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   groups:
     - toolchain: Kubernetes/YAML
       whereResource: ConfigHub.ResourceType = 'v1/Namespace'
@@ -94,7 +94,7 @@ metadata:
   name: example-base-inputs
 spec:
   package: example-base
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: e2e-ns
   values: {}
 --- out/base/record/manifest-index.yaml
@@ -104,7 +104,7 @@ metadata:
   name: example-base-manifest-index
 spec:
   package: example-base
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: configmap-e2e-ns-example-base-defaults.yaml
       slug: configmap-e2e-ns-example-base-defaults
@@ -124,7 +124,7 @@ metadata:
   name: example-base-selection
 spec:
   package: example-base
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
 --- out/compose/installer-transformer.sh
 #!/bin/sh
@@ -192,7 +192,7 @@ metadata:
   name: example-stack-function-chain
 spec:
   package: example-stack
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   groups:
     - toolchain: Kubernetes/YAML
       invocations:
@@ -206,7 +206,7 @@ metadata:
   name: example-stack-inputs
 spec:
   package: example-stack
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: e2e-ns
   values: {}
 --- out/record/lock.yaml
@@ -219,11 +219,11 @@ metadata:
 spec:
   package:
     name: example-stack
-    version: 0.1.0
+    version: v0.1.0
   resolved:
     - name: base
-      ref: oci://$REGISTRY/installer-e2e/example-base:0.1.0
-      digest: sha256:36a55cb10d0bc35a49fcb65dea9f1c547aa2654804fc9808992834ff074916d8
+      ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
+      digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
       version: 0.1.0
       requestedBy:
         - root
@@ -234,7 +234,7 @@ metadata:
   name: example-stack-manifest-index
 spec:
   package: example-stack
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-e2e-ns-example-stack.yaml
       slug: deployment-e2e-ns-example-stack
@@ -254,7 +254,7 @@ metadata:
   name: example-stack-selection
 spec:
   package: example-stack
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
 --- out/record/source.yaml
 apiVersion: installer.confighub.com/v1alpha1
@@ -287,7 +287,7 @@ kind: Package
 metadata:
   name: example-base
 installerMetadata:
-  version: 0.1.0
+  version: v0.1.0
 spec:
   bases:
     - name: default

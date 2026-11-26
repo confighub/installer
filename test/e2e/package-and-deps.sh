@@ -79,7 +79,7 @@ done
 # 3. Push example-base.
 log "push example-base"
 "$BIN" push "$REPO_ROOT/examples/example-base" \
-  "oci://localhost:$REGISTRY_PORT/installer-e2e/example-base:0.1.0" >/dev/null
+  "oci://localhost:$REGISTRY_PORT/installer-e2e/example-base:v0.1.0" >/dev/null
 
 # 4. Setup: pull + wizard + deps update + render in one call.
 WORK_TMP=$(mktemp -d -t installer-e2e.XXXXXX)

@@ -1,6 +1,6 @@
 ===== installer upload --work-dir $WORK --space hello --yes =====
 --- stdout
-== hello-app@0.1.0 → Space hello ==
+== hello-app@v0.1.0 → Space hello ==
 Space hello (Create)
   Create    installer
   Create    deployment-demo-hello-app

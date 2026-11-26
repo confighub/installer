@@ -34,7 +34,7 @@ func (e *env) helloV1() string {
 func (e *env) helloV2() string {
 	pkg := e.copyExample("hello-app", "PKG_V2")
 	e.edit(filepath.Join(pkg, "installer.yaml"), func(s string) string {
-		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.2.0", 1)
+		s = strings.Replace(s, "  version: v0.1.0", "  version: v0.2.0", 1)
 		return strings.Replace(s, "  components:\n", `  inputs:
     - name: log_level
       type: string
@@ -174,7 +174,7 @@ func TestLifecycleUpgradeAnswers(t *testing.T) {
 	tr.section("a new required input answered with --input")
 	required := e.copyExample("hello-app", "PKG_REQUIRED")
 	e.edit(filepath.Join(required, "installer.yaml"), func(s string) string {
-		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.2.0", 1)
+		s = strings.Replace(s, "  version: v0.1.0", "  version: v0.2.0", 1)
 		return strings.Replace(s, "  components:\n", `  inputs:
     - name: team
       type: string
@@ -193,7 +193,7 @@ func TestLifecycleUpgradeAnswers(t *testing.T) {
 	tr.section("an input whose type changed, answered with --input")
 	retyped := e.copyExample("hello-app", "PKG_RETYPED")
 	e.edit(filepath.Join(retyped, "installer.yaml"), func(s string) string {
-		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.3.0", 1)
+		s = strings.Replace(s, "  version: v0.1.0", "  version: v0.3.0", 1)
 		return strings.Replace(s, "  components:\n", `  inputs:
     - name: team
       type: int
@@ -214,7 +214,7 @@ func TestLifecycleUpgradeAnswers(t *testing.T) {
 	tr.section("a component newly flagged default")
 	defaults := e.copyExample("hello-app", "PKG_DEFAULTS")
 	e.edit(filepath.Join(defaults, "installer.yaml"), func(s string) string {
-		s = strings.Replace(s, "  version: 0.1.0", "  version: 0.4.0", 1)
+		s = strings.Replace(s, "  version: v0.1.0", "  version: v0.4.0", 1)
 		s = strings.Replace(s, "      path: components/monitoring\n", "      path: components/monitoring\n      default: true\n", 1)
 		return strings.Replace(s, "  components:\n", `  inputs:
     - name: team
@@ -320,7 +320,7 @@ func TestLifecycleDependencies(t *testing.T) {
 func (e *env) exampleStack(reg *testregistry.Registry) string {
 	e.t.Helper()
 	mustRun(e.t, "push", filepath.Join(e.repo, "examples", "example-base"),
-		"oci://"+reg.Host+"/installer-e2e/example-base:0.1.0")
+		"oci://"+reg.Host+"/installer-e2e/example-base:v0.1.0")
 	stack := e.copyExample("example-stack", "STACK")
 	e.edit(filepath.Join(stack, "installer.yaml"), func(s string) string {
 		return strings.ReplaceAll(s, "localhost:5555", reg.Host)
@@ -342,9 +342,9 @@ func TestLifecycleOutputOCI(t *testing.T) {
 	tr.ok("setup", "--pull", v1, "--work-dir", work, "--non-interactive",
 		"--namespace", "demo", "--output-oci", filepath.Join(work, "rendered.oci"))
 
-	mustRun(t, "push", v1, "oci://"+reg.Host+"/pkgs/hello-app:0.1.0")
+	mustRun(t, "push", v1, "oci://"+reg.Host+"/pkgs/hello-app:v0.1.0")
 	fromRegistry := e.dir("FROMREG")
-	args := []string{"setup", "--pull", "oci://" + reg.Host + "/pkgs/hello-app:0.1.0", "--work-dir", fromRegistry,
+	args := []string{"setup", "--pull", "oci://" + reg.Host + "/pkgs/hello-app:v0.1.0", "--work-dir", fromRegistry,
 		"--non-interactive", "--namespace", "demo",
 		"--output-oci", "oci://" + reg.Host + "/rendered/hello-app:demo"}
 	r := mustRun(t, args...)

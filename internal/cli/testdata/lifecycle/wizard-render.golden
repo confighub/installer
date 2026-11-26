@@ -13,7 +13,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: core
@@ -24,7 +24,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
 --- out/record/source.yaml
 apiVersion: installer.confighub.com/v1alpha1
@@ -137,7 +137,7 @@ metadata:
   name: hello-app-function-chain
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   groups:
     - toolchain: Kubernetes/YAML
       invocations:
@@ -152,7 +152,7 @@ metadata:
   name: hello-app-inputs
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   namespace: demo
   values:
     team: core
@@ -163,7 +163,7 @@ metadata:
   name: hello-app-manifest-index
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   files:
     - filename: deployment-demo-hello-app.yaml
       slug: deployment-demo-hello-app
@@ -189,7 +189,7 @@ metadata:
   name: hello-app-selection
 spec:
   package: hello-app
-  packageVersion: 0.1.0
+  packageVersion: v0.1.0
   base: default
 --- record/source.yaml
 apiVersion: installer.confighub.com/v1alpha1
