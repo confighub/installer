@@ -82,6 +82,10 @@ type RegistryOptions struct {
 	// PlainHTTP uses HTTP for every registry. localhost and 127.0.0.1
 	// always use HTTP.
 	PlainHTTP bool
+	// PackageRepository is where a bare package name, <name>[:<version>],
+	// resolves: a mirror of ConfigHub's packages, say. "" is
+	// api.PackageRepository, which is read anonymously.
+	PackageRepository string
 }
 
 // LoadSigningPolicy reads the signing policy at path, or at
@@ -115,6 +119,8 @@ func New(opts Options) (*Installer, error) {
 		Credentials: opts.Registry.Credentials,
 		PlainHTTP:   opts.Registry.PlainHTTP,
 		Verifier:    &sign.Verifier{Policy: opts.SigningPolicy, Cosign: opts.CosignBinary},
+
+		PackageRepository: opts.Registry.PackageRepository,
 	}
 	return i, nil
 }

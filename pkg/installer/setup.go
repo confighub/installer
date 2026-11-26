@@ -28,8 +28,10 @@ type SetupOptions struct {
 	// WorkDir holds the install's state; it is created if missing. "" is the
 	// current directory.
 	WorkDir string
-	// Pull is the package to install or upgrade to: an oci:// reference, a
-	// local directory, or a .tgz. It replaces <WorkDir>/package. "" uses the
+	// Pull is the package to install or upgrade to: a package ConfigHub
+	// publishes, as <name>[:<version>], its newest release without a
+	// version; an oci:// reference; or a local directory or .tgz, written as
+	// a path (./my-package). It replaces <WorkDir>/package. "" uses the
 	// package already there, or the one the installer record in Space names.
 	Pull string
 	// Space is the Space whose installer record a work-dir with no prior
@@ -173,10 +175,16 @@ func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult,
 	pkgDir := filepath.Join(absWork, "package")
 	sourceReference := ""
 	sourceDigest := ""
-	pullRef := opts.Pull
-	if opts.OutputOCI != "" && strings.HasPrefix(opts.Pull, "oci://") {
-		sourceReference = opts.Pull
-		sourceDigest, err = i.registry.ResolveManifestDigest(ctx, opts.Pull)
+	pullRef, err := i.registry.ResolveRef(ctx, opts.Pull)
+	if err != nil {
+		return nil, err
+	}
+	if pullRef != opts.Pull {
+		i.printf("Pulling %s for package %s.\n", pullRef, opts.Pull)
+	}
+	if opts.OutputOCI != "" && strings.HasPrefix(pullRef, "oci://") {
+		sourceReference = pullRef
+		sourceDigest, err = i.registry.ResolveManifestDigest(ctx, pullRef)
 		if err != nil {
 			return nil, fmt.Errorf("resolve source package digest: %w", err)
 		}

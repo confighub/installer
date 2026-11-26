@@ -12,7 +12,7 @@ import (
 func newWizardCmd() *cobra.Command {
 	var opts flowOptions
 	cmd := &cobra.Command{
-		Use:   "wizard <package-ref>",
+		Use:   "wizard <package>",
 		Short: "Pull a package, pick base + components, answer inputs, and (by default) render",
 		Long: `Wizard turns the user's high-level intent (which base, which components,
 what namespace, etc.) into ConfigHub-bound documents inside the working
@@ -30,6 +30,8 @@ For most installs use the higher-level setup command, which combines
 wizard with optional pull and supports the same flags. wizard is the
 narrow form that always pulls (positional ref required) and is useful
 when you want to be explicit about the Q&A step.
+
+` + packageRefHelp + `
 
 --namespace is a top-level flag rather than a per-package input:
 packages reference it from chain templates as {{ .Namespace }} and

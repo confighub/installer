@@ -21,8 +21,9 @@ func newInstallCmd() *cobra.Command {
 		Use:   "install <package>",
 		Short: "Install a package into ConfigHub: pull, wizard, render and upload",
 		Long: `Install takes a package to its Spaces in ConfigHub in one command: setup
---pull <package> followed by upload. <package> is an oci:// reference, a
-local directory, or a .tgz.
+--pull <package> followed by upload.
+
+` + packageRefHelp + `
 
 Install checks the ConfigHub session before pulling anything. It does not
 release the Spaces, and creates no variants or Targets.

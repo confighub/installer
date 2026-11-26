@@ -25,6 +25,8 @@ import (
 // Pull resolves a package reference to a local directory ready for Load.
 //
 // Supported reference formats:
+//   - <name>[:<version>]              a package ConfigHub publishes, its newest
+//     release without a version (see ResolveRef)
 //   - oci://registry/path/repo:tag    fetched via oras-go to dest, Helm chart unpacked
 //   - file:///abs/path                local directory or .tgz file
 //   - /abs/path or ./relative/path    local directory or .tgz file
@@ -36,14 +38,25 @@ import (
 // atomic-rename pattern so a failed fetch never leaves the prior
 // <workDir>/package/ in an indeterminate state.
 func (reg Registry) Pull(ctx context.Context, ref, dest string) (string, error) {
-	switch {
-	case strings.HasPrefix(ref, "oci://"):
-		return reg.pullOCI(ctx, strings.TrimPrefix(ref, "oci://"), dest)
-	case strings.HasPrefix(ref, "file://"):
-		return pullLocal(strings.TrimPrefix(ref, "file://"), dest)
-	default:
-		return pullLocal(ref, dest)
+	_, dir, err := reg.pull(ctx, ref, dest)
+	return dir, err
+}
+
+// pull is Pull, also returning the reference ref resolved to.
+func (reg Registry) pull(ctx context.Context, ref, dest string) (resolved, dir string, err error) {
+	resolved, err = reg.ResolveRef(ctx, ref)
+	if err != nil {
+		return "", "", err
 	}
+	switch {
+	case strings.HasPrefix(resolved, "oci://"):
+		dir, err = reg.pullOCI(ctx, strings.TrimPrefix(resolved, "oci://"), dest)
+	case strings.HasPrefix(resolved, "file://"):
+		dir, err = pullLocal(strings.TrimPrefix(resolved, "file://"), dest)
+	default:
+		dir, err = pullLocal(resolved, dest)
+	}
+	return resolved, dir, err
 }
 
 // PullToWorkDir fetches ref into <workDir>/package/ atomically.
@@ -92,7 +105,7 @@ func (reg Registry) StagePull(ctx context.Context, ref, workDir string) (*Staged
 	if err != nil {
 		return nil, err
 	}
-	loaded, err := reg.Pull(ctx, ref, stage)
+	ref, loaded, err := reg.pull(ctx, ref, stage)
 	if err != nil {
 		_ = os.RemoveAll(stage)
 		return nil, err
@@ -247,7 +260,7 @@ func (reg Registry) pullOCI(ctx context.Context, ref, dest string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	repo, err := reg.newRepo(repoRef)
+	repo, err := reg.readRepo(repoRef)
 	if err != nil {
 		return "", err
 	}

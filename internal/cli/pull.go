@@ -15,11 +15,12 @@ import (
 func newPullCmd() *cobra.Command {
 	var workDir string
 	cmd := &cobra.Command{
-		Use:   "pull <package-ref>",
+		Use:   "pull <package>",
 		Short: "Fetch a package into <work-dir>/package/",
-		Long: `Pull a package reference (local path, .tgz, or oci://...) into
-<work-dir>/package/. Subsequent commands (wizard, render, setup) read
-from the same work-dir.
+		Long: `Pull a package into <work-dir>/package/. Subsequent commands (wizard,
+render, setup) read from the same work-dir.
+
+` + packageRefHelp + `
 
 The fetch is staged into a sibling temp directory and atomically
 renamed into <work-dir>/package/ on success — a failed pull leaves any

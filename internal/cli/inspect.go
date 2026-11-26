@@ -15,11 +15,14 @@ import (
 func newInspectCmd() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "inspect <ref>",
+		Use:   "inspect <package>",
 		Short: "Print installer.yaml from an OCI artifact without pulling the layer",
 		Long: `Inspect fetches only the manifest + config blob for a native installer OCI
 artifact and prints the embedded installer.yaml plus bundle metadata
 (layer digest, file list, the installer version that produced the bundle).
+
+<package> is oci://<ref>, or <name>:<version> for a package ConfigHub
+publishes, the newest release without :<version>.
 
 This is the cheap-read path used by the resolver: it avoids downloading the
 package layer when only metadata is needed.`,
