@@ -5,7 +5,7 @@ Base: default; components: []
 Namespace: demo
 Rendered 3 manifest(s) to $WORK/out/manifests
 Wrote rendered OCI $WORK/rendered.oci:latest
-  manifest:  sha256:6183c2485d3ae7b01141148bc4f25c23eaa13349b950f374da08ea793be65b36
+  manifest:  sha256:064fd734964dcec1ab48f0bb36c26755c5188839afc86250342dd5f862609c58
   objects:   sha256:e27d594fd835c361c33902475fd9dec4e4150f06c0779b3742b97733d9a1e261 (3 manifest files)
   pull-back: verified
 Next: installer upload --work-dir $WORK
@@ -80,5 +80,5 @@ kind: Source
 metadata:
   name: hello-app-source
 spec:
-  ref: oci://$REGISTRY/pkgs/hello-app:v0.1.0@sha256:66e8a521248a3d80f505b0a63d7d2b9b80ab0824d2fab3bbfe63bb8c024ba22a
-  digest: sha256:66e8a521248a3d80f505b0a63d7d2b9b80ab0824d2fab3bbfe63bb8c024ba22a
+  ref: oci://$REGISTRY/pkgs/hello-app:v0.1.0@sha256:3df8cb937e106946ea00591679892c0eccda83f59511e9c5b46df2fbbc677f40
+  digest: sha256:3df8cb937e106946ea00591679892c0eccda83f59511e9c5b46df2fbbc677f40

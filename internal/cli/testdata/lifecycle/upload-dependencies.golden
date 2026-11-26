@@ -165,7 +165,7 @@ POST /upload ? dry_run=true & include=Mutations
       resolved:
         - name: base
           ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
-          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
+          digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
           version: 0.1.0
           requestedBy:
             - root
@@ -339,7 +339,7 @@ POST /upload ? dry_run=true
       resolved:
         - name: base
           ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
-          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
+          digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
           version: 0.1.0
           requestedBy:
             - root
@@ -492,7 +492,7 @@ POST /upload
       resolved:
         - name: base
           ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
-          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
+          digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
           version: 0.1.0
           requestedBy:
             - root
@@ -680,7 +680,7 @@ POST /upload ? dry_run=true & include=Mutations
       resolved:
         - name: base
           ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
-          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
+          digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
           version: 0.1.0
           requestedBy:
             - root
@@ -881,7 +881,7 @@ POST /upload ? dry_run=true & include=Mutations
       resolved:
         - name: base
           ref: oci://$REGISTRY/installer-e2e/example-base:v0.1.0
-          digest: sha256:ef371e0924220f1b9b3c75025f08f6f491d4b338a5b1446097a1894ee626bb64
+          digest: sha256:3b80a03973d4de37724762c2e720403cb88c0b661f54bc82728801eeb1c831cf
           version: 0.1.0
           requestedBy:
             - root
