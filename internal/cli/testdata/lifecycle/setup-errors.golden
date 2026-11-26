@@ -12,9 +12,9 @@ no package found in $EMPTY/package — pass --pull <ref> to fetch one, --space <
 ===== installer setup --work-dir $BADPULL --pull $PKG_V1/missing --non-interactive --namespace x =====
 --- stdout
 --- stderr
-Error: pull $PKG_V1/missing: stat $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
+Error: pull $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
 --- error
-pull $PKG_V1/missing: stat $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
+pull $PKG_V1/missing: stat $PKG_V1/missing: no such file or directory
 
 ===== fresh install without --namespace =====
 
