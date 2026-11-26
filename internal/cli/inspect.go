@@ -45,6 +45,9 @@ package layer when only metadata is needed.`,
 			cb := res.Config
 			fmt.Printf("Package:  %s@%s\n", cb.Manifest.Metadata.Name, cb.Manifest.InstallerMetadata.Version)
 			fmt.Printf("Manifest: %s\n", res.ManifestDigest)
+			if g := cb.Bundle.Git; g != nil {
+				fmt.Printf("Git:      %s @ %s (path %q, dirty %t)\n", g.Repository, g.Revision, g.Path, g.Dirty)
+			}
 			if cb.Bundle.InstallerVersion != "" {
 				fmt.Printf("Built with installer %s\n", cb.Bundle.InstallerVersion)
 			}

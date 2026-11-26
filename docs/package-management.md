@@ -204,6 +204,21 @@ double-install conflicts at apply time, it is matched against parent
 `externalRequires` during resolution so the resolver knows a dep covers a
 precondition.
 
+### Git source
+
+`installer push <dir>` records where the package's source is kept: the
+`origin` repository (credentials removed), the commit, the package's directory
+in the repository, and whether that directory had uncommitted changes. This
+needs `installer.yaml` to be tracked by git. A `.tgz` carries no git details,
+so give `--source-repo`, `--source-revision` and, if needed, `--source-path`
+when pushing one. `--no-git-source` records nothing, which keeps a private
+repository's URL out of the artifact.
+
+The artifact holds these in its config blob and manifest annotations
+(`org.opencontainers.image.source` and `.revision`). A pull copies them to
+`source.yaml` under `git:`, so the installer record and `installer show` have
+them. Dependencies don't have a `source.yaml`, so their records don't yet.
+
 ### Lock file
 
 The lock is not stored in git. It travels in the installer record, which
