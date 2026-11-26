@@ -28,13 +28,19 @@ type Registry struct {
 	// Verifier checks each package pulled from a registry, including
 	// dependencies; nil checks none.
 	Verifier *sign.Verifier
+	// PackageRepository is where bare package names resolve; "" is
+	// api.PackageRepository.
+	PackageRepository string
 }
 
-// authClient builds an oras auth.Client that presents reg's credentials.
-// Anonymous access works when no credentials are configured — the store
-// returns auth.EmptyCredential.
-func (reg Registry) authClient() (*auth.Client, error) {
-	store := reg.Credentials
+// anonymous presents no credentials.
+var anonymous credentials.Store = credentials.NewMemoryStore()
+
+// authClientFor builds an oras auth.Client that presents store's
+// credentials, or the docker-config store's when store is nil. Anonymous
+// access works when no credentials are configured: the store returns
+// auth.EmptyCredential.
+func (reg Registry) authClientFor(store credentials.Store) (*auth.Client, error) {
 	if store == nil {
 		var err error
 		if store, err = credentialStore(); err != nil {

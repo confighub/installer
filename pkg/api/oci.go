@@ -25,6 +25,10 @@ const (
 	LayerMediaType = "application/vnd.confighub.installer.package.tar+gzip"
 )
 
+// PackageRepository is where ConfigHub publishes packages. A bare package
+// name, k8sbot or k8sbot:0.2.12, names a repository under it.
+const PackageRepository = "ghcr.io/confighub/packages"
+
 // OCI manifest annotation keys for installer-specific metadata. These mirror
 // fields in ConfigBlob so registry-listing UIs can show name/version without
 // fetching the config blob.

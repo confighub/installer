@@ -32,17 +32,13 @@ func newDocCmd() *cobra.Command {
 		asJSON bool
 	)
 	cmd := &cobra.Command{
-		Use:   "doc <package-ref>",
+		Use:   "doc <package>",
 		Short: "Print a package's components, requirements, and inputs",
 		Long: `Pull a package and print its declared bases, components (with required-deps),
 external requirements, and wizard inputs schema. Use --json for machine-
 readable output suitable for agents.
 
-Package references:
-  ./path/to/pkg               local directory
-  /abs/path/to/pkg.tgz        local archive
-  oci://ghcr.io/org/pkg:tag   OCI artifact (Helm-OCI shaped)
-`,
+` + packageRefHelp,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref := args[0]

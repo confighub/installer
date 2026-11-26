@@ -12,12 +12,14 @@ import (
 
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list <oci-repo>",
+		Use:   "list <package|oci-repo>",
 		Short: "List tags of an OCI repo holding installer artifacts",
 		Long: `List queries the OCI /tags/list endpoint for the given repo and prints
-the tags.
+the tags. A bare package name lists the releases of a package ConfigHub
+publishes.
 
-Example:
+Examples:
+  installer list k8sbot
   installer list oci://ghcr.io/confighubai/gateway-api`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/wizard"
 	"github.com/confighub/installer/pkg/installer"
 )
@@ -53,7 +53,8 @@ func runFlow(ctx context.Context, opts flowOptions) error {
 	// The signing policy is read only when something may be pulled from a
 	// registry: the package, the one an installer record names, or render's
 	// dependencies.
-	inst, err := newInstaller(ctx, strings.HasPrefix(opts.pullRef, "oci://") || opts.recoverSpace != "" || opts.runRender)
+	pullsFromRegistry := opts.pullRef != "" && !ipkg.IsPath(opts.pullRef)
+	inst, err := newInstaller(ctx, pullsFromRegistry || opts.recoverSpace != "" || opts.runRender)
 	if err != nil {
 		return err
 	}
@@ -192,7 +193,7 @@ Rendered OCI output:
                       reporting success.
 
 Pull:
-  --pull <ref>       optional. When present, fetches the package and
+  --pull <package>   optional. When present, fetches the package and
                      replaces <work-dir>/package/ atomically (failed
                      pulls leave the prior tree intact). When absent,
                      the work-dir must already contain a package/ tree
@@ -231,7 +232,7 @@ Setup does NOT upload. Run installer upload to push to ConfigHub.`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.workDir, "work-dir", ".", "working directory (gets ./package and ./out subdirs)")
-	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package reference (oci://..., local path, or .tgz) before running the wizard")
+	cmd.Flags().StringVar(&opts.pullRef, "pull", "", "fetch this package before running the wizard: <name>[:<version>] for a package ConfigHub publishes, oci://<ref>, or a directory or .tgz written as a path")
 	cmd.Flags().StringVar(&opts.recoverSpace, "space", "", "Space to recover a prior install from when the work-dir has no out/record/ of its own (default: the package's only install in the organization); a Space that does not exist yet, or holds no installer record, is a fresh install there. Without --pull, a work-dir with no package pulls the one the Space's installer record says the install came from")
 	registerAnswerFlags(cmd, &opts)
 	cmd.Flags().StringVar(&opts.outputOCI, "output-oci", "", "write rendered manifests to a local OCI layout path or push them to oci://host/repo:tag")

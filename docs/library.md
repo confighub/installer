@@ -195,6 +195,10 @@ type RegistryOptions struct {
 	// PlainHTTP uses HTTP for every registry. localhost and 127.0.0.1
 	// always use HTTP.
 	PlainHTTP bool
+	// PackageRepository is where a bare package name, <name>[:<version>],
+	// resolves: a mirror of ConfigHub's packages, say. "" is
+	// api.PackageRepository, which is read anonymously.
+	PackageRepository string
 }
 
 func New(opts Options) (*Installer, error)
@@ -206,7 +210,7 @@ func LoadSigningPolicy(path string) (*api.SigningPolicy, error)
 
 type SetupOptions struct {
 	WorkDir   string            // created if missing
-	Pull      string            // package reference; "" uses <WorkDir>/package
+	Pull      string            // <name>[:<version>], oci://<ref>, or a path; "" uses <WorkDir>/package
 	Space     string            // re-enter the install whose installer record is in this Space
 	Base      string            // "" means the package's default base
 	Namespace string
@@ -238,6 +242,11 @@ type SetupResult struct {
 }
 
 func (i *Installer) Setup(ctx context.Context, opts SetupOptions) (*SetupResult, error)
+
+// Setup resolves a bare package name in SetupOptions.Pull itself, so a host
+// passes the name it was given through, and gets the same packages the
+// installer CLI does. api.PackageRepository is where names resolve unless
+// RegistryOptions.PackageRepository names another.
 
 // Render renders the work-dir's package from the selection and inputs in
 // out/record, as `installer render` does.

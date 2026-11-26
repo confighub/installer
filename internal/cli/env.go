@@ -15,6 +15,7 @@ import (
 	ipkg "github.com/confighub/installer/internal/pkg"
 	"github.com/confighub/installer/internal/sign"
 	"github.com/confighub/installer/internal/version"
+	"github.com/confighub/installer/pkg/api"
 	"github.com/confighub/installer/pkg/installer"
 )
 
@@ -110,3 +111,13 @@ func (e *explainedError) Unwrap() error { return e.err }
 func notAuthenticated(err error) error {
 	return fmt.Errorf("not authenticated to ConfigHub — run `cub auth login` (interactive) and retry: %w", err)
 }
+
+// packageRefHelp says what a package argument can be, for the help of every
+// command that takes one.
+const packageRefHelp = `<package> is one of:
+  <name>[:<version>]   a package ConfigHub publishes, from
+                       ` + api.PackageRepository + `/<name>; without a
+                       version, its newest release
+  oci://<ref>          a package in any OCI registry
+  <dir> or <file.tgz>  a package on this machine, written as a path: with a
+                       / (./my-package), or ending in .tgz`

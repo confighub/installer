@@ -22,6 +22,7 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/credentials"
 
 	"github.com/confighub/installer/internal/bundle"
 	"github.com/confighub/installer/internal/version"
@@ -159,11 +160,15 @@ type InspectResult struct {
 // artifact. The layer is not pulled, making this cheap enough for the
 // resolver to call on every dependency candidate.
 func (reg Registry) Inspect(ctx context.Context, ref string) (*InspectResult, error) {
+	ref, err := reg.ResolveRef(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
 	repoRef, tag, want, err := parseRef(ref, false)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := reg.newRepo(repoRef)
+	repo, err := reg.readRepo(repoRef)
 	if err != nil {
 		return nil, err
 	}
@@ -221,14 +226,18 @@ func inspectFromTarget(ctx context.Context, target oras.Target, ref string, want
 	}, nil
 }
 
-// List returns the tags of repoRef. The endpoint is `/tags/list` per the OCI
-// distribution spec; the registry decides whether catalogs are public.
+// List returns the tags of repoRef, or of the package a bare package name
+// names. The endpoint is `/tags/list` per the OCI distribution spec; the
+// registry decides whether catalogs are public.
 func (reg Registry) List(ctx context.Context, repoRef string) ([]string, error) {
+	if isPackageName(repoRef) && !strings.Contains(repoRef, ":") {
+		repoRef = reg.packageRepository() + "/" + repoRef
+	}
 	parsed, err := parseRepoOnly(repoRef)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := reg.newRepo(parsed)
+	repo, err := reg.readRepo(parsed)
 	if err != nil {
 		return nil, err
 	}
@@ -323,12 +332,26 @@ func parseRepoOnly(ref string) (string, error) {
 	return ref, nil
 }
 
+// newRepo is repoRef, reached with reg's credentials.
 func (reg Registry) newRepo(repoRef string) (*remote.Repository, error) {
+	return reg.repo(repoRef, reg.Credentials)
+}
+
+// readRepo is repoRef, for reading. ConfigHub's packages are public, so they
+// are read anonymously: an expired login to their registry can't refuse them.
+func (reg Registry) readRepo(repoRef string) (*remote.Repository, error) {
+	if strings.HasPrefix(repoRef, api.PackageRepository+"/") {
+		return reg.repo(repoRef, anonymous)
+	}
+	return reg.newRepo(repoRef)
+}
+
+func (reg Registry) repo(repoRef string, store credentials.Store) (*remote.Repository, error) {
 	repo, err := remote.NewRepository(repoRef)
 	if err != nil {
 		return nil, fmt.Errorf("repo %s: %w", repoRef, err)
 	}
-	client, err := reg.authClient()
+	client, err := reg.authClientFor(store)
 	if err != nil {
 		return nil, err
 	}

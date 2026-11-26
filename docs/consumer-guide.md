@@ -49,9 +49,24 @@ configured separately).
 
 ## Find a package
 
-Today, package discovery is convention-based — you find a package by
-its OCI ref (`oci://host/repo:tag`). The installer repo ships
-packages under `packages/` as starting points, among them:
+A package ConfigHub publishes is named by itself: `k8sbot`, or
+`k8sbot:0.2.12` for one release. A bare name is a repository under
+`ghcr.io/confighub/packages/`, and without a version names the newest
+X.Y.Z release. Those packages are public, so the installer reads them
+without credentials, and an expired login to ghcr.io can't refuse them.
+
+```bash
+installer list k8sbot              # its releases
+installer doc k8sbot               # what the newest one offers
+installer setup --pull k8sbot:0.2.12 --namespace k8sbot
+```
+
+Any other package is named by its OCI ref (`oci://host/repo:tag`), or
+by a path when it is on this machine. A local package is always written
+as a path, with a `/` (`./statusboard`) or ending in `.tgz`, so a
+directory that shares a published package's name never stands in for
+it. The installer repo ships packages under `packages/` as starting
+points, among them:
 
 - `packages/kubernetes-resources/` — eleven canonical Kubernetes
   resource templates with best-practice defaults pre-applied. Used

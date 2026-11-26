@@ -121,7 +121,7 @@ func (reg Registry) ResolveManifestDigest(ctx context.Context, ref string) (stri
 	if err != nil {
 		return "", err
 	}
-	repo, err := reg.newRepo(repoRef)
+	repo, err := reg.readRepo(repoRef)
 	if err != nil {
 		return "", err
 	}
