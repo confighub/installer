@@ -116,6 +116,21 @@ func compareVersions(a, b [3]int) int {
 	return 0
 }
 
+// registryHint adds, to the error reading a local package that doesn't
+// exist, how to write it as an oci:// reference, when it reads as a registry
+// reference typed without one: ghcr.io/example/app:1.0.0, whose first
+// element is a registry host.
+func registryHint(ref string, err error) error {
+	if !os.IsNotExist(err) || strings.HasPrefix(ref, ".") || filepath.IsAbs(ref) || strings.HasPrefix(ref, "file://") {
+		return err
+	}
+	host, _, ok := strings.Cut(ref, "/")
+	if !ok || (!strings.ContainsAny(host, ".:") && host != "localhost") {
+		return err
+	}
+	return fmt.Errorf("%w; a package in a registry is written oci://%s", err, ref)
+}
+
 // localHint adds, to the error fetching the package a bare name names, how to
 // use the local directory or archive of that name instead, when there is one.
 func localHint(ref string, err error) error {

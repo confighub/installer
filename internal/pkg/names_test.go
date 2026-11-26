@@ -169,3 +169,26 @@ func TestReadRepoCredentials(t *testing.T) {
 		}
 	}
 }
+
+// A registry reference typed without oci:// is a path that doesn't exist; the
+// error says how to write it.
+func TestRegistryHint(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for ref, hint := range map[string]bool{
+		"ghcr.io/example/app:1.0.0": true,
+		"localhost:5000/app:1.0.0":  true,
+		"localhost/app:1.0.0":       true,
+		"./ghcr.io/app":             false,
+		"examples/app":              false,
+		"/no/such/app":              false,
+	} {
+		_, err := (Registry{}).Pull(context.Background(), ref, t.TempDir())
+		if err == nil || !os.IsNotExist(errors.Unwrap(err)) {
+			t.Errorf("Pull(%q): err = %v, want the path not found", ref, err)
+			continue
+		}
+		if got := strings.Contains(err.Error(), "written oci://"+ref); got != hint {
+			t.Errorf("Pull(%q): err = %v; hint %v, want %v", ref, err, got, hint)
+		}
+	}
+}

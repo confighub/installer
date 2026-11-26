@@ -221,7 +221,8 @@ func pullLocal(src, dest string) (string, error) {
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		return "", fmt.Errorf("stat %s: %w", abs, err)
+		// os.Stat's error names the path already.
+		return "", registryHint(src, err)
 	}
 	if info.IsDir() {
 		// For local directories, prefer in-place use unless an explicit dest
